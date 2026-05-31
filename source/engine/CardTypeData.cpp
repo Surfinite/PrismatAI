@@ -137,25 +137,32 @@ void CardTypeData::InitFromCardLibraryFile(const std::string & jsonGameStateCard
     
     const std::string dominionNames[] = 
     {
-        "Vivid Drone", "Bond", "Centrifuge", "Doomed Drone", "Battalion", "Panther", "Flame Warrior", "Flame Kin", "Machine", "Cyclic Attacker",
-        "Fragilewall", "Fabricator", "Distractorod", "Ion Cannon", "Meteor Shower", "Wild Drone",
-        "Doomed Mech", "Conscription", "Pixie", "Blade", "Supertreant", "Golem", "Defense Grid", "Drake", "Militia", "Doomwall", "Polywall", "Nether Warrior", "Flame Assassin", "Hate Reactor", "Adrenaline Reactor", "Furion",
-        "Fickle Marine", "Screech Blast", "House", "Trickster", "Gnoll", "Angelic", "Annihilator", "Nightmare Cannon", "Jester", "Doomed Infantry", "Neo Overlord",
-        "Antima Comet", "BFD", "Stone Guardian", "Tesla Coil", "Factory",
-        "Piranha Academy", "Statue", "Minimarshal", "Demolition Mech", "Grenadier",
-        "Ephemeron", "Sentinel", "Gasplant", "Rocket Artillery", "HPMan", "Pixieflower",
-        "NeoContraption", "Unholy Barrier", "Electrophore", "Sound Barrier", "Uberdefcell", "Giga Cannon", "Psychosis Cannon", "Tank", "Marauder", "Deconstructible Tower", "Cowardly Marine", "Hotel", "Disruption Kit", "Viletrope", "Roshan", "Rukh",
-        "Ebb Turbine", "Beam of Wincing", "Volatile Blast", "Arsonist",
-        "Butter on Blood", "Husk",
-        "Nitrocybe", "Corpus", "Vai Mauronax", "Xaetron", "Vai Mauronax", "Corpus",
-        "Borehole Patroller", "Thorium Dynamo", "Tantalum Ray",
-        "Psychosis Cannon", "Blood Phage", "Galvani Drone", "Thunderhead",
-        "Savior", "Lancetooth", "Ferritin Sac",
-        // Ranked units added AFTER this engine was open-sourced -- missing from the
-        // allow-list above, so the file-library load path silently dropped them.
-        // Internal name == display name for all 12 (no codename alias). See FINDINGS_35prop.md.
-        "Arms Race", "Bombarder", "Colossus", "Innervi Field", "Manticore", "Mega Drone",
-        "Mobile Animus", "Oxide Mixer", "Photonic Fibroid", "Tyranno Smorcus", "Urban Sentry", "Valkyrion"
+        // The 105 non-base ("dominion") units, mirroring cardLibrary.jso by INTERNAL
+        // engine name (the .jso key -- e.g. Husk's key is "House"). Base units load via
+        // their baseSet:1 flag, not this list. KEEP IN SYNC with cardLibrary.jso when
+        // ranked units are added/removed. (Regenerated 2026-05-31 from the .jso non-base
+        // keys: added 12 post-open-source units, dropped the dead "Husk" alias + dupes.)
+        "Doomed Drone", "Wild Drone", "Vivid Drone", "Bond", "Galvani Drone",
+        "Electrophore", "Centrifuge", "Savior", "Sound Barrier", "Machine",
+        "Thorium Dynamo", "Flame Kin", "Distractorod", "Cyclic Attacker", "Xaetron",
+        "Fragilewall", "Meteor Shower", "Uberdefcell", "Arsonist", "NeoContraption",
+        "Viletrope", "Butter on Blood", "Ion Cannon", "Tantalum Ray", "Giga Cannon",
+        "Deconstructible Tower", "Fabricator", "Volatile Blast", "Ebb Turbine", "Militia",
+        "Pixie", "Adrenaline Reactor", "Panther", "Polywall", "Golem",
+        "Blade", "Drake", "Furion", "Doomwall", "Defense Grid",
+        "Oxide Mixer", "Doomed Mech", "Flame Assassin", "Nether Warrior", "Conscription",
+        "Lancetooth", "Hate Reactor", "Supertreant", "Cowardly Marine", "Unholy Barrier",
+        "Psychosis Cannon", "Flame Warrior", "Marauder", "Neo Overlord", "Doomed Infantry",
+        "Fickle Marine", "House", "Vai Mauronax", "Gnoll", "Nightmare Cannon",
+        "Jester", "Trickster", "Screech Blast", "Nitrocybe", "Blood Phage",
+        "Annihilator", "Angelic", "Valkyrion", "Mobile Animus", "Corpus",
+        "Factory", "Stone Guardian", "Borehole Patroller", "Tank", "Tesla Coil",
+        "BFD", "Antima Comet", "Thunderhead", "Rukh", "Ferritin Sac",
+        "Piranha Academy", "Hotel", "Minimarshal", "Roshan", "Demolition Mech",
+        "Grenadier", "Statue", "Rocket Artillery", "HPMan", "Gasplant",
+        "Pixieflower", "Ephemeron", "Disruption Kit", "Sentinel", "Battalion",
+        "Beam of Wincing", "Colossus", "Arms Race", "Bombarder", "Innervi Field",
+        "Manticore", "Mega Drone", "Photonic Fibroid", "Tyranno Smorcus", "Urban Sentry"
     };
 
     bool parsingFailed = document.Parse(FileUtils::ReadFile(jsonGameStateCardData).c_str()).HasParseError();
