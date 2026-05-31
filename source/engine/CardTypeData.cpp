@@ -150,7 +150,12 @@ void CardTypeData::InitFromCardLibraryFile(const std::string & jsonGameStateCard
         "Nitrocybe", "Corpus", "Vai Mauronax", "Xaetron", "Vai Mauronax", "Corpus",
         "Borehole Patroller", "Thorium Dynamo", "Tantalum Ray",
         "Psychosis Cannon", "Blood Phage", "Galvani Drone", "Thunderhead",
-        "Savior", "Lancetooth", "Ferritin Sac"
+        "Savior", "Lancetooth", "Ferritin Sac",
+        // Ranked units added AFTER this engine was open-sourced -- missing from the
+        // allow-list above, so the file-library load path silently dropped them.
+        // Internal name == display name for all 12 (no codename alias). See FINDINGS_35prop.md.
+        "Arms Race", "Bombarder", "Colossus", "Innervi Field", "Manticore", "Mega Drone",
+        "Mobile Animus", "Oxide Mixer", "Photonic Fibroid", "Tyranno Smorcus", "Urban Sentry", "Valkyrion"
     };
 
     bool parsingFailed = document.Parse(FileUtils::ReadFile(jsonGameStateCardData).c_str()).HasParseError();

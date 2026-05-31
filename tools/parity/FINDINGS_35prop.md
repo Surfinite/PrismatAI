@@ -43,6 +43,26 @@ self-consistent 35-prop `.bin`), so it holds for the final weights too. Re-runni
 clean re-run's final export (`neural_weights_mixed_35prop.bin`) is a trivial repeat of the
 Reproduce steps — no rebuild.
 
+## Loader allow-list fix (`dominionNames`) — 2026-05-31
+
+Running this surfaced a soft-assert on `state_02`: `CardType::getCardType() error: Card name
+not found: Mega Drone`. Root cause: the `--dump-features` hook loads cards via
+`CardTypeData::InitFromCardLibraryFile` (the GUI/testing path), which admits a `.jso` entry
+only if it's base-set or in a hardcoded `dominionNames[]` allow-list. That list was frozen
+when the engine was open-sourced and never updated, so it silently dropped **12 ranked units
+added since**: Arms Race, Bombarder, Colossus, Innervi Field, Manticore, Mega Drone, Mobile
+Animus, Oxide Mixer, Photonic Fibroid, Tyranno Smorcus, Urban Sentry, Valkyrion. The real AI
+path (`InitFromMergedDeckJSON`, used by matchup/self-play from the request's `mergedDeck`) was
+never affected.
+
+`dominionNames[]` matches the `.jso` **key = internal engine name** (e.g. Husk's key is
+`"House"`; the literal `"Husk"` in the list is a dead no-op). All 12 missing units have
+internal == display name, so they were added verbatim to `CardTypeData.cpp`. After an
+incremental GUI-off rebuild (`Prismata_Standalone`, Release/x64), the miss is gone, `state_02`
+now feeds Mega Drone's supply (idx 71) to the NN, and parity re-confirms **ALL PASS** (worst
+2.02e-08; `state_02` logit 22.356 → 22.229 as the now-complete supply changes the input, with
+C++ == PyTorch to 4.4e-10). `out35_state_02_constr_damage.json` regenerated post-fix.
+
 ## Reproduce
 
 ```bash

@@ -1,7 +1,7 @@
 {
   "value_p0": 1,
   "value_p0_from_logit": 1,
-  "logit_p0": 22.3558044,
+  "logit_p0": 22.2291908,
   "active_player": 0,
   "turn_number": 19,
   "num_units": 116,
@@ -120,7 +120,8 @@
     {"unit_index": 114, "ui_name": "Xeno Guardian", "p0": 9, "p1": 10},
     {"unit_index": 87, "ui_name": "Redeemer", "p0": 3, "p1": 4},
     {"unit_index": 49, "ui_name": "Flame Animus", "p0": 4, "p1": 4},
-    {"unit_index": 63, "ui_name": "Infusion Grid", "p0": 10, "p1": 10}
+    {"unit_index": 63, "ui_name": "Infusion Grid", "p0": 10, "p1": 10},
+    {"unit_index": 71, "ui_name": "Mega Drone", "p0": 1, "p1": 1}
   ],
   "dropped_instances": []
 }
