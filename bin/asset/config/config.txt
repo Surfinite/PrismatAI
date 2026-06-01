@@ -223,9 +223,8 @@
     { "run":false, "type":"Tournament", "name":"PV_RawSurface_T8",    "rounds":16, "UpdateIntervalSec":10, "Threads":8, "RandomCards":8, "players":[ {"name":"DSNN_F500","group":1}, {"name":"HardAB_F500","group":2}] },
     { "run":false, "type":"Tournament", "name":"PV_Regression_post",  "rounds":16, "UpdateIntervalSec":10, "Threads":8, "RandomCards":8, "players":[ {"name":"HardUCT_F500","group":1}, {"name":"HardAB_F500","group":2}] },
     { "run":false, "type":"Tournament", "name":"PV_CleanAblation_T1", "rounds":16, "UpdateIntervalSec":10, "Threads":1, "RandomCards":8, "players":[ {"name":"DSNN_F500","group":1}, {"name":"HardUCT_F500","group":2}] },
-    { "run":false, "type":"Tournament", "name":"PV_Mixed35_Smoke",            "rounds":2,  "UpdateIntervalSec":0,  "Threads":8, "RandomCards":8, "saveReplays":"asset/replays/mixed35_smoke",          "players":[ {"name":"DSNN_Mixed35_F500","group":1}, {"name":"HardUCT_F500","group":2}] },
-    { "run":true,  "type":"Tournament", "name":"PV_Mixed35_vs_HardestAI_T8",    "rounds":64, "UpdateIntervalSec":10, "Threads":8, "RandomCards":8, "saveReplays":"asset/replays/mixed35_vs_hardestai",    "players":[ {"name":"DSNN_Mixed35","group":1}, {"name":"HardestAI","group":2}] },
-    { "run":true,  "type":"Tournament", "name":"PV_Mixed35_vs_HardestAIUCT_T8", "rounds":64, "UpdateIntervalSec":10, "Threads":8, "RandomCards":8, "saveReplays":"asset/replays/mixed35_vs_hardestaiuct", "players":[ {"name":"DSNN_Mixed35","group":1}, {"name":"HardestAIUCT","group":2}] }
+    { "run":false, "type":"Tournament", "name":"PV_Mixed35_vs_HardestAI_T8",    "rounds":64, "UpdateIntervalSec":10, "Threads":8, "RandomCards":8, "saveReplays":"asset/replays/mixed35_vs_hardestai",    "players":[ {"name":"DSNN_Mixed35","group":1}, {"name":"HardestAI","group":2}] },
+    { "run":false, "type":"Tournament", "name":"PV_Mixed35_vs_HardestAIUCT_T8", "rounds":64, "UpdateIntervalSec":10, "Threads":8, "RandomCards":8, "saveReplays":"asset/replays/mixed35_vs_hardestaiuct", "players":[ {"name":"DSNN_Mixed35","group":1}, {"name":"HardestAIUCT","group":2}] }
 ]
 
 }
