@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(PrismataAI LANGUAGES CXX)
+project(PrismataAI LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -70,9 +70,12 @@ target_include_directories(Prismata_Standalone PRIVATE
 
 file(GLOB PRISMATA_TESTING_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/source/testing/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/source/testing/miniz/miniz.c"
 )
 
+# miniz is vendored C (gzip for ReplaySerializer); compiled as C so its symbols
+# keep C linkage to match miniz.h's extern "C" declarations. Requires the C
+# language to be enabled in project() above, else CMake demotes .c to a
+# non-built <None> item and link fails with unresolved mz_crc32/tdefl_*/mz_free.
 add_executable(Prismata_Testing ${PRISMATA_TESTING_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/source/testing/miniz/miniz.c")
 target_link_libraries(Prismata_Testing PRIVATE Prismata_AI Prismata_Engine)
 target_include_directories(Prismata_Testing PRIVATE
