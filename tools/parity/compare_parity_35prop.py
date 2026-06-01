@@ -85,15 +85,19 @@ def torch_logit(model, feats, ids, count, supply, globs):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("usage: python compare_parity_35prop.py <dump1.json> [dump2.json ...]")
-        sys.exit(2)
+    import argparse
+    ap = argparse.ArgumentParser(description="35-prop C++<->PyTorch value parity")
+    ap.add_argument("dumps", nargs="+", help="C++ --dump-features output JSON(s)")
+    ap.add_argument("--pt", default=PT_PATH, help="PyTorch .pt reference (default: interim ep30)")
+    ap.add_argument("--bin", default=BIN_PATH, help="DSN2 .bin (default: interim ep30)")
+    a = ap.parse_args()
+    dumps = a.dumps
 
-    print(f"PyTorch reference .pt : {PT_PATH}")
-    print(f"DSN2 .bin             : {BIN_PATH}")
-    model, cfg = load_model(PT_PATH)
+    print(f"PyTorch reference .pt : {a.pt}")
+    print(f"DSN2 .bin             : {a.bin}")
+    model, cfg = load_model(a.pt)
     num_units = cfg.get("num_units", 116)
-    hdr, bin_tensors = ew.load_binary(BIN_PATH)
+    hdr, bin_tensors = ew.load_binary(a.bin)
     print(f"loaded model (cfg num_units={num_units}) and .bin "
           f"(hdr num_units={hdr['num_units']}, num_properties={hdr.get('num_properties')}, "
           f"tensors={hdr['num_tensors']})")
@@ -109,7 +113,7 @@ def main():
     any_fail = False
     any_drop = False
 
-    for path in sys.argv[1:]:
+    for path in dumps:
         with open(path) as f:
             dump = json.load(f)
         feats, ids, count, supply, globs = build_inputs(dump, num_units)

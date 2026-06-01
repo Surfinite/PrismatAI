@@ -63,6 +63,26 @@ now feeds Mega Drone's supply (idx 71) to the NN, and parity re-confirms **ALL P
 2.02e-08; `state_02` logit 22.356 → 22.229 as the now-complete supply changes the input, with
 C++ == PyTorch to 4.4e-10). `out35_state_02_constr_damage.json` regenerated post-fix.
 
+## Final weights (SWA, 2026-06-01) — re-verified, deployment-faithful
+
+The clean 100-epoch re-run completed with **no crash** (XPU `reserved` flat at 346 MB for
+all 100 epochs — the per-epoch `empty_cache` fix held; `allocated` flat at 4 MB rules out a
+leak). Best val_loss 0.3465 @ ep98; **SWA 0.3464 / 81.7% acc / brier 0.1166**. The SWA model
+was exported to `bin/asset/config/neural_weights_mixed_35prop.bin`.
+
+Re-ran this harness on the **final SWA weights** (`final35_state_*.json`,
+`compare_parity_35prop.py --pt …/deepsets_mixed_35prop_v2/swa_model.pt --bin …/neural_weights_mixed_35prop.bin`):
+**ALL PASS**, worst `|value_cpp − value_torch| = 5.84e-07`; C++ == PyTorch == numpy to ~1e-6;
+0 dropped; no card-not-found (the `dominionNames` fix holds). The shipped engine reproduces
+the shipped model.
+
+Note on the exporter round-trip: `export_weights_v2.py`'s synthetic *random* case "FAILED"
+its absolute `tol=1e-4` at diff 8.5e-4 — but that case feeds `randn` noise yielding an
+out-of-distribution logit ≈1793, where 8.5e-4 is ~5e-7 **relative** (float32 rounding), not a
+weight error (the all-zeros case passed at 1.5e-8). On real states logits are ~[−6, 46] and
+parity is <6e-7, so the real-state parity here is authoritative. `compare_parity_35prop.py`
+now takes optional `--pt`/`--bin` so it serves both interim and final references.
+
 ## Reproduce
 
 ```bash
