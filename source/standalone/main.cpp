@@ -59,8 +59,18 @@ int main(int argc, char *argv[])
         std::string stateStr((std::istreambuf_iterator<char>(sin)), std::istreambuf_iterator<char>());
         sin.close();
 
-        // Load the 116-unit training card library (matches the NN unit_index + property_table)
-        Prismata::InitFromCardLibrary("asset/config/cardLibrary.jso");
+        // Load the 116-unit training card library (matches the NN unit_index + property_table).
+        // Resolve relative to the executable so --dump-features works from any working dir.
+        std::string cardLibPath = "asset/config/cardLibrary.jso";
+        {
+            const std::string exeDir = NeuralNet::getExecutableDir();
+            if (!exeDir.empty())
+            {
+                std::ifstream clTest(exeDir + "/" + cardLibPath);
+                if (clTest.good()) { cardLibPath = exeDir + "/" + cardLibPath; }
+            }
+        }
+        Prismata::InitFromCardLibrary(cardLibPath);
 
         rapidjson::Document doc;
         if (doc.Parse(stateStr.c_str()).HasParseError())

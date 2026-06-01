@@ -116,6 +116,10 @@ public:
     // the 14 normalized globals the forward consumes (plus any alive cards that map to -1).
     void dumpFeaturesJSON(const GameState & state, const std::string & path) const;
 
+    // Directory of the running executable, for cwd-independent asset loading
+    // (the AIR client launches PrismataAI.exe without setting a working dir).
+    static std::string getExecutableDir();
+
     static NeuralNet & Instance();
 };
 

@@ -6,6 +6,7 @@
 #include "Timer.h"
 
 #include <cstdlib>   // std::getenv (FORCE_DSNN env override)
+#include <fstream>   // std::ifstream (FORCE_DSNN sentinel-file check)
 
 using namespace Prismata;
 
@@ -107,8 +108,20 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
         // thinks ~10s: a timeable tell that the DSNN is active, plus a slightly
         // stronger opponent. The "3s" bot (HardAI, 3000) stays 3s. When the env var
         // is unset, aiPlayer keeps the value above and behavior is byte-identical.
-        const char * forceDSNN = std::getenv("PRISMATA_FORCE_DSNN");
-        if (forceDSNN != nullptr && forceDSNN[0] != '\0')
+        // Trigger: env var PRISMATA_FORCE_DSNN set, OR a sentinel file 'use_dsnn.txt'
+        // sitting next to the executable (drop-in friendly -- no env var, no Steam).
+        const char * forceEnv = std::getenv("PRISMATA_FORCE_DSNN");
+        bool forceDSNN = (forceEnv != nullptr && forceEnv[0] != '\0');
+        if (!forceDSNN)
+        {
+            const std::string exeDir = NeuralNet::getExecutableDir();
+            if (!exeDir.empty())
+            {
+                std::ifstream sentinel(exeDir + "/use_dsnn.txt");
+                forceDSNN = sentinel.good();
+            }
+        }
+        if (forceDSNN)
         {
             const PlayerID activePlayer = initialState.getActivePlayer();
             const std::string requestedName = document["aiPlayerName"].GetString();

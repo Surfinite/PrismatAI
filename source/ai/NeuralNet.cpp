@@ -9,6 +9,14 @@
 
 #include "rapidjson/document.h"
 
+// Resolve the running executable's directory WITHOUT including <windows.h>
+// (its GetObjectA/W macro would clobber rapidjson::Value::GetObject()).
+#if defined(_WIN32)
+extern "C" __declspec(dllimport) unsigned long __stdcall GetModuleFileNameA(void * hModule, char * lpFilename, unsigned long nSize);
+#elif defined(__linux__)
+#include <unistd.h>
+#endif
+
 using namespace Prismata;
 
 NeuralNet::NeuralNet()
@@ -116,17 +124,44 @@ static bool readTensor(std::ifstream & f, const std::string & expectedName,
 // Unit index loading (JSON)
 // ---------------------------------------------------------------------------
 
+std::string NeuralNet::getExecutableDir()
+{
+#if defined(_WIN32)
+    char buf[1024];
+    unsigned long len = GetModuleFileNameA(nullptr, buf, (unsigned long)sizeof(buf));
+    if (len == 0 || len >= sizeof(buf)) { return std::string(); }
+    std::string path(buf, len);
+#elif defined(__linux__)
+    char buf[1024];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0) { return std::string(); }
+    std::string path(buf, (size_t)len);
+#else
+    return std::string();
+#endif
+    const size_t slash = path.find_last_of("/\\");
+    return (slash == std::string::npos) ? std::string() : path.substr(0, slash);
+}
+
 bool NeuralNet::loadUnitIndex()
 {
-    const char * paths[] = {
+    // Prefer paths relative to the executable so the swap-in finds its assets
+    // regardless of the process working directory (the AIR client sets none).
+    const std::string exeDir = getExecutableDir();
+    std::vector<std::string> paths = {
+        "asset/config/unit_index.json",
         "training/data/unit_index.json",
         "../training/data/unit_index.json",
-        "asset/config/unit_index.json",
     };
+    if (!exeDir.empty())
+    {
+        paths.insert(paths.begin(), exeDir + "/asset/config/unit_index.json");
+        paths.push_back(exeDir + "/../asset/config/unit_index.json");
+    }
 
     std::ifstream f;
     std::string foundPath;
-    for (const char * path : paths)
+    for (const std::string & path : paths)
     {
         f.open(path);
         if (f.good())
@@ -180,6 +215,15 @@ bool NeuralNet::loadUnitIndex()
 bool NeuralNet::loadWeights(const std::string & filename)
 {
     std::ifstream f(filename, std::ios::binary);
+    if (!f.is_open())
+    {
+        // Retry relative to the executable's directory (cwd-independent swap-in).
+        const std::string exeDir = getExecutableDir();
+        if (!exeDir.empty())
+        {
+            f.open(exeDir + "/" + filename, std::ios::binary);
+        }
+    }
     if (!f.is_open())
     {
         printf("NeuralNet: could not open weight file: %s\n", filename.c_str());
