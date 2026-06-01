@@ -70,9 +70,10 @@ target_include_directories(Prismata_Standalone PRIVATE
 
 file(GLOB PRISMATA_TESTING_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/source/testing/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/source/testing/miniz/miniz.c"
 )
 
-add_executable(Prismata_Testing ${PRISMATA_TESTING_SOURCES})
+add_executable(Prismata_Testing ${PRISMATA_TESTING_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/source/testing/miniz/miniz.c")
 target_link_libraries(Prismata_Testing PRIVATE Prismata_AI Prismata_Engine)
 target_include_directories(Prismata_Testing PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/source/testing"

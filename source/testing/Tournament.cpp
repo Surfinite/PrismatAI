@@ -68,7 +68,7 @@ void Tournament::run()
     size_t totalGamesExpected = 0;
     for (size_t p1(0); p1 < _players.size(); ++p1)
     {
-        for (size_t p2(0); p2 < _players.size(); ++p2)
+        for (size_t p2(p1 + 1); p2 < _players.size(); ++p2)
         {
             if (_playerGroups[p1] != _playerGroups[p2])
             {
@@ -96,7 +96,7 @@ void Tournament::run()
 
             for (size_t p1(0); p1 < _players.size(); ++p1)
             {
-                for (size_t p2(0); p2 < _players.size(); ++p2)
+                for (size_t p2(p1 + 1); p2 < _players.size(); ++p2)
                 {
                     if (_playerGroups[p1] == _playerGroups[p2])
                     {
@@ -214,7 +214,7 @@ void Tournament::run()
 
             for (size_t p1(0); p1 < _players.size(); ++p1)
             {
-                for (size_t p2(0); p2 < _players.size(); ++p2)
+                for (size_t p2(p1 + 1); p2 < _players.size(); ++p2)
                 {
                     if (_playerGroups[p1] == _playerGroups[p2])
                     {
