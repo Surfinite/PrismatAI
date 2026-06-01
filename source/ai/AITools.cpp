@@ -5,6 +5,8 @@
 #include "Game.h"
 #include "Timer.h"
 
+#include <cstdlib>   // std::getenv (FORCE_DSNN env override)
+
 using namespace Prismata;
 
 std::string AITools::InitializeAI(const std::string & initString)
@@ -96,6 +98,81 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
         const GameState initialState(document["gameState"]);
 
         PlayerPtr aiPlayer = AIParameters::Instance().getPlayer(initialState.getActivePlayer(), document["aiPlayerName"].GetString());
+
+        // --- FORCE_DSNN override -------------------------------------------------
+        // If env PRISMATA_FORCE_DSNN is set, ignore the requested AI player and run
+        // UCT + NeuralNet using neural_weights_mixed_35prop.bin (override via env
+        // PRISMATA_DSNN_WEIGHTS). Think time = the requested player's TimeLimit, but
+        // 7000 -> 10000, so the in-game "7s Master Bot" (aiPlayerName HardestAI)
+        // thinks ~10s: a timeable tell that the DSNN is active, plus a slightly
+        // stronger opponent. The "3s" bot (HardAI, 3000) stays 3s. When the env var
+        // is unset, aiPlayer keeps the value above and behavior is byte-identical.
+        const char * forceDSNN = std::getenv("PRISMATA_FORCE_DSNN");
+        if (forceDSNN != nullptr && forceDSNN[0] != '\0')
+        {
+            const PlayerID activePlayer = initialState.getActivePlayer();
+            const std::string requestedName = document["aiPlayerName"].GetString();
+
+            // Read the requested player's TimeLimit from the parsed aiParameters.
+            int requestedTimeLimit = 7000;
+            if (document.HasMember("aiParameters") && document["aiParameters"].IsObject())
+            {
+                const rapidjson::Value & ap = document["aiParameters"];
+                if (ap.HasMember("Players") && ap["Players"].IsObject()
+                    && ap["Players"].HasMember(requestedName.c_str())
+                    && ap["Players"][requestedName.c_str()].IsObject()
+                    && ap["Players"][requestedName.c_str()].HasMember("TimeLimit")
+                    && ap["Players"][requestedName.c_str()]["TimeLimit"].IsInt())
+                {
+                    requestedTimeLimit = ap["Players"][requestedName.c_str()]["TimeLimit"].GetInt();
+                }
+            }
+            const int dsnnTimeLimit = (requestedTimeLimit == 7000) ? 10000 : requestedTimeLimit;
+
+            const char * weightsEnv = std::getenv("PRISMATA_DSNN_WEIGHTS");
+            const std::string weightsName = (weightsEnv && weightsEnv[0] != '\0')
+                                          ? std::string(weightsEnv)
+                                          : std::string("neural_weights_mixed_35prop.bin");
+
+            NeuralNetPtr nn = std::make_shared<NeuralNet>();
+            const bool nnOk = nn->loadWeights("asset/config/" + weightsName) || nn->loadWeights(weightsName);
+
+            // HardIterator(_Root) match the tested DSNN_MBonly config and are
+            // registered by InitializeAI from the request's aiParameters blob.
+            MoveIteratorPtr rootI1 = AIParameters::Instance().getMoveIterator(Players::Player_One, "HardIterator_Root");
+            MoveIteratorPtr rootI2 = AIParameters::Instance().getMoveIterator(Players::Player_Two, "HardIterator_Root");
+            MoveIteratorPtr moveI1 = AIParameters::Instance().getMoveIterator(Players::Player_One, "HardIterator");
+            MoveIteratorPtr moveI2 = AIParameters::Instance().getMoveIterator(Players::Player_Two, "HardIterator");
+
+            if (nnOk && rootI1 && rootI2 && moveI1 && moveI2)
+            {
+                nn->buildCardTypeMapping();
+
+                UCTSearchParameters params;
+                params.setMaxPlayer(activePlayer);
+                params.setTimeLimit((size_t)dsnnTimeLimit);
+                params.setMaxTraversals(100000);
+                params.setMaxChildren(40);
+                params.setRootMoveIterator(Players::Player_One, rootI1);
+                params.setRootMoveIterator(Players::Player_Two, rootI2);
+                params.setMoveIterator(Players::Player_One, moveI1);
+                params.setMoveIterator(Players::Player_Two, moveI2);
+                params.setEvalMethod(EvaluationMethods::NeuralNet);
+                params.setNeuralNet(nn);
+
+                aiPlayer = PlayerPtr(new Player_UCT(activePlayer, params));
+
+                fprintf(stderr, "FORCE_DSNN: '%s' -> UCT+NeuralNet, weights=%s, timeLimit=%dms\n",
+                        requestedName.c_str(), weightsName.c_str(), dsnnTimeLimit);
+            }
+            else
+            {
+                fprintf(stderr, "FORCE_DSNN: could NOT build DSNN player (nnOk=%d, iterators=%d); "
+                        "falling back to requested '%s'\n",
+                        (int)nnOk, (int)(rootI1 && rootI2 && moveI1 && moveI2), requestedName.c_str());
+            }
+        }
+        // --- end FORCE_DSNN override --------------------------------------------
 
         airesign = PlayerShouldResign(initialState, initialState.getActivePlayer());
 
