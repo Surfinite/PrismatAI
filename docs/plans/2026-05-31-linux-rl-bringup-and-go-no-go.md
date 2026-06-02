@@ -105,6 +105,47 @@ left on the table"). Infrastructure already exists and was never run: players
   *first*. In RL, treat `cValue`/`cPUCT` as a **scheduled/annealed** HP (more exploration early,
   less late), not a fixed constant.
 
+### Result (2026-06-02) — DONE: `UCTConstant` set to **0.3** on `DSNN_Mixed35` + `DSNN_Mixed35_OB`
+
+Swept the 35-prop DSNN (`neural_weights_mixed_35prop.bin`) vs `HardestAI` on engine_v1
+(`dave-master-jsonclean`). **First pass (64 games/block, 7s, 6 separate blocks `PV_cValue_c*`)
+was inconclusive** — non-monotonic, noisy (0.3=60.9%, 0.5=51.6%, 0.7=59.4%, 1.0=59.4%, 1.5=53.1%,
+2.0=53.1%). Root cause: each block drew *different* random card sets (`Random::Int` uses one
+process-wide `mt19937_64` seeded once at startup, never re-seeded per block — `Random.cpp:11`,
+`Tournament.cpp:213`), so cross-block WRs were confounded by card-set luck, which dominates at
+64 games (95% CI ≈ ±12 pts).
+
+**Fix (no code change): single paired round-robin block** — all cValue variants in group 1, the
+opponent in group 2. Per `Tournament::run`, each round generates one card set that *every* variant
+plays colour-swapped → identical card sets across variants → card-set variance differenced out.
+
+**Paired 1s sweep** (8 variants vs `HardestAI_1s`, 512 games each on the same 256 card sets):
+
+| cValue | 0.1 | 0.2 | 0.3 | 0.5 | 0.7 | 1.0 | 1.5 | 2.0 |
+|---|---|---|---|---|---|---|---|---|
+| WR | **60.1%** | 59.0% | 57.9% | 57.9% | 55.5% | 53.8% | 51.6% | 49.3% |
+
+Perfectly **monotonic**: lower cValue = stronger; the **2.0 default is the single worst setting**.
+
+**7s full-OB confirmation** (`HardIterator_OB2_Root` vs `HardestAI_OB`, 128 games each, same 64 card sets):
+
+| cValue | 0.1 | 0.3 | 0.7 | 2.0 |
+|---|---|---|---|---|
+| WR | 59.0% | 59.0% | 58.6% | 56.2% |
+
+The low-cValue edge **transfers to production settings but compresses** (gap over 2.0: ~11 pts @1s
+→ ~2.7 pts @7s — more traversals make some exploration worthwhile). At 7s the **0.1–0.7 region is a
+flat optimum** (statistically indistinguishable), all beating 2.0.
+
+**Set `UCTConstant` = 0.3** (config-only) on `DSNN_Mixed35` (weak book) and `DSNN_Mixed35_OB`
+(full OB). 0.3 is tied-best at 7s, near-best at 1s, beats the 2.0 default at both think-times, and
+retains exploration for RL self-play diversity (vs near-greedy 0.1) — consistent with annealing
+cValue in RL (above). Confirms the DSNN-port audit's "claimable margin left on the table." Note the
+think-time interaction: the *strength*-optimum is lower at low search budgets, so RL annealing
+should bias toward exploration early. Reproducer players/blocks (`DSNN_M35_1s_c*`, `DSNN_M35_OB_c*`,
+`PV_cValue_paired_1s`, `PV_cValue_OB_confirm_7s`) retained in `config.txt` as `"run":false`. Logs:
+`pv_cval_run.log` (1st pass), `pv_cval_paired_run.log` (1s paired), `pv_cval_ob_confirm.log` (7s OB).
+
 ## Hyperparameter note (supervised → RL)
 
 - **Architecture HPs carry over** (same net is fine-tuned in RL).
