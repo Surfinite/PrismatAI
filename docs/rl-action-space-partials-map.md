@@ -198,15 +198,16 @@ flowchart TD
 
 ## 5. Recommended sequencing
 
-The engine is currently **locked** (a tournament holds all cores; `config.txt` has uncommitted OB2 work). So:
+The cValue sweep is **done** (`UCTConstant` → **0.3** on DSNN_Mixed35; 2.0 was the worst setting; strength monotonic in 1/cValue — see `project_cvalue_sweep_result_2026_06_02`). Widenings should layer **grouped by phase and batched for retraining**, not one-unit-at-a-time — an "axis" is a class of decision, not a single card. The value net scores whatever children the iterator emits, so added portfolio variants *function* immediately; retraining only makes the net *better* at the new choices, and several axes can share one training batch.
 
 1. **Now (read-only, safe):** this map + diagrams. ✅
-2. **After the prior session reports "OB2 finished + committed" and the cValue sweep is done** (engine + config free):
-   - **First widening axis — prove the mechanism (config-only):** Option A for the discretionary-utility class (Infusion Grid). Smallest possible test that "added portfolio variant → value net makes a real, learnable choice." Verify with `--suggest` on the reported IG state (both fire and don't-fire whole-turn children appear), then a small A/B vs the un-widened baseline to confirm no strength regression.
-   - **In parallel / next (also config-only):** wire the already-existing `Defense_Default`/`Defense_GreedyKnapsack` and `Breach_Default` into the deployed iterators' phase-0/phase-3 arrays — defense and breach are currently *never* branched, and these variants exist for free.
-   - **Higher-value, needs C++ (rebuild):** the **red buy-vs-click split** (Perforator/Animus). This is two coupled restrictions — `GreedyKnapsack` single-scalar greedy (red *consumption*) and `TechHeuristic`'s Elyot cap (red *supply*, dead `DIVERSIFY` stub) — neither of which co-optimizes producers with consumers. This is the canonical action-space-widening case from the Perforator analysis.
-   - **Port the KEEP rules:** `AvoidDefenseWaste` + `AvoidResourceWaste` (separate, additive; needs rebuild).
-3. **Before any of the above changes**, the pending **cValue sweep** should land first (it tunes UCT exploration on the *current* action space; widening the space changes what cValue should be).
+2. **Batch 1 — config-only ability widenings (after the engine frees up):**
+   - **Port the live 5 ability variants into `HardIterator_Root`** (closes the 5-vs-1 parity gap; this is the live MasterBot's own optionality device — see §8.2). Opens three axes at once: `Ability_Filter` on/off (fire Drake/Grenade Mech/Odin or not), frontline-GK on/off, chill on/off. Known-good because it's what the shipping MB runs. **Prerequisite:** fix the config-closure null-deref that crashes the LiveHardestAI config in dave (§8.5).
+   - **Add the Infusion-Grid-optional variant** (Option A; *beyond* live — all 5 live variants still fire IG, §8.2). Proof-of-mechanism that the value net exploits a newly-exposed choice. Verify with `--suggest` (both fire and don't-fire whole-turn children appear).
+   - → batch-retrain these together; A/B vs the un-widened baseline for no regression.
+3. **Batch 2 — defense/breach branching (config-only, *beyond* live):** wire the already-implemented `Defense_Default`/`Defense_GreedyKnapsack` and `Breach_Default` into the phase-0/phase-3 arrays. Defense/breach are pinned to one variant in **both** dave and live (§8.3), so this is a deliberate widening past the MasterBot.
+4. **Batch 3 — red buy-vs-click split (needs C++ rebuild):** the high-value Perforator/Animus axis — two coupled restrictions, `GreedyKnapsack` single-scalar greedy (red *consumption*) and `TechHeuristic`'s Elyot cap (red *supply*, dead `DIVERSIFY` stub) — neither co-optimizes producers with consumers.
+5. **Port the KEEP rules:** `AvoidDefenseWaste` + `AvoidResourceWaste` (separate, additive; needs rebuild).
 
 ---
 
@@ -226,3 +227,48 @@ The engine is currently **locked** (a tournament holds all cores; `config.txt` h
 - `AvoidBreachSolver` / `ChillSolver` delegate to iterators (`AvoidBreachBuyIterator`, `StateChillIterator`) — do those hide non-dominated multi-turn lines? (Read the iterator objectives + params.)
 - For Option C, what does "fire IG #i but not #j" mean across isomorphic instances? (Interacts with `IsomorphicCardSet`.)
 - Confirm the **deployed RL player** is the non-OB `DSNN_Mixed35` on `HardIterator_Root` (not an `*_OB` variant) before treating this map's "deployed" column as live.
+- Does `PrismataAI.exe.ORIG` honor `Eval:WillScore` + `MaxTraversals` (no `TimeLimit`) in its aiParameters? (Determines whether the RNG-free exact diff, §8.6 option A, is possible.)
+- What exactly in the LiveHardestAI config closure null-derefs in dave (§8.5)?
+
+---
+
+## 8. Live-game parity & engine provenance (added 2026-06-02)
+
+### 8.1 Two players — don't conflate them
+- `LiveHardestAI` (PrismataAI repo) matches the SWF `NewIterator_Root` almost byte-for-byte: same 5 ability variants, OB content identical, filter matches (incl. Odin). Only intentional delta: the added `AbilityAvoidDefenseWaste`. **Bringing back the live OB squashed the differences — for this player.**
+- The **RL target is not `LiveHardestAI`**. It's `DSNN_Mixed35` / `HardestAI` on dave's `HardIterator_Root` — a leaner, dave-native config: **1 ability variant**, and `DefaultOpeningBook` (until the in-flight OB2 work lands). So the "5 vs 1" gap is between **dave's RL config and live**, not between `LiveHardestAI` and live.
+
+### 8.2 The live 5 ability variants, decoded (SWF full blob)
+The live MasterBot's `NewIterator_Root` ability slot holds 5 `ACAvoidBreach_ChillSolver*` variants differing along three axes — encoded as **portfolio variants the search picks among**. This *is* Option A (§4), and the shipping MasterBot already uses it.
+
+| Variant | `Ability_Filter`? | Frontline GK | Chill | OB |
+|---|---|---|---|---|
+| `ChillSolver2` | yes (filter) | yes | yes | OB2 |
+| `ChillSolver` | yes (filter) | yes | yes | OB |
+| `ChillSolverNF` | yes (filter) | **no** | yes | OB |
+| `ChillSolverClickNoChill` | **no ("Click")** | yes | **no** | OB |
+| `ChillSolverClickNF` | **no ("Click")** | **no** | yes | OB |
+
+- **"Click" = no `Ability_Filter`** → *also* auto-fires the normally-filtered units (Drake / Grenade Mech / Odin). Confirmed from the blob: `AbilityAttackDefault` has `"filter":"Ability_Filter"`; `AbilityAttackDefaultClick` is identical minus the filter. dave reproduces this with an empty `CardFilter` — **not a missing capability**.
+- **All 5 still fire Infusion Grid** (it is never in `Ability_Filter`), so the live MasterBot can't decline it either. Making IG optional is therefore *beyond-live* behavior, not a parity fix (consistent with the MB-weakness catalog listing IG as a blindspot).
+
+### 8.3 Defense / Breach are pinned to one variant in live too
+The diff confirms live wires exactly `DefenseSolver` (defense) and `BreachGreedyKnapsack` (breach) — **1 variant each, same as dave**. dave *implements* `Defense_Default`/`Defense_GreedyKnapsack`/`Defense_Random` + `Breach_Default`/`Breach_Random` but wires none of them. So defense/breach pinning is a **shared design choice**, not a dave gap — and adding the extras (Batch 2) is a deliberate widening *past* the MasterBot.
+
+### 8.4 SWF param vocabulary vs dave's dispatch — dave implements all of it
+The decompiled AS3 has **no AI algorithm** — `scripts/AI/` is `Cpp_Brain.as` etc., client wrappers that shell out to the native `PrismataAI.exe`. The ground truth for "what the real MasterBot supports" is the **SWF AI params** (the config the client feeds the .exe). Diffing every component name in the full param blob against dave's `getPartialPlayer` dispatch ([AIParameters.cpp:367-629](c:/libraries/PrismataAI-dave-master/source/ai/AIParameters.cpp#L367-L629)): dave implements **every** partial-player class referenced (15 ActionAbility, 10 ActionBuy, 4 Defense, 3 Breach), plus the player/iterator types (`Player_StackAlphaBeta`, `Player_RandomFromIterator`, `PPPortfolio`). **dave shares the real MasterBot's entire partial-player vocabulary.** What the SWF has that dave's *config* doesn't *wire up* is a much larger portfolio (many `ChillSolver`/`Rush`/difficulty-personality variants) — unused config, not missing code.
+
+### 8.5 The LiveHardestAI segfault is config-closure, not missing code
+dave's `getPartialPlayer` else-branch only prints a warning on an unknown *variable* name and leaves the pointer **null** ([AIParameters.cpp:633](c:/libraries/PrismataAI-dave-master/source/ai/AIParameters.cpp#L633)), then dereferences it at [line 637](c:/libraries/PrismataAI-dave-master/source/ai/AIParameters.cpp#L637) → crash. The LiveHardestAI-config crash is therefore almost certainly an **undefined referenced leaf** in the ported config, not a capability gap (§8.4) and not the Click variants (§8.2). A 2-line robustness fix (null-check + hard assert with the offending name) both prevents the crash and surfaces the missing definition — and is the prerequisite to porting the live 5 variants (Batch 1).
+
+### 8.6 `PrismataAI.exe.ORIG` provenance & why a clean diff is hard
+- `.ORIG` is a **user-renamed** preserved **2016 MasterBot binary** (721,920 B, **32-bit**); the bare `PrismataAI.exe` in the Steam install is now the **DSNN swap-in**. Any "is X as strong as MasterBot" test **must point the SteamAI bridge at `.ORIG`** or it silently diffs against the DSNN.
+- **"dave standalone == `.ORIG`" is unverified.** Evidence of shared lineage: identical partial-class vocabulary (§8.4), byte-identical opening books (May 16), same player/iterator types. Unverified: behavioral equivalence; the compiled-in-OB question; dave's source is a later snapshot than the 2016 build.
+- **Two structural blockers to a bit-exact diff:**
+  1. **32 vs 64-bit.** Dave updated his repo to cmake/64-bit; `.ORIG` is 32-bit. Floating-point/playout values diverge between architectures → no bit-exact agreement is achievable against a 64-bit build.
+  2. **Seeding.** dave's `Random::Seed()` ([Random.cpp:42-47](c:/libraries/PrismataAI-dave-master/source/engine/Random.cpp#L42-L47)) exists but reseeds via `nextThreadSeed()`, which mixes in `std::hash<std::thread::id>` (line 26-28) → **not reproducible across runs as-is** (and only reseeds the calling thread). `.ORIG` uses internal `srand(time^PID)` → **unseedable**.
+- **Verification options:**
+  - **(A) RNG-free exact diff** — run both with `Eval:WillScore` (deterministic, StackAlphaBeta-supported) + fixed `MaxTraversals` (no `TimeLimit`). No RNG → both deterministic → exact move-diff over a state corpus, *if* `.ORIG` honors those param keys. Tests the engine+search machinery exactly and sidesteps seeding. Cleanest provenance test available.
+  - **(B) Statistical, for the real Playout config** — can't seed `.ORIG`, so compare move-**agreement rate** over many states and head-to-head WR (~50% ⇒ equivalent within noise).
+  - **(C) Source-to-source (skip `.ORIG`)** — build Dave's **2019 repo as a 32-bit standalone** (the MasterBot-era source we control and can patch to seed), compare against dave-master with a matched deterministic config + fixed seed (after a small `Random.cpp` determinism patch). Sidesteps `.ORIG`'s unseedability, at the cost of assuming 2019-source ≈ 2016-binary.
+- **Pragmatic note:** bit-exact `.ORIG` validation is largely infeasible and arguably unnecessary for RL — what matters for RL is that dave-master is a *strong, self-consistent* engine. Provenance matters for paper baselines and the compiled-in-OB question, where option (A) is the cleanest test.
