@@ -108,6 +108,17 @@ swap-in (sentinel `use_dsnn.txt` active).
 > the engine that supported it. Needs dedicated debugging (segfault gives no stdout) or an
 > engine-native OB iterator built from the jsonclean engine's working components.
 
+> **UPDATE (2026-06-02): native OB chain SUCCEEDED — and the baseline was NOT book-less.** dave's
+> `HardIterator_Root` already transitively consumes the *weak* 5-entry `DefaultOpeningBook` (via
+> `ACAvoidBreach_ChillSolver → ACEasy → BuyOpeningBook`), so the real axis is **weak-vs-strong book**,
+> not book-vs-none. Built a NATIVE engine_v1 strong-OB chain (`HardIterator_OB2_Root → … →
+> BuyOpeningBook2 → LiveOpeningBook2`, 50 entries, byte-verified == SWF `DefaultOpeningBook2`) — runs
+> cleanly where the main-repo `Live_*` chain segfaulted. **Strong book on all sides, 128 g/7 s each:**
+> `DSNN_Mixed35_OB` **54.7 %** vs `HardestAI_OB` (weak-book 55.5 % → ~flat), **58.2 %** vs
+> `HardestAIUCT_OB` (weak-book 47.3 % → **+11 pt**). So with openings equalized on both sides, DSNN
+> beats **both** baselines and the clean-eval control flips to a win — the 35-prop NN eval > Playout
+> once the opening is controlled. Config + full numbers committed `dave-master-jsonclean f15335e`.
+
 ### JS-harness cross-check (matchup_clean.js, live MasterBot params, 2026-06-01)
 
 Re-ran the same matchups through `js_engine/matchup_clean.js` (DaveAI = per-turn `Prismata_Standalone.exe`
