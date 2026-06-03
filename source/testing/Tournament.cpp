@@ -38,6 +38,11 @@ Tournament::Tournament(const rapidjson::Value & tournamentValue)
     {
         _saveReplaysDir = tournamentValue["saveReplays"].GetString();
     }
+
+    if (tournamentValue.HasMember("exportTrainingV2") && tournamentValue["exportTrainingV2"].IsString())
+    {
+        _exportTrainingV2Dir = tournamentValue["exportTrainingV2"].GetString();
+    }
     
     PRISMATA_ASSERT(tournamentValue["players"].Size() >= 2, "Tournament has less than 2 players");
 
@@ -130,6 +135,12 @@ void Tournament::run()
                     {
                         g1.setReplaySaveDir(_saveReplaysDir, _replayGameCounter.fetch_add(1));
                         g2.setReplaySaveDir(_saveReplaysDir, _replayGameCounter.fetch_add(1));
+                    }
+
+                    if (!_exportTrainingV2Dir.empty())
+                    {
+                        g1.setExportTrainingV2(_exportTrainingV2Dir, _exportV2GameCounter.fetch_add(1));
+                        g2.setExportTrainingV2(_exportTrainingV2Dir, _exportV2GameCounter.fetch_add(1));
                     }
 
                     playGame(g1, t);
@@ -266,6 +277,10 @@ TournamentGame Tournament::playGame(const GameState & state, const size_t whiteI
     if (!_saveReplaysDir.empty())
     {
         game.setReplaySaveDir(_saveReplaysDir, _replayGameCounter.fetch_add(1));
+    }
+    if (!_exportTrainingV2Dir.empty())
+    {
+        game.setExportTrainingV2(_exportTrainingV2Dir, _exportV2GameCounter.fetch_add(1));
     }
     game.playGame();
 

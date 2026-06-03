@@ -15,7 +15,9 @@ class Tournament
     std::string                         _type;
     std::string                         _date;
     std::string                         _saveReplaysDir;   // empty = disabled
+    std::string                         _exportTrainingV2Dir;   // empty = disabled
     mutable std::atomic<int>            _replayGameCounter{0};
+    mutable std::atomic<int>            _exportV2GameCounter{0};
     size_t                              _rounds;
     size_t                              _totalGamesPlayed;
     size_t                              _discardedGames;

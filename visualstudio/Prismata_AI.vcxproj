@@ -80,6 +80,7 @@
     <ClCompile Include="..\source\ai\PartialPlayer_Defense_Random.cpp" />
     <ClCompile Include="..\source\ai\PartialPlayer_Defense_Solver.cpp" />
     <ClCompile Include="..\source\ai\NeuralNet.cpp" />
+    <ClCompile Include="..\source\ai\V2Record.cpp" />
     <ClCompile Include="..\source\ai\Player_AlphaBeta.cpp" />
     <ClCompile Include="..\source\ai\Player_Default.cpp" />
     <ClCompile Include="..\source\ai\Player_GUI.cpp" />
@@ -172,6 +173,7 @@
     <ClInclude Include="..\source\ai\PartialPlayer_Defense_Random.h" />
     <ClInclude Include="..\source\ai\PartialPlayer_Defense_Solver.h" />
     <ClInclude Include="..\source\ai\NeuralNet.h" />
+    <ClInclude Include="..\source\ai\V2Record.h" />
     <ClInclude Include="..\source\ai\Player_AlphaBeta.h" />
     <ClInclude Include="..\source\ai\Player_Default.h" />
     <ClInclude Include="..\source\ai\Player_GUI.h" />

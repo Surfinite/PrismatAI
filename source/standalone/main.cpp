@@ -2,6 +2,7 @@
 #include "PrismataAI.h"
 #include "NeuralNet.h"
 #include "MoveSampler.h"
+#include "V2Record.h"
 #include "Random.h"
 #include "rapidjson/document.h"
 #include <iostream>
@@ -164,6 +165,58 @@ int main(int argc, char *argv[])
 
         printf("--test-sampler: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;
+    }
+
+    // --- DeepSets V2 training-record dump (single state) ---
+    // Usage: PrismataAI.exe --dump-v2-record <stateJson> <outJson>
+    // Emits the per-state V2 record (WITHOUT outcome_p0/total_plies) for the given
+    // state, using the SAME GameState the value net evaluates. Run from bin/ so the
+    // relative cardLibrary path resolves. Not part of the AI move protocol.
+    if (argc >= 4 && std::string(argv[1]) == "--dump-v2-record")
+    {
+        const std::string statePath = argv[2];
+        const std::string outPath   = argv[3];
+
+        std::ifstream sin(statePath);
+        if (!sin.is_open())
+        {
+            fprintf(stderr, "dump-v2-record: cannot open state file %s\n", statePath.c_str());
+            return 1;
+        }
+        std::string stateStr((std::istreambuf_iterator<char>(sin)), std::istreambuf_iterator<char>());
+        sin.close();
+
+        // Load the 116-unit training card library (matches NN unit_index + property_table).
+        std::string cardLibPath = "asset/config/cardLibrary.jso";
+        {
+            const std::string exeDir = NeuralNet::getExecutableDir();
+            if (!exeDir.empty())
+            {
+                std::ifstream clTest(exeDir + "/" + cardLibPath);
+                if (clTest.good()) { cardLibPath = exeDir + "/" + cardLibPath; }
+            }
+        }
+        Prismata::InitFromCardLibrary(cardLibPath);
+
+        rapidjson::Document doc;
+        if (doc.Parse(stateStr.c_str()).HasParseError())
+        {
+            fprintf(stderr, "dump-v2-record: JSON parse error in %s\n", statePath.c_str());
+            return 1;
+        }
+        const rapidjson::Value & gs = doc.HasMember("gameState") ? doc["gameState"] : doc;
+        const GameState state(gs);
+
+        const std::string rec = buildV2RecordJSON(state, 0);
+
+        std::ofstream out(outPath, std::ios::binary);
+        if (!out)
+        {
+            fprintf(stderr, "dump-v2-record: cannot open output file %s\n", outPath.c_str());
+            return 1;
+        }
+        out << rec;
+        return out.good() ? 0 : 1;
     }
 
     Random::Seed((uint64_t)time(NULL));

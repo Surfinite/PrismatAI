@@ -46,9 +46,28 @@ void TournamentGame::playGame(size_t updateIntervalSec)
         _serializer->captureInitialState(init);
     }
 
+    // Optional DeepSets V2 training-data export. Independent of replay capture:
+    // it snapshots a per-turn record at each turn-start (the leaf the value net
+    // evaluates) and backfills the game outcome at the end. plyIndex counts
+    // captured player-turns (0-based) within this game.
+    if (!_exportV2Dir.empty())
+    {
+        _v2Exporter = std::make_unique<SelfPlayV2Exporter>(_exportV2Dir);
+    }
+    int _v2PlyIndex = 0;
+
     while(!_game.gameOver())
     {
         PlayerID playerToMove = _game.getState().getActivePlayer();
+
+        // V2 capture at turn-start: the current GameState is the turn-start
+        // snapshot the active player's value net would evaluate. One record per
+        // player-turn (not per action).
+        if (_v2Exporter)
+        {
+            _v2Exporter->capture(_game.getState(), _v2PlyIndex);
+            ++_v2PlyIndex;
+        }
 
         // Snapshot the pre-move state when recording, so per-action frames can be
         // reconstructed off the think-timer below. Allocated only when recording;
@@ -61,8 +80,9 @@ void TournamentGame::playGame(size_t updateIntervalSec)
         {
             _discarded = true;
             _discardReason = "empty move from " + _playerNames[playerToMove] + " on turn " + std::to_string(_game.getState().getTurnNumber());
-            // Serializer is dropped without finalize on discard.
+            // Serializer / V2 exporter are dropped without finalize on discard.
             _serializer.reset();
+            _v2Exporter.reset();
             return;
         }
 
@@ -109,6 +129,17 @@ void TournamentGame::playGame(size_t updateIntervalSec)
         const int turns = static_cast<int>(finalState.getTurnNumber());
         _serializer->finalize(winnerInt, turns, _replaySaveDir, _replayGameIndex);
         _serializer.reset();
+    }
+
+    // Finalize the V2 training export: backfill outcome_p0 + total_plies (game
+    // level) and write selfplay_<gameId>.jsonl. total_plies = engine turn number.
+    if (_v2Exporter)
+    {
+        const GameState & finalState = _game.getState();
+        _v2Exporter->finalize(finalState.winner(),
+                              static_cast<int>(finalState.getTurnNumber()),
+                              _exportV2GameId);
+        _v2Exporter.reset();
     }
 }
 
