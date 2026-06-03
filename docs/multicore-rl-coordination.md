@@ -24,6 +24,16 @@ The AI = **net (`.bin`) + action-space (iterators/partials/config)**. Both live 
 
 **Rule:** the net and the iterator must be **promoted together** — a net trained on a widened action space must be paired with that widened iterator on the live path (and vice-versa). Promote only RL-validated (post-GO) widenings to the live drop-in; keep unvalidated/experimental widenings out of friends' builds.
 
+### ⚠️ 2a. REQUIRED WIRE (does not exist yet): make the live exe use OUR iterator, not the SWF's
+
+**Current reality (verified `AITools.cpp:124–187`, `9c64813`):** the live `FORCE_DSNN` swap-in overrides the player type / eval / weights / think-time, but it resolves its **move iterator by name** — `getMoveIterator(..., "HardIterator_Root")` / `"HardIterator"` — out of the **per-request `aiParameters` (the SWF's blob)**. The standalone exe **does not load `config.txt`** at startup (only `InitFromCardLibrary`); the `AIParameters` singleton is populated per-request from the SWF. **So the live action space is the SWF's iterator, NOT ours.** Widening `config.txt` (RL's `HardIterator_5var_IGopt_Root`, etc.) has **zero effect on live play** until this is changed — shipping a new exe + `.bin` alone would run the new net over the *old* candidate set (net trained to widen, but the wider moves never generated).
+
+**Required addition (owned by the live-drop-in / multicore workstream; NOT RL):**
+1. **Load a bundled config at startup** in the live standalone so our iterator/partial/filter definitions (incl. widened ones → `V5_CS_NoIG` → `Ability_Filter_Live_NoIG`) are registered in `AIParameters::Instance()` (as the tournament exe already does via `parseFile`). Verify whether the per-request `parseJSONValue` **merges into** or **replaces** the registry, and order the load accordingly.
+2. **Make `FORCE_DSNN` use a configurable iterator name** (e.g. a `use_dsnn.txt` `iterator=HardIterator_5var_IGopt_Root` key), defaulting to the latest RL-validated iterator — instead of the hardcoded `"HardIterator_Root"` lookup against the SWF blob.
+
+Until (1)+(2) exist, **"promote a widening to friends" is not just a `.bin` swap** — it requires this wire. Track it as a prerequisite of the first live action-space promotion.
+
 ## 3. Shared engine surface (as of `9c64813`)
 
 **RL-hot (RL is still editing these — re-verify line numbers; expect rebases):**
