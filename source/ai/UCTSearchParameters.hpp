@@ -30,6 +30,10 @@ class Prismata::UCTSearchParameters
     int        _evalMethod         = EvaluationMethods::Playout;
     double          _blendWeight        = 0.5;
     bool            _usePUCT            = false;
+    bool            _selfPlaySampling   = false;   // self-play-only temperature/epsilon root sampling
+    double          _temperatureTau     = 1.0;     // visits^(1/tau)
+    size_t          _temperatureK       = 6;       // tau=1 for plies < K, then argmax
+    double          _epsilonUniform     = 0.25;    // epsilon-uniform mix over root candidates
 
     PlayerPtr       _playoutPlayers[2];
     MoveIteratorPtr _moveIterators[2];
@@ -55,6 +59,10 @@ public:
     const int & rootMoveSelectionMethod()                      const   { return _rootMoveSelection; }
     const double & blendWeight()                                    const   { return _blendWeight; }
     bool           usePUCT()                                        const   { return _usePUCT; }
+    bool           selfPlaySampling()                               const   { return _selfPlaySampling; }
+    const double & temperatureTau()                                 const   { return _temperatureTau; }
+    const size_t & temperatureK()                                   const   { return _temperatureK; }
+    const double & epsilonUniform()                                 const   { return _epsilonUniform; }
     const std::string & graphVizFilename()                          const   { return _graphVizFilename; }
     const PlayerPtr & getPlayoutPlayer(const PlayerID p)            const   { return _playoutPlayers[p]; }
     const MoveIteratorPtr & getMoveIterator(const PlayerID p)       const   { return _moveIterators[p]; }
@@ -71,6 +79,10 @@ public:
     void setRootMoveSelectionMethod(const int & method)                { _rootMoveSelection = method; }
     void setBlendWeight(const double & w)                                 { _blendWeight = w; }
     void setUsePUCT(bool use)                                             { _usePUCT = use; }
+    void setSelfPlaySampling(bool b)                                      { _selfPlaySampling = b; }
+    void setTemperatureTau(double t)                                      { _temperatureTau = t; }
+    void setTemperatureK(size_t k)                                        { _temperatureK = k; }
+    void setEpsilonUniform(double e)                                      { _epsilonUniform = e; }
     void setGraphVizFilename(const std::string & filename)                  { _graphVizFilename = filename; }
     void setPlayoutPlayer(const PlayerID p, const PlayerPtr & ptr)          { _playoutPlayers[p] = ptr; }
     void setMoveIterator(const PlayerID p, const MoveIteratorPtr & m)       { _moveIterators[p] = m; }

@@ -780,6 +780,15 @@ PlayerPtr AIParameters::parsePlayer(const PlayerID player, const std::string & p
             params.setCValue(args["UCTConstant"].GetDouble());
         }
 
+        if (args.HasMember("SelfPlaySampling") && args["SelfPlaySampling"].IsBool())
+            params.setSelfPlaySampling(args["SelfPlaySampling"].GetBool());
+        if (args.HasMember("TemperatureTau") && args["TemperatureTau"].IsDouble())
+            params.setTemperatureTau(args["TemperatureTau"].GetDouble());
+        if (args.HasMember("TemperatureK") && args["TemperatureK"].IsInt())
+            params.setTemperatureK((size_t)args["TemperatureK"].GetInt());
+        if (args.HasMember("EpsilonUniform") && args["EpsilonUniform"].IsDouble())
+            params.setEpsilonUniform(args["EpsilonUniform"].GetDouble());
+
         if (params.evalMethod() == EvaluationMethods::NeuralNet)
         {
             NeuralNetPtr nn = createPlayerNeuralNet(playerValue);

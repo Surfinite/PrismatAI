@@ -4,6 +4,8 @@
 #include <algorithm>
 #include "AITools.h"
 #include "NeuralNet.h"
+#include "MoveSampler.h"
+#include "Random.h"
 
 using namespace Prismata;
 
@@ -76,6 +78,24 @@ void UCTSearch::doSearch(const GameState & initialState, Move & move)
 
 UCTNode * UCTSearch::getBestRootNode()
 {
+    // Self-play-only: sample the root move during the tau=1 opening (first K plies).
+    if (_params.selfPlaySampling()
+        && _rootNode.getState().getTurnNumber() < _params.temperatureK()
+        && _rootNode.numChildren() > 0)
+    {
+        std::vector<size_t> visits(_rootNode.numChildren());
+        for (size_t c = 0; c < _rootNode.numChildren(); ++c)
+        {
+            visits[c] = _rootNode.getChild(c).numVisits();
+        }
+        const double u1 = Random::Real01();
+        const double u2 = Random::Real01();
+        const size_t idx = MoveSampler::sampleRootIndex(
+            visits, _params.temperatureTau(), _params.epsilonUniform(), u1, u2);
+        return &_rootNode.getChild(idx);
+    }
+
+    // Default (eval/deploy and late-game self-play): argmax.
     UCTNode * bestNode = NULL;
     if (_params.rootMoveSelectionMethod() == UCTMoveSelect::HighestValue)
     {
