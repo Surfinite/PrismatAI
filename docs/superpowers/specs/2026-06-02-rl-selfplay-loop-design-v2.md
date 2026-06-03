@@ -46,11 +46,13 @@ Clone of `DSNN_Mixed35_5var` (NeuralNet eval, 5-variant portfolio + IG-optional,
 - <!-- CHANGED: root exploration injection — temperature alone is insufficient without a policy prior (THE #1 review consensus) — Reviewers 1,2,3,4,5,6 -->
   **Root exploration injection (required).** Visit-count temperature is *result* diversity, not *search* diversity: with UCB1 + small cValue the search concentrates visits, so the τ-sampler only reshuffles a narrow band. During the `τ=1` phase, self-play **(a) forces ≥1 visit to every root candidate before UCB1 exploitation, and (b) mixes in an ε-uniform component** over root candidates (start ε≈0.25): with prob 1−ε sample ∝ visits, with prob ε sample uniformly over the *non-waste-pruned* root candidates. This is the policy-free analogue of AlphaZero root noise. (Root Q-perturbation / Dirichlet-on-Q is an alternative — start with ε-uniform; it's simplest and seedable.)
 - **Clean seedable RNG** (the `Random.cpp` thread-hash fix — §10.1); the sampler *and* MCTS tie-breaking must draw from a controllable stream for reproducibility.
+- <!-- CHANGED: MaxChildren/traversal scaling under forced root exploration; incorporates O5 — user question -->
+  **MaxChildren & traversal floor (code-checked).** `MaxChildren` is a **single per-node cap** (no separate root cap — `UCTNode.cpp:54`), and the deployed search expands the root **incrementally** (one child per traversal; PUCT's `generateAllChildren` is off). The root yields ≤25 candidates (5-variant) / ≤30 (IG-optional) — both **< 40, so `MaxChildren=40` already covers every root candidate for axis-1; no change needed.** Incremental expansion already gives each candidate ≥1 eval once `N ≥ ~30`, so the **ε-uniform mix (no extra traversals) is the real diversity lever**, not "forcing" visits. **Calibration constraint (add to M5):** `N` must be comfortably **> the root branching factor** so the mandatory initial expansion isn't most of the budget and depth survives. **Later/wider axes (O5):** when the root grows past ~40 candidates, raise **`MaxChildren` ≥ root branching factor AND scale `N` proportionally** — `MaxChildren` caps internal nodes too, so raising it widens the whole tree and *will* collapse search depth unless `N` rises with it.
 
 ## 4. Data & training regime
 
 - <!-- CHANGED: label scale corrected to match the actual pipeline (BCE on [0,1]); the v1 "+1/-1/0.5" was inconsistent — Reviewers 2,3 + code-check -->
-  **Labels: probability scale [0,1]** — **win = 1.0, draw = 0.5, loss = 0.0**, from the active-player's perspective (this is what `train.py` uses — BCE requires labels in [0,1]; the net maps value→`(v+1)/2`∈[0,1] for UCT). **Add label unit tests:** terminal win/loss/draw label correctly; opposite-active-player view inverts; aggregate P0/P1/P2 rates match the known ~57% P2 asymmetry; the historical P0/P1 inversion bug would fail the test. **Colour-balance training batches** (equal P1/P2 starts) so the value net isn't biased by start-advantage imbalance.
+  **Labels: probability scale [0,1]** — **win = 1.0, draw = 0.5, loss = 0.0**, from the active-player's perspective (this is what `train.py` uses — BCE requires labels in [0,1]; the net maps value→`(v+1)/2`∈[0,1] for UCT). **Add label unit tests:** terminal win/loss/draw label correctly; opposite-active-player view inverts; aggregate P0/P1/P2 rates match the known ~57% P2 asymmetry; the historical P0/P1 inversion bug would fail the test. **Colour-balance training batches** (equal P1/P2 starts) so the value net isn't biased by start-advantage imbalance. <!-- CHANGED: P2 asymmetry is set-dependent and narrows at strong play — user --> (Note: the ~57% P2 figure is **highly set-dependent** and collapses toward **~51:49 at master-level human play** — so colour-balance for cleanliness, but do *not* hard-normalize to a fixed 0.57; the net should learn the small, set-dependent residual itself. This reinforces rejecting fixed-base-rate value labels (R-rej1) and asymmetric temperature (§13-O12).)
 - **Sliding replay buffer:** last **W** iterations (start W≈5–10); sample each batch from the window.
 - <!-- CHANGED: human-only value anchor at a named fraction; MB-fleet dropped from training value targets — Reviewers 1,2,3,4,5,6 -->
   **Rehearsal = human-only.** Anchor on `human_1800_v2` (exact-match-clean) at a **named fraction**: ~**30% human / ~70% self-play at iter-1, decaying to ~10–15% by iter-3** as self-play accumulates. **Do NOT put MasterBot-fleet data in the training value targets** (its MasterBot-level outcomes would cap the ceiling / fight the RL signal) — use MB-fleet only for the val/forgetting diagnostic, or at ≤5% with reduced loss weight if coverage of a specific unit is missing. Monitor for forgetting via win-rate vs `STEAMAI` + the human-val forgetting check.
@@ -99,6 +101,14 @@ Triage with the KEEP/OPEN lens: **KEEP-style heuristic *bugs*** (dominated mispl
 - <!-- CHANGED: measure throughput before AWS — Reviewer 2 -->
   **Before AWS:** measure games/hour at the chosen N, NN-evals/sec, CPU utilization, shard write throughput, eval games/hour — self-play is CPU-bound, so size the £400 against measured throughput, not assumption.
 - **AWS (£400):** scale self-play volume + iterations; an improving win-rate **trajectory** (define: ≥2 consecutive iters of CI-clearing improvement) → continue monthly; flat → stop / rethink action space.
+
+## 8.5 Iteration-0 de-risking & label-quality diagnostics *(incorporates O1, O2, O4)*
+
+<!-- CHANGED: incorporate optionals O1 (high-sim early data), O2 (deep-label reference batch), O4 (offline-RL iteration-0) — user selected -->
+Cheap guards against the #1 risk (shallow-search label noise → false negative), run before/at iteration 0:
+- **O4 — Offline batch-RL iteration-0 (no loop):** generate one fixed self-play dataset (on the IG-optional config), train the net on it once, eval. If the net improves with *no feedback loop*, that's a clean positive signal with zero self-play-poisoning risk — and it validates the data→train→export→eval pipeline before the online loop is built.
+- **O1 — High-sim early data:** generate iteration-0/early batches at *deep* search (~10k–50k sims, ≈100 games overnight on the box) instead of the volume-`N` budget. Cleaner labels invert the many-games-vs-depth trade-off for the proof-of-life, where the question is *"can RL improve the net at all?"* not *"cheaply?"*.
+- **O2 — Deep-label reference batch:** hold a small batch labelled by deep search; train on the shallow-`N` self-play labels but *also* report the net's loss on the deep-label batch. A much-lower deep-label loss ⇒ shallow search is the bottleneck (not net capacity or the RL algorithm) — a direct false-negative diagnostic feeding the §9 triage.
 
 ## 9. Risks & false-negative guards
 
@@ -153,7 +163,13 @@ if MAX_ITERS reached with no GO:
 
 ## 13. Optional Enhancements (pick what you want)
 
-Not applied. Tell me which numbers to add.
+**Decision status (this round):**
+- ✅ **Incorporated:** **O1, O2, O4** → §8.5 (iteration-0 de-risking). **O5** → §3 (MaxChildren/`N` scaling under widening).
+- ⏳ **Pending your call (explained in chat):** **O3** (distillation bootstrap), **O6** (candidate-level policy-head fallback), **O7** (tactical/blunder regression suite).
+- 📦 **Documented for later, not now:** **O8** (opponent pool — AWS-scale anti-overfitting; revisit at scale).
+- ❌ **Declined:** **O9** (overlaps root exploration), **O10** (two-stage training), **O11** (intrinsic motivation), **O12** (asymmetric temperature — the P2 edge is set-dependent and ≈51:49 at master-level human play, so not worth the knob).
+
+The descriptions below remain as reference.
 
 1. **High-sim data for early iterations** — generate fewer, *deeper* (10k–50k-sim) self-play games for cleaner labels at proof-of-life, inverting the many-games-vs-depth trade-off. *(R3)* — Effort: medium. **Lean yes** (strong false-negative guard; the box can generate ~100 deep games overnight).
 2. **Deep-label reference batch** — train on shallow-search labels but also measure loss on a small deep-search-labelled batch; a much-lower deep-label loss ⇒ shallow search is the bottleneck (not capacity/algorithm). *(R3)* — Effort: small. **Lean yes** (direct, cheap diagnostic).
