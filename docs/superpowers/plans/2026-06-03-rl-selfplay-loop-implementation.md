@@ -40,6 +40,10 @@
 1. **CLI-hook tests** in `source/standalone/main.cpp` (pattern = the existing `--dump-features` hook at line 47): a `--test-X` arg runs asserts, prints `PASS`/`FAIL`, returns exit code 0/1. Run from `bin/`.
 2. **Benchmark tournaments**: add a `{"run":false,...}` block to `config.txt`, flip to `"run":true`, run `Prismata_Testing.exe` from `bin/`.
 
+**Two config gotchas (learned in Tasks 1–2):**
+- **`config.txt` is strict JSON** — `TestingConfig.cpp` parses it with plain RapidJSON (no `kParseCommentsFlag`). **No `//` or `/* */` comments** anywhere in it, or parsing fails. Put any explanatory notes in source comments instead.
+- **Self-play tournament blocks need the same player name in two DIFFERENT groups** (`group:1` + `group:2`). `Tournament::run()` skips same-group pairs (`if (_playerGroups[p1]==_playerGroups[p2]) continue;`), so a block with both entries in `group:1` schedules **0 games**. All `RL_SelfPlay`-vs-itself blocks in this plan use `group:1`/`group:2`.
+
 **Python tests:** `cd c:/libraries/PrismataAI/training && python -m pytest tests/<file>.py -v` (pattern = `tests/test_model_deepsets.py`).
 
 **Commit cadence:** one commit per task (after its verification passes). Use `feat(ai|train|eval): …`; end the message with the Co-Authored-By trailer.
@@ -193,7 +197,7 @@ In `source/testing/main.cpp` leave `Random::Seed((uint64_t)time(NULL))` as the d
 
 Append to the `"Benchmarks"` array in `bin/asset/config/config.txt` (use real existing players; pure-NeuralNet players have no playout RNG, so at `Threads:1` games are fully deterministic):
 ```json
-    {"run":false, "type":"Tournament", "name":"RNG_Repro_Check", "rounds":4, "Seed":777, "UpdateIntervalSec":5, "Threads":1, "RandomCards":8, "players":[{"name":"DSNN_Mixed35_5var_F1s","group":1},{"name":"DSNN_Mixed35_5var_F1s","group":1}]},
+    {"run":false, "type":"Tournament", "name":"RNG_Repro_Check", "rounds":4, "Seed":777, "UpdateIntervalSec":5, "Threads":1, "RandomCards":8, "players":[{"name":"DSNN_Mixed35_5var_F1s","group":1},{"name":"DSNN_Mixed35_5var_F1s","group":2}]},
 ```
 (Self-play: both same group — every pair is identical-config self-play.) Flip `"run":true`, run `Prismata_Testing.exe` from `bin/` twice, and confirm identical output (same per-player Turns total and Wins). Flip back to `"run":false`.
 
@@ -492,7 +496,7 @@ After `LiveHardestAIUCT` (line ~230) in the players block, add:
 
 Add a smoke block:
 ```json
-    {"run":false, "type":"Tournament", "name":"RL_SelfPlay_Smoke", "rounds":2, "Seed":101, "UpdateIntervalSec":5, "Threads":1, "RandomCards":8, "saveReplays":"asset/replays/rl_smoke", "players":[{"name":"RL_SelfPlay","group":1},{"name":"RL_SelfPlay","group":1}]},
+    {"run":false, "type":"Tournament", "name":"RL_SelfPlay_Smoke", "rounds":2, "Seed":101, "UpdateIntervalSec":5, "Threads":1, "RandomCards":8, "saveReplays":"asset/replays/rl_smoke", "players":[{"name":"RL_SelfPlay","group":1},{"name":"RL_SelfPlay","group":2}]},
 ```
 Flip `"run":true`, run `Prismata_Testing.exe` from `bin/`, confirm 2 rounds complete and `bin/asset/replays/rl_smoke/` contains replay JSON files. Flip back.
 
@@ -1434,7 +1438,7 @@ In `source/testing/Tournament.cpp`: read an optional `"ForcedCards"` string arra
 
 Add a block forcing Infusion Grid:
 ```json
-    {"run":false, "type":"Tournament", "name":"RL_ForcedIG_Smoke", "rounds":2, "Seed":55, "Threads":1, "RandomCards":8, "ForcedCards":["Hotel"], "saveReplays":"asset/replays/forced_ig", "players":[{"name":"RL_SelfPlay","group":1},{"name":"RL_SelfPlay","group":1}]},
+    {"run":false, "type":"Tournament", "name":"RL_ForcedIG_Smoke", "rounds":2, "Seed":55, "Threads":1, "RandomCards":8, "ForcedCards":["Hotel"], "saveReplays":"asset/replays/forced_ig", "players":[{"name":"RL_SelfPlay","group":1},{"name":"RL_SelfPlay","group":2}]},
 ```
 Run `Prismata_Testing.exe`, then confirm every saved replay's card set contains `Hotel`/Infusion Grid:
 ```bash
