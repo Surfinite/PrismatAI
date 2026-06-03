@@ -23,9 +23,7 @@ namespace
     uint64_t nextThreadSeed()
     {
         const uint64_t sequence = g_seedSequence.fetch_add(1, std::memory_order_relaxed);
-        const uint64_t threadHash = static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-
-        return mixSeed(g_baseSeed.load(std::memory_order_relaxed) + sequence + threadHash);
+        return mixSeed(g_baseSeed.load(std::memory_order_relaxed) + sequence);
     }
 
     std::mt19937_64 & engine()
@@ -43,7 +41,12 @@ namespace Random
     {
         g_baseSeed.store(seed, std::memory_order_relaxed);
         g_seedSequence.store(0, std::memory_order_relaxed);
-        engine().seed(nextThreadSeed());
+        // Seed the engine deterministically with mixSeed(seed). Do NOT route through
+        // nextThreadSeed() here: the thread_local engine is lazily constructed on the
+        // first engine() call (consuming sequence 0 via its constructor), which would
+        // double-bump the sequence counter and seed with mixSeed(seed+1) instead. The
+        // stream must be a pure function of the seed, so seed directly.
+        engine().seed(mixSeed(seed));
     }
 
     size_t Int(size_t exclusiveMax)
@@ -51,6 +54,12 @@ namespace Random
         PRISMATA_ASSERT(exclusiveMax > 0, "Random::Int called with exclusiveMax 0");
 
         std::uniform_int_distribution<size_t> dist(0, exclusiveMax - 1);
+        return dist(engine());
+    }
+
+    double Real01()
+    {
+        std::uniform_real_distribution<double> dist(0.0, 1.0);
         return dist(engine());
     }
 }

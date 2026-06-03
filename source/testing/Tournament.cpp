@@ -2,6 +2,7 @@
 #include "TestingConfig.h"
 #include "Timer.h"
 #include "PrismataAI.h"
+#include "Random.h"
 
 #include <iostream>
 #include <iomanip>
@@ -30,6 +31,9 @@ Tournament::Tournament(const rapidjson::Value & tournamentValue)
     JSONTools::ReadInt("Threads", tournamentValue, _threads);
     _threads = std::max<size_t>(1, _threads);
 
+    _seed = 0;
+    JSONTools::ReadInt("Seed", tournamentValue, _seed);   // 0 = time-based (default)
+
     if (tournamentValue.HasMember("saveReplays") && tournamentValue["saveReplays"].IsString())
     {
         _saveReplaysDir = tournamentValue["saveReplays"].GetString();
@@ -52,6 +56,16 @@ void Tournament::run()
     std::stringstream startDate;
     startDate << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S");
     _date = startDate.str();
+
+    if (_seed != 0)
+    {
+        Random::Seed((uint64_t)_seed);
+        if (_threads > 1)
+        {
+            fprintf(stderr, "[Tournament] Seed set but Threads=%zu>1; "
+                            "full reproducibility requires Threads:1.\n", _threads);
+        }
+    }
 
     _totalGames = std::vector<int>(_players.size(), 0);
     _totalWins = std::vector<int>(_players.size(), 0);

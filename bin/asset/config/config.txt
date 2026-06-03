@@ -264,6 +264,7 @@
 "Benchmarks" :
 [
     {"run":false, "type":"Tournament", "name":"AB_5var_Smoke",        "rounds":2,   "UpdateIntervalSec":5,  "Threads":1, "RandomCards":8, "players":[{"name":"DSNN_Mixed35_5var_F1s","group":1},{"name":"DSNN_M35_1s_c03","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RNG_Repro_Check", "rounds":4, "Seed":777, "UpdateIntervalSec":5, "Threads":1, "RandomCards":8, "players":[{"name":"DSNN_Mixed35_5var_F1s","group":1},{"name":"DSNN_Mixed35_5var_F1s","group":2}]},
     {"run":false, "type":"Tournament", "name":"AB_5var_vs_Mixed35_7s", "rounds":64,  "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "saveReplays":"asset/replays/ab_5var_vs_mixed35", "players":[{"name":"DSNN_Mixed35_5var","group":1},{"name":"DSNN_Mixed35","group":2}]},
     {"run": false, "type": "Tournament", "name": "PV_cValue_c03_vs_HardestAI", "rounds": 32, "UpdateIntervalSec": 10, "Threads": 8, "RandomCards": 8, "players": [{"name": "DSNN_Mixed35_c03", "group": 1}, {"name": "HardestAI", "group": 2}]},
     {"run": false, "type": "Tournament", "name": "PV_cValue_c05_vs_HardestAI", "rounds": 32, "UpdateIntervalSec": 10, "Threads": 8, "RandomCards": 8, "players": [{"name": "DSNN_Mixed35_c05", "group": 1}, {"name": "HardestAI", "group": 2}]},

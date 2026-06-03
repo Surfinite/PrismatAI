@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdio.h>
+#include <random>
 
 #ifdef WIN32
     #include <Windows.h>
@@ -89,6 +90,38 @@ int main(int argc, char *argv[])
         NeuralNet::Instance().buildCardTypeMapping();
         NeuralNet::Instance().dumpFeaturesJSON(state, outPath);
         return 0;
+    }
+
+    // --- RNG determinism self-test ---
+    // Usage: PrismataAI.exe --test-rng    (prints PASS/FAIL, returns 0/1)
+    if (argc >= 2 && std::string(argv[1]) == "--test-rng")
+    {
+        auto mixSeed = [](uint64_t x) -> uint64_t {
+            x += 0x9e3779b97f4a7c15ULL;
+            x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+            x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+            return x ^ (x >> 31);
+        };
+        const uint64_t S = 123456789ULL;
+        std::mt19937_64 ref(mixSeed(S));
+        std::uniform_int_distribution<size_t> dist(0, 1000000 - 1);
+        Prismata::Random::Seed(S);
+        bool pureFnOfSeed = true;
+        for (int i = 0; i < 8; ++i)
+        {
+            size_t expected = dist(ref);
+            size_t got = Prismata::Random::Int(1000000);
+            if (got != expected) { pureFnOfSeed = false; break; }
+        }
+        Prismata::Random::Seed(S);
+        size_t a = Prismata::Random::Int(1000000);
+        Prismata::Random::Seed(S);
+        size_t b = Prismata::Random::Int(1000000);
+        bool reproducible = (a == b);
+        bool ok = pureFnOfSeed && reproducible;
+        printf("--test-rng: pureFnOfSeed=%d reproducible=%d => %s\n",
+               (int)pureFnOfSeed, (int)reproducible, ok ? "PASS" : "FAIL");
+        return ok ? 0 : 1;
     }
 
     Random::Seed((uint64_t)time(NULL));

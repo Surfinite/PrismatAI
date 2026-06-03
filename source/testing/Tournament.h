@@ -22,6 +22,7 @@ class Tournament
     size_t                              _updateIntervalSec;
     size_t                              _randomCards;
     size_t                              _threads;
+    int                                 _seed;
     Timer                               _timeElapsed;
 
     std::vector<std::string>            _players;
