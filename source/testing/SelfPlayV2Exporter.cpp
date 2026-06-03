@@ -16,6 +16,13 @@ namespace Prismata
 void SelfPlayV2Exporter::capture(const GameState & state, int plyIndex)
 {
     _records.push_back(buildV2RecordJSON(state, plyIndex));
+
+    // Parity sidecar: stash the raw turn-start state in the exact bare-doc shape
+    // that PrismataAI.exe --dump-features consumes. state.toJSONString() emits
+    // {whiteMana, blackMana, turn, phase, cards, ...supply..., table}, which the
+    // GameState(const rapidjson::Value&) constructor round-trips. finalize() writes
+    // these out so the export-parity harness can be scaled to ~1000 self-play states.
+    _rawStates.emplace_back(plyIndex, state.toJSONString());
 }
 
 bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
@@ -78,7 +85,52 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
         out << buffer.GetString() << "\n";
     }
 
-    return out.good();
+    // Parity-states sidecar: write each stashed raw state to a sibling parity_states/
+    // dir (e.g. asset/training/rl_smoke_v2 -> asset/training/parity_states) as
+    // sp_<gameId>_<plyIndex>.json. These bare-doc state files feed the C++<->PyTorch
+    // value export-parity harness (tools/parity/dump_value_batch.py +
+    // compare_parity_35prop.py). This does NOT alter the V2 JSONL output above.
+    {
+        const std::filesystem::path parityDir =
+            std::filesystem::path(_outDir).parent_path() / "parity_states";
+
+        std::error_code pec;
+        std::filesystem::create_directories(parityDir, pec);
+        if (pec && !std::filesystem::is_directory(parityDir))
+        {
+            fprintf(stderr, "[SelfPlayV2Exporter] parity create_directories failed: %s (%s)\n",
+                    parityDir.string().c_str(), pec.message().c_str());
+        }
+        else
+        {
+            for (const auto & rs : _rawStates)
+            {
+                char spName[64];
+                std::snprintf(spName, sizeof(spName), "sp_%04d_%04d.json", gameId, rs.first);
+                const std::filesystem::path spPath = parityDir / spName;
+
+                std::ofstream sp(spPath, std::ios::binary);
+                if (sp)
+                {
+                    sp << rs.second;
+                }
+                else
+                {
+                    fprintf(stderr, "[SelfPlayV2Exporter] failed to write parity state %s\n",
+                            spPath.string().c_str());
+                }
+            }
+        }
+    }
+
+    const bool ok = out.good();
+
+    // Clear accumulators so a second finalize() call cannot re-emit duplicate JSONL
+    // lines or duplicate sp_<gameId>_*.json sidecar files (idempotent re-finalize).
+    _records.clear();
+    _rawStates.clear();
+
+    return ok;
 }
 
 } // namespace Prismata

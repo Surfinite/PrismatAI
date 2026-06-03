@@ -2,6 +2,7 @@
 
 #include "Prismata.h"
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Prismata
@@ -18,6 +19,13 @@ class SelfPlayV2Exporter
 {
     std::string              _outDir;
     std::vector<std::string> _records;   // per-turn V2 JSON (without outcome), ply order
+
+    // Raw-state parity sidecar. Parallel to _records: one (plyIndex, toJSONString())
+    // per captured turn. finalize() writes these to a sibling parity_states/ dir as
+    // sp_<gameId>_<plyIndex>.json. Each file is the exact bare-doc state shape that
+    // PrismataAI.exe --dump-features consumes, feeding the C++<->PyTorch value
+    // export-parity harness (tools/parity/compare_parity_35prop.py) at scale.
+    std::vector<std::pair<int, std::string>> _rawStates;
 
 public:
 
