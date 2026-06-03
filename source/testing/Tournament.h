@@ -22,7 +22,7 @@ class Tournament
     size_t                              _updateIntervalSec;
     size_t                              _randomCards;
     size_t                              _threads;
-    int                                 _seed;
+    uint64_t                            _seed;   // "Seed":0 (or absent) = time-based / non-reproducible; any non-zero = fixed seed
     Timer                               _timeElapsed;
 
     std::vector<std::string>            _players;

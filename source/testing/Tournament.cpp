@@ -59,11 +59,12 @@ void Tournament::run()
 
     if (_seed != 0)
     {
-        Random::Seed((uint64_t)_seed);
+        Random::Seed(_seed);
         if (_threads > 1)
         {
-            fprintf(stderr, "[Tournament] Seed set but Threads=%zu>1; "
-                            "full reproducibility requires Threads:1.\n", _threads);
+            fprintf(stderr, "[Tournament] Seed set but Threads=%zu>1; the seed applies to the main "
+                            "thread only (worker threads seed independently) -- only Threads:1 is "
+                            "reproducible.\n", _threads);
         }
     }
 

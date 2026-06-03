@@ -96,6 +96,7 @@ int main(int argc, char *argv[])
     // Usage: PrismataAI.exe --test-rng    (prints PASS/FAIL, returns 0/1)
     if (argc >= 2 && std::string(argv[1]) == "--test-rng")
     {
+        // NOTE: must stay identical to mixSeed() in source/engine/Random.cpp (test isolation).
         auto mixSeed = [](uint64_t x) -> uint64_t {
             x += 0x9e3779b97f4a7c15ULL;
             x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
