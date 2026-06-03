@@ -919,6 +919,20 @@ def main():
                              "changing --epochs, so the LR schedule is unaffected). "
                              "Use with --resume for staged/segmented training.")
 
+    # RL fine-tuning
+    parser.add_argument("--rl-mode", action="store_true",
+                        help="RL fine-tune: replay buffer + human rehearsal + colour balance")
+    parser.add_argument("--selfplay-files", nargs="*", default=[],
+                        help="Per-iteration self-play V2 H5 files (newest last)")
+    parser.add_argument("--human-file", type=str, default=None,
+                        help="human_1800_v2 H5 for rehearsal")
+    parser.add_argument("--replay-window", type=int, default=5, help="W: sliding buffer size")
+    parser.add_argument("--rl-iteration", type=int, default=1, help="iteration index (sets rehearsal fraction)")
+    parser.add_argument("--rehearsal-fraction", type=float, default=None,
+                        help="override the scheduled human fraction")
+    parser.add_argument("--swa-start-epoch", type=int, default=None,
+                        help="SWA start epoch (default 80%% of --epochs)")
+
     args = parser.parse_args()
 
     # Normalize model type
@@ -1083,6 +1097,29 @@ def main():
             num_workers=use_workers, pin_memory=pin_mem,
             persistent_workers=use_workers > 0)
 
+    # --- RL fine-tune: replace train_loader with replay-buffer + human-rehearsal sampler ---
+    # When --rl-mode is set, the normally-constructed deepsets train_loader is replaced by a
+    # weighted-sampling loader over the last-W self-play H5 files + human rehearsal, with
+    # colour-balanced sampling. The val_loader (from --val-file) is left untouched. The
+    # non-rl path is completely unaffected when --rl-mode is absent.
+    if args.rl_mode:
+        from rl_data import select_replay_window, rehearsal_fraction_for_iter, build_rl_sampler
+        sp_paths = select_replay_window(args.selfplay_files, args.replay_window)
+        sp_datasets = [H5DatasetV2(p, label_strategy=args.label_strategy) for p in sp_paths]
+        human_ds = (H5DatasetV2(args.human_file, label_strategy=args.label_strategy)
+                    if args.human_file else None)
+        frac = (args.rehearsal_fraction if args.rehearsal_fraction is not None
+                else rehearsal_fraction_for_iter(args.rl_iteration))
+        train_loader, train_ds = build_rl_sampler(sp_datasets, human_ds, frac,
+                                                  args.batch_size, num_workers=args.num_workers)
+        train_n = len(train_ds)
+        print(f"[RL] window={len(sp_datasets)} files, human_fraction={frac:.2f}, "
+              f"combined={len(train_ds):,} samples")
+
+    # RL replaces train_ds with an in-memory ConcatDataset; recompute the streaming flag
+    # so the per-epoch set_epoch() call (streaming-only) is skipped for the RL loader.
+    is_streaming = isinstance(train_ds, IterableDataset)
+
     # --- Model ---
     if use_deepsets:
         from model_deepsets import PrismataDeepSets
@@ -1133,7 +1170,7 @@ def main():
     value_criterion = nn.BCEWithLogitsLoss()
 
     # --- SWA setup (last 20% of epochs) ---
-    swa_start_epoch = max(1, int(args.epochs * 0.8))
+    swa_start_epoch = args.swa_start_epoch or max(1, int(args.epochs * 0.8))
     swa_model = AveragedModel(model)
     swa_scheduler = SWALR(optimizer, swa_lr=args.lr * 0.1)
     swa_active = False
