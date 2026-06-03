@@ -78,6 +78,8 @@ Clone of `DSNN_Mixed35_5var` (NeuralNet eval, 5-variant portfolio + IG-optional,
   **Eval paths:** C++ tournament for config-player anchors (1,2; per-player NeuralNet runs two NN players in one process when weights match); `matchup_clean.js` (SteamAI bridge → `.ORIG`) for anchor 3. **One path per anchor**, documented; run a one-off cross-path sanity check (`HardestAIUCT` vs itself on both paths) to bound the path effect. **Eval contamination checks each run:** `use_dsnn.txt`/`PRISMATA_FORCE_DSNN` absent, expected net-hash loaded, fixed-sims active, `.ORIG` used for `STEAMAI`.
 - <!-- CHANGED: per-iteration manifest + dashboard + action-coverage instrumentation — Reviewers 1,2,3,6 -->
   **Manifest + dashboard (per iteration):** manifest = {resolved-config-hash (post-parser), parent/trained/exported net-hashes, seed range, games, positions, replay window, rehearsal datasets+weights, eval card pools + results, promotion decision}. Dashboard = win-rate vs each anchor (with CIs, forced+general); self-play game-length vs prev; **action-coverage metrics** (avg root candidates, root entropy, % positions where IG is legal, **IG fire-vs-skip frequency in self-play and at argmax**, win-rate conditioned on IG availability); training loss by source; export-parity error; val Brier/accuracy.
+- <!-- CHANGED: O7 tactical/blunder regression suite incorporated; positions sourced from the user's own DSNN games — user selected -->
+  **O7 — Tactical regression suite (fast leading indicator).** A fixed, curated set (~20–50) of `--suggest` test cases with known-correct moves, run after each iteration (seconds, deterministic) *before* the expensive tournaments: pass = net+search picks the known-correct move (for a value-only net, checked via the move `--suggest` returns). **Sourced from the user's own games vs DSNN, with card sets curated to include Infusion Grid.** Two buckets feeding two channels: (a) *known-correct-move* positions ("should fire IG" / "should skip IG", stamina-blind absorb, the strange-defense cases the user can already diagnose) → regression checks **+ the §7 KEEP heuristic-bug backlog**; (b) *"a decision looks forced here"* positions → **the §6 action-space-widening backlog**. Not a promotion metric — a cheap diagnostic + a backlog feeder.
 
 ## 6. Action-space widening curriculum
 
@@ -97,7 +99,7 @@ Triage with the KEEP/OPEN lens: **KEEP-style heuristic *bugs*** (dominated mispl
 
 - <!-- CHANGED: quantitative go-criterion + kill criteria — Reviewers 1,2,3,4 -->
   **Local go-criterion (quantitative):** RL-trained net beats the **wide-untrained iter-0** anchor by **≥ the pre-registered effect size at the pre-registered N, CI lower-bound > 0**, with **general-pool delta ≥ −Y** (no material regression) — measured on the IG-optional axis (IG fire/skip behaviour demonstrably learned). → justifies AWS spend.
-- **Kill criteria (local):** if ≥**3 consecutive iterations** show no improvement beyond the CI **and** the false-negative triage (§9) passes (action present, temperature sampling, labels valid, predictions changed, export parity OK, eval powered, self-play non-degenerate), terminate the local phase and either increase N, widen further, or reconsider value-only (→ §13-C6 policy-head fallback).
+- **Kill criteria (local):** if ≥**3 consecutive iterations** show no improvement beyond the CI **and** the false-negative triage (§9) passes (action present, temperature sampling, labels valid, predictions changed, export parity OK, eval powered, self-play non-degenerate), terminate the local phase and either increase N, widen further, or escalate (→ §14 escalation paths).
 - <!-- CHANGED: measure throughput before AWS — Reviewer 2 -->
   **Before AWS:** measure games/hour at the chosen N, NN-evals/sec, CPU utilization, shard write throughput, eval games/hour — self-play is CPU-bound, so size the £400 against measured throughput, not assumption.
 - **AWS (£400):** scale self-play volume + iterations; an improving win-rate **trajectory** (define: ≥2 consecutive iters of CI-clearing improvement) → continue monthly; flat → stop / rethink action space.
@@ -164,8 +166,8 @@ if MAX_ITERS reached with no GO:
 ## 13. Optional Enhancements (pick what you want)
 
 **Decision status (this round):**
-- ✅ **Incorporated:** **O1, O2, O4** → §8.5 (iteration-0 de-risking). **O5** → §3 (MaxChildren/`N` scaling under widening).
-- ⏳ **Pending your call (explained in chat):** **O3** (distillation bootstrap), **O6** (candidate-level policy-head fallback), **O7** (tactical/blunder regression suite).
+- ✅ **Incorporated:** **O1, O2, O4** → §8.5 (iteration-0 de-risking). **O5** → §3 (MaxChildren/`N` scaling). **O7** → §5 (tactical regression suite, sourced from the user's DSNN games).
+- 📐 **Documented as escalation paths (build only if value-only flatlines):** **O6** (candidate-level policy head + PUCT), **O3** (distillation bootstrap) → §14.
 - 📦 **Documented for later, not now:** **O8** (opponent pool — AWS-scale anti-overfitting; revisit at scale).
 - ❌ **Declined:** **O9** (overlaps root exploration), **O10** (two-stage training), **O11** (intrinsic motivation), **O12** (asymmetric temperature — the P2 edge is set-dependent and ≈51:49 at master-level human play, so not worth the knob).
 
@@ -183,3 +185,11 @@ The descriptions below remain as reference.
 10. **Two-stage training** (RL fine-tune, then a brief supervised calibration pass) instead of mixed-batch rehearsal. *(R4)* — Effort: medium. **Lean no** (mixed-batch is the literature norm; two-stage risks oscillation).
 11. **Intrinsic-motivation / novelty exploration bonus** in MCTS. *(R3)* — Effort: large. **Lean no** (premature).
 12. **Asymmetric / game-phase-specific temperature** (e.g., P1 hotter to offset the P2 edge; sharper endgame annealing). *(R1, R3)* — Effort: small. **Lean no for v1** (follow-up).
+
+## 14. Escalation paths *(documented; build only if value-only RL flatlines — O6, O3)*
+
+<!-- CHANGED: document O6 + O3 as escalation paths, not built now — user selected -->
+If the §8 kill-criteria trigger (≥3 flat iterations with a clean false-negative triage), escalate in this order before spending AWS or abandoning the value-only approach:
+
+- **O6 — Candidate-level policy head, then PUCT.** Add a head that outputs a prior over *just the ≤~30 whole-turn portfolio candidates the iterator emits* — **not** the full action space (encoding arbitrary click-sequences is the hard "mapping problem" that makes a general policy head a large project, and why it's deferred). Train it on the MCTS **visit distribution over those candidates** (AlphaZero-style, on the small fixed candidate set). Turn PUCT on at the root so the search concentrates sims on net-preferred candidates — the standard fix for value-only MCTS under-exploration. *Effort: large.* It's the cheapest route to PUCT precisely because the portfolio iterator already supplies the candidate set.
+- **O3 — Distillation bootstrap.** Periodically run the current net at high sims (10k–50k) on a position batch and train the value net to predict the **deep-search backed-up value** (an MSE target) — distilling deep-search judgment into the static eval so shallow self-play yields cleaner labels. (The visit-count *soft-target* form is a policy target → needs O6; for the value-only net, distil the value.) *Effort: medium-large + extra deep-search compute; risks baking in the deep search's residual biases.* **Invoke only if O2's deep-label diagnostic (§8.5) confirms shallow search is the binding bottleneck** — O1+O2 already deliver most of the benefit far more cheaply.
