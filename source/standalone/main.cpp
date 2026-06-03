@@ -154,6 +154,14 @@ int main(int argc, char *argv[])
         std::vector<size_t> z = {0, 5, 0};
         check(sampleRootIndex(z, 1.0, 0.0, 0.5, 0.50) == 1, "only idx1 eligible");
 
+        // (F) empty input -> 0 (contract fallback).
+        std::vector<size_t> empt;
+        check(sampleRootIndex(empt, 1.0, 0.0, 0.5, 0.5) == 0, "empty -> 0");
+
+        // (G) tiny tau with large visits must NOT overflow into elig.back(); must pick argmax.
+        std::vector<size_t> big = {500, 1, 1};
+        check(sampleRootIndex(big, 0.001, 0.0, 0.5, 0.99) == 0, "tiny-tau large-visits -> argmax idx0");
+
         printf("--test-sampler: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;
     }

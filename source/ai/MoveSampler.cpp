@@ -3,6 +3,21 @@
 #include <cmath>
 #include <limits>
 
+namespace
+{
+    constexpr double kArgmaxTauThreshold = 1e-6;
+
+    size_t argmaxEligible(const std::vector<size_t> & visits, const std::vector<size_t> & elig)
+    {
+        size_t best = elig[0];
+        for (size_t i = 1; i < elig.size(); ++i)
+        {
+            if (visits[elig[i]] > visits[best]) { best = elig[i]; }
+        }
+        return best;
+    }
+}
+
 namespace Prismata
 {
 namespace MoveSampler
@@ -27,14 +42,9 @@ namespace MoveSampler
         }
 
         // Near-zero temperature => argmax (most visited; first-wins tie-break).
-        if (tau <= 1e-6)
+        if (tau <= kArgmaxTauThreshold)
         {
-            size_t best = elig[0];
-            for (size_t i = 1; i < elig.size(); ++i)
-            {
-                if (visits[elig[i]] > visits[best]) { best = elig[i]; }
-            }
-            return best;
+            return argmaxEligible(visits, elig);
         }
 
         // Proportional to visits^(1/tau).
@@ -47,7 +57,10 @@ namespace MoveSampler
             w[i] = wi;
             total += wi;
         }
-        if (total <= 0.0) { return elig[0]; }
+        // pow() overflows to +inf for small tau (large invTau) at realistic visit counts,
+        // making the inverse-CDF scan silently return elig.back(). Degenerate to argmax,
+        // which is the intended behavior as tau -> 0. Also covers the degenerate total==0 case.
+        if (!std::isfinite(total) || total <= 0.0) { return argmaxEligible(visits, elig); }
 
         double target = u2 * total;
         double cum = 0.0;
