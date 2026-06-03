@@ -603,6 +603,10 @@ cd c:/libraries/PrismataAI && git add training/tests/test_selfplay_export_parity
 git commit -m "test(train): C++ exporter <-> JS extractor V2 parity"
 ```
 
+> **Optional parallel de-risk — human-corpus oracle spot-check (low-cost first; do whenever it fits).** The C++↔JS parity test (Step 6) validates the JS extractor against the **C++ engine's** GameState — strong, since dave engine_v1 is the lineage the real client shells out to. The one residual gap it does *not* close: client ground-truth on the specific state patterns **human replays** produce (the parity test runs on self-play states; we can't replay human games through C++). That gap is the only place the human rehearsal corpus could carry a silent state-error. The check already exists — `js_engine/oracle_diff.js` diffs the JS engine's replayed state against an **F6 dev-mode client dump** — it just needs real human-replay dumps to run against.
+> - **Cheap version (recommended, ~hours):** load 10–20 human replays by code in the dev-mode client, F6 at **turn-start decision points** (matching the extractor's `beginTurnHistory` snapshot), run each through `oracle_diff.js`. Clean → strong confidence in `human_1800_v2`; a diff → caught corrupt training data **before** the AWS spend. This is a parallel guard, **not a blocker** for Tasks 1–14.
+> - **Expensive version (deferred — build only if the spot-check warrants it or the paper needs exhaustive coverage):** an automated F6 exporter over the corpus, built on the prismata-ladder headless-spectator infra. Viability is being assessed separately (`docs/scratch/prismata-ladder-f6-export-viability-prompt.md`); do not build speculatively.
+
 ---
 
 ## Task 6: Replay buffer + human-only rehearsal + colour-balance + label tests (Prereq §10.5)
