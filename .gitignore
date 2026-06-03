@@ -269,6 +269,11 @@ tools/
 !tools/ob_explorer_viz.py
 !tools/requirements-explorer.txt
 !tools/tests/
+# Export-parity harness driver. The blanket tools/ rule above blocks traversal into
+# subdirs, so the script itself was added with `git add -f`; these exceptions document
+# intent and keep its generated dumps (tools/parity/_batch_out/, out_sp_*.json) ignored.
+!tools/parity/
+!tools/parity/dump_value_batch.py
 
 # --- Cloud config (resource IDs, project names) ---
 cloud-config.env
