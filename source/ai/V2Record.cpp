@@ -174,6 +174,7 @@ std::string buildV2RecordJSON(const GameState & state, int plyIndex)
                   static_cast<int>(state.getResources(Players::Player_Two).amountOf(Resources::Attack)), a);
 
     // ---- turn metadata ----
+    // C++ m_turnNumber: init 0, +1 per Confirm phase — identical convention to JS numTurns (no offset/skew).
     doc.AddMember("turn_number",   static_cast<int>(state.getTurnNumber()),   a);
     doc.AddMember("active_player", static_cast<int>(state.getActivePlayer()), a);
 

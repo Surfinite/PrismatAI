@@ -54,7 +54,7 @@ void TournamentGame::playGame(size_t updateIntervalSec)
     {
         _v2Exporter = std::make_unique<SelfPlayV2Exporter>(_exportV2Dir);
     }
-    int _v2PlyIndex = 0;
+    int plyIndex = 0;
 
     while(!_game.gameOver())
     {
@@ -65,8 +65,8 @@ void TournamentGame::playGame(size_t updateIntervalSec)
         // player-turn (not per action).
         if (_v2Exporter)
         {
-            _v2Exporter->capture(_game.getState(), _v2PlyIndex);
-            ++_v2PlyIndex;
+            _v2Exporter->capture(_game.getState(), plyIndex);
+            ++plyIndex;
         }
 
         // Snapshot the pre-move state when recording, so per-action frames can be
@@ -136,6 +136,8 @@ void TournamentGame::playGame(size_t updateIntervalSec)
     if (_v2Exporter)
     {
         const GameState & finalState = _game.getState();
+        // total_plies = final getTurnNumber() (player-turn count). For a normally
+        // completed game this equals the number of captured turn-start records.
         _v2Exporter->finalize(finalState.winner(),
                               static_cast<int>(finalState.getTurnNumber()),
                               _exportV2GameId);

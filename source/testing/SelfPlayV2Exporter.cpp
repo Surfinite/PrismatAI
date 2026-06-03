@@ -6,6 +6,10 @@
 #include <filesystem>
 #include <string>
 
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
+
 namespace Prismata
 {
 
@@ -26,14 +30,15 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
                            : (winner == Players::Player_None) ? 0.5
                            : 0.0;
 
-    // Format outcome as a clean numeric literal (1.0 / 0.5 / 0.0).
-    char outBuf[32];
-    std::snprintf(outBuf, sizeof(outBuf), "%.1f", outcomeP0);
-
     std::error_code ec;
     std::filesystem::create_directories(_outDir, ec);
-    if (ec)
+    // Only fail if the directory genuinely isn't there afterward: create_directories
+    // can set ec spuriously on an already-existing dir (MSVC edge case / concurrent
+    // first-writers). is_directory is the source of truth.
+    if (ec && !std::filesystem::is_directory(_outDir))
     {
+        fprintf(stderr, "[SelfPlayV2Exporter] create_directories failed: %s (%s)\n",
+                _outDir.c_str(), ec.message().c_str());
         return false;
     }
 
@@ -47,18 +52,30 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
         return false;
     }
 
+    // Backfill the two game-level fields via a robust parse-then-reserialize, so we
+    // depend on no string-layout contract (where the record ends, trailing chars).
+    // outcome_p0 is added as a double so it serializes as a float that vectorize_v2
+    // ingests via float(outcome_p0).
     for (const std::string & rec : _records)
     {
-        // buildV2RecordJSON emits a compact object ending in '}' (no trailing
-        // whitespace). Inject the two game-level fields before the closing brace.
-        if (rec.empty() || rec.back() != '}')
+        rapidjson::Document doc;
+        doc.Parse(rec.c_str());
+        if (doc.HasParseError())
         {
-            continue;   // defensive: skip a malformed record rather than corrupt the line
+            // Surface a bad record rather than silently dropping it.
+            fprintf(stderr, "[SelfPlayV2Exporter] skipping malformed record in game %d\n", gameId);
+            continue;
         }
-        out.write(rec.data(), static_cast<std::streamsize>(rec.size() - 1));   // up to but not incl. '}'
-        out << ",\"outcome_p0\":" << outBuf
-            << ",\"total_plies\":" << totalPlies
-            << "}\n";
+
+        rapidjson::Value outcomeMember;
+        outcomeMember.SetDouble(outcomeP0);
+        doc.AddMember("outcome_p0", outcomeMember, doc.GetAllocator());
+        doc.AddMember("total_plies", totalPlies, doc.GetAllocator());
+
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        doc.Accept(writer);
+        out << buffer.GetString() << "\n";
     }
 
     return out.good();
