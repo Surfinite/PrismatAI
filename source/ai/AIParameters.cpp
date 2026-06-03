@@ -782,11 +782,15 @@ PlayerPtr AIParameters::parsePlayer(const PlayerID player, const std::string & p
 
         if (args.HasMember("SelfPlaySampling") && args["SelfPlaySampling"].IsBool())
             params.setSelfPlaySampling(args["SelfPlaySampling"].GetBool());
-        if (args.HasMember("TemperatureTau") && args["TemperatureTau"].IsDouble())
+        if (args.HasMember("TemperatureTau") && args["TemperatureTau"].IsNumber())
             params.setTemperatureTau(args["TemperatureTau"].GetDouble());
         if (args.HasMember("TemperatureK") && args["TemperatureK"].IsInt())
-            params.setTemperatureK((size_t)args["TemperatureK"].GetInt());
-        if (args.HasMember("EpsilonUniform") && args["EpsilonUniform"].IsDouble())
+        {
+            const int k = args["TemperatureK"].GetInt();
+            PRISMATA_ASSERT(k >= 0, "TemperatureK must be non-negative, got %d", k);
+            params.setTemperatureK((size_t)k);
+        }
+        if (args.HasMember("EpsilonUniform") && args["EpsilonUniform"].IsNumber())
             params.setEpsilonUniform(args["EpsilonUniform"].GetDouble());
 
         if (params.evalMethod() == EvaluationMethods::NeuralNet)

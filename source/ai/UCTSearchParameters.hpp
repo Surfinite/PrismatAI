@@ -32,7 +32,7 @@ class Prismata::UCTSearchParameters
     bool            _usePUCT            = false;
     bool            _selfPlaySampling   = false;   // self-play-only temperature/epsilon root sampling
     double          _temperatureTau     = 1.0;     // visits^(1/tau)
-    size_t          _temperatureK       = 6;       // tau=1 for plies < K, then argmax
+    size_t          _temperatureK       = 6;       // tau=1 for the first K player-turns (getTurnNumber), then argmax
     double          _epsilonUniform     = 0.25;    // epsilon-uniform mix over root candidates
 
     PlayerPtr       _playoutPlayers[2];

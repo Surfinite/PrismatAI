@@ -34,7 +34,7 @@ public:
     UCTNode &           UCTNodeSelect(UCTNode & parent);
     double              traverse(UCTNode & node);
     void                uct(GameState & state, size_t depth, const int lastPlayerToMove);
-    UCTNode *           getBestRootNode();
+    UCTNode *           getBestRootNode(bool allowSampling);
     double              getBestRootWinRate();
     void                computeRootPriors();
 

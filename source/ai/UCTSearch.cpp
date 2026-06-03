@@ -21,7 +21,7 @@ void UCTSearch::updateResults(bool forceUpdate)
         _results.timeElapsed = _searchTimer.getElapsedTimeInMilliSec();
         _results.treeSize = _rootNode.memoryUsed() * _results.nodesCreated;
 
-        UCTNode * bestNode = getBestRootNode();
+        UCTNode * bestNode = getBestRootNode(false);
         std::stringstream ss;
         ss << "Possible Moves: " << _rootNode.numChildren() << "\n";
         ss << bestNode->getDescription();
@@ -70,16 +70,19 @@ void UCTSearch::doSearch(const GameState & initialState, Move & move)
     }
 
     // choose the move to return
-    UCTNode * bestNode = getBestRootNode();
+    UCTNode * bestNode = getBestRootNode(true);
     move = bestNode->getMove();
 
     updateResults(true);
 }
 
-UCTNode * UCTSearch::getBestRootNode()
+UCTNode * UCTSearch::getBestRootNode(bool allowSampling)
 {
-    // Self-play-only: sample the root move during the tau=1 opening (first K plies).
-    if (_params.selfPlaySampling()
+    // Self-play-only: sample the root move during the tau=1 opening (first K player-turns).
+    // Only fires on the real move-selection call (allowSampling); the description/win-rate
+    // paths pass false so they don't perturb the seeded RNG stream.
+    if (allowSampling
+        && _params.selfPlaySampling()
         && _rootNode.getState().getTurnNumber() < _params.temperatureK()
         && _rootNode.numChildren() > 0)
     {
@@ -111,7 +114,7 @@ UCTNode * UCTSearch::getBestRootNode()
 
 double UCTSearch::getBestRootWinRate()
 {
-    UCTNode * best = getBestRootNode();
+    UCTNode * best = getBestRootNode(false);
     if (best && best->numVisits() > 0)
     {
         return best->numWins() / (double)best->numVisits();
