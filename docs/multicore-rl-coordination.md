@@ -34,6 +34,13 @@ The AI = **net (`.bin`) + action-space (iterators/partials/config)**. Both live 
 
 Until (1)+(2) exist, **"promote a widening to friends" is not just a `.bin` swap** — it requires this wire. Track it as a prerequisite of the first live action-space promotion.
 
+**This is a SHARED prerequisite, not just live play.** Every path that drives our AI through the **standalone exe's Steam protocol** resolves the iterator by name from the per-request blob (the SWF's narrow `HardIterator_Root`), so it does NOT see our widened iterators. In the RL pipeline that's:
+- **Eval anchor 3 (STEAMAI/.ORIG via `matchup_clean.js`)** — candidate runs the *narrow* space → understated (distortion; STEAMAI doesn't gate).
+- **O7 tactical suite (Task 10 via `query_move.js`)** — **hard-dependent**: IG-skip is only a candidate in the *widened* iterator, so the narrow path makes "should-skip-IG" untestable (IG always fires) → the suite is broken, not just distorted.
+- **N-calibration root entropy (Task 13 via `query_move.js`)** — `aivisits` are over the iterator's candidates → narrow iterator calibrates the wrong search.
+
+The **config-loading tournament path** (eval anchors 1–2, RL self-play) is unaffected — it uses our widened iterators from `config.txt` correctly. **The unified fix = the standalone loads our `config.txt`/DSNN iterator config at startup** (verify `parseJSONValue` merge-vs-replace), which makes the widened iterators resolvable by name for BOTH the live drop-in AND the RL Steam-protocol eval. Because Task 10 cannot function without it, **build this before the RL eval-harness work hits the Steam-protocol anchors** — it is owned jointly (whoever needs it first builds it; it lives in the shared engine).
+
 ## 3. Shared engine surface (as of `9c64813`)
 
 **RL-hot (RL is still editing these — re-verify line numbers; expect rebases):**
