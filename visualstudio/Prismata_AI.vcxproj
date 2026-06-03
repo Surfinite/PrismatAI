@@ -96,6 +96,7 @@
     <ClCompile Include="..\source\ai\StateChillIterator.cpp" />
     <ClCompile Include="..\source\ai\UCTNode.cpp" />
     <ClCompile Include="..\source\ai\UCTSearch.cpp" />
+    <ClCompile Include="..\source\ai\MoveSampler.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\source\ai\AIParameters.h" />
@@ -131,6 +132,7 @@
     <ClInclude Include="..\source\ai\MoveIterator_AllBuy.h" />
     <ClInclude Include="..\source\ai\MoveIterator_AllDefense.h" />
     <ClInclude Include="..\source\ai\MoveIterator_PPPortfolio.h" />
+    <ClInclude Include="..\source\ai\MoveSampler.h" />
     <ClInclude Include="..\source\ai\PartialPlayer.h" />
     <ClInclude Include="..\source\ai\PartialPlayerSequence.h" />
     <ClInclude Include="..\source\ai\PartialPlayer_ActionAbility_ActivateAll.h" />

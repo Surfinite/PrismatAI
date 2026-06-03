@@ -1,6 +1,7 @@
 #include "Prismata.h"
 #include "PrismataAI.h"
 #include "NeuralNet.h"
+#include "MoveSampler.h"
 #include "Random.h"
 #include "rapidjson/document.h"
 #include <iostream>
@@ -122,6 +123,38 @@ int main(int argc, char *argv[])
         bool ok = pureFnOfSeed && reproducible;
         printf("--test-rng: pureFnOfSeed=%d reproducible=%d => %s\n",
                (int)pureFnOfSeed, (int)reproducible, ok ? "PASS" : "FAIL");
+        return ok ? 0 : 1;
+    }
+
+    // --- Move sampler self-test ---
+    if (argc >= 2 && std::string(argv[1]) == "--test-sampler")
+    {
+        using Prismata::MoveSampler::sampleRootIndex;
+        bool ok = true;
+        auto check = [&](bool cond, const char * msg){ if (!cond) { ok = false; printf("  FAIL: %s\n", msg); } };
+
+        // (A) Uniform visits, tau=1, eps=0 -> proportional == uniform; u2 picks the bucket.
+        std::vector<size_t> uni = {1,1,1,1};
+        check(sampleRootIndex(uni, 1.0, 0.0, 0.5, 0.00) == 0, "uniform u2=0.00 -> idx0");
+        check(sampleRootIndex(uni, 1.0, 0.0, 0.5, 0.99) == 3, "uniform u2=0.99 -> idx3");
+
+        // (B) tau->0 => argmax regardless of u2 (eps=0).
+        std::vector<size_t> skew = {10,1,1};
+        check(sampleRootIndex(skew, 1e-9, 0.0, 0.5, 0.99) == 0, "tau~0 -> argmax idx0");
+
+        // (C) eps=1, u1=0 forces uniform branch over eligible.
+        check(sampleRootIndex(skew, 1.0, 1.0, 0.0, 0.99) == 2, "eps=1 uniform u2=0.99 -> idx2");
+
+        // (D) visits {4,1}, tau=1, eps=0 => p0=0.8 cut at u2=0.8.
+        std::vector<size_t> v41 = {4,1};
+        check(sampleRootIndex(v41, 1.0, 0.0, 0.5, 0.79) == 0, "v41 u2=0.79 -> idx0");
+        check(sampleRootIndex(v41, 1.0, 0.0, 0.5, 0.81) == 1, "v41 u2=0.81 -> idx1");
+
+        // (E) zero-visit candidates are ineligible.
+        std::vector<size_t> z = {0, 5, 0};
+        check(sampleRootIndex(z, 1.0, 0.0, 0.5, 0.50) == 1, "only idx1 eligible");
+
+        printf("--test-sampler: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;
     }
 
