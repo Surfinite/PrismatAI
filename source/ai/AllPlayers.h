@@ -21,6 +21,8 @@
 #include "PartialPlayer_ActionAbility_UntapAvoidBreach.h"
 #include "PartialPlayer_ActionAbility_AvoidAttackWaste.h"
 #include "PartialPlayer_ActionAbility_AvoidEconomyWaste.h"
+#include "PartialPlayer_ActionAbility_AvoidDefenseWaste.h"
+#include "PartialPlayer_ActionAbility_AvoidResourceWaste.h"
 #include "PartialPlayer_ActionAbility_AvoidBreachSolver.h"
 #include "PartialPlayer_ActionAbility_Random.h"
 #include "PartialPlayer_ActionAbility_Combination.h"

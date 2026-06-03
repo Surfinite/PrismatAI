@@ -408,6 +408,14 @@ PPPtr AIParameters::parsePartialPlayer(const PlayerID player, const std::string 
     { 
         playerPtr = PPPtr(new PartialPlayer_ActionAbility_AvoidEconomyWaste(player));
     }
+    else if (partialPlayerClassName == "ActionAbility_AvoidDefenseWaste")
+    {
+        playerPtr = PPPtr(new PartialPlayer_ActionAbility_AvoidDefenseWaste(player));
+    }
+    else if (partialPlayerClassName == "ActionAbility_AvoidResourceWaste")
+    {
+        playerPtr = PPPtr(new PartialPlayer_ActionAbility_AvoidResourceWaste(player));
+    }
     else if (partialPlayerClassName == "ActionAbility_AvoidBreachSolver")  
     { 
         BreachIteratorParameters params;
@@ -630,7 +638,16 @@ PPPtr AIParameters::parsePartialPlayer(const PlayerID player, const std::string 
     }
     else
     {
-        std::cout << "WARNING: Unknown Partial Player Class Name:" << partialPlayerClassName << "\n";
+        PRISMATA_ASSERT(false, "Unknown Partial Player Class Name: %s", partialPlayerClassName.c_str());
+    }
+
+    // Hard guard: a config closure that references an undefined partial-player variable leaves
+    // playerPtr null; the setDescription() below would then segfault opaquely. Fail loudly with the
+    // offending name instead (this is what silently crashed earlier LiveHardestAI config ports).
+    if (!playerPtr)
+    {
+        fprintf(stderr, "FATAL: AIParameters: unknown/undefined partial player class '%s' (config variable '%s'). Aborting.\n", partialPlayerClassName.c_str(), playerVariable.c_str());
+        abort();
     }
     
     _partialPlayerParses++;
