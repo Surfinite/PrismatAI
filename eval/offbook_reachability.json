@@ -1,0 +1,714 @@
+{
+  "n_units": 116,
+  "n_reachable_ample": 116,
+  "n_reachable_passive": 110,
+  "n_unreachable": 0,
+  "needs_prereq": [
+    "Arka Sodara",
+    "Bloodrager",
+    "Lancetooth",
+    "Manticore",
+    "Mega Drone",
+    "Tia Thurnax"
+  ],
+  "mode": "AllBuy (exhaustive single-BUY legality: in-set + affordable + supply)",
+  "note": "reachable = a single off-book BUY is legal given AMPLE resources of every type (incl. attack) + standard sac fodder. reachable_passive = also legal on a plain economy turn (gold/colour/energy only, no attack income, no sac fodder). tier=needs_prereq units require attack income (buyCost has 'A') and/or sac fodder (buySac). dave-master's cardLibrary.jso models ALL 116 units as buyable (no token flag), so nothing is structurally unbuildable.",
+  "units": {
+    "Engineer": {
+      "codename": "Engineer",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Drone": {
+      "codename": "Drone",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Conduit": {
+      "codename": "Conduit",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Blastforge": {
+      "codename": "Brooder",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Animus": {
+      "codename": "Academy",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Forcefield": {
+      "codename": "Blood Barrier",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Gauss Cannon": {
+      "codename": "Minicannon",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Wall": {
+      "codename": "Wall",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Steelsplitter": {
+      "codename": "Treant",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Tarsier": {
+      "codename": "Tesla Tower",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Rhino": {
+      "codename": "Elephant",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Aegis": {
+      "codename": "Fragilewall",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Amporilla": {
+      "codename": "Annihilator",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Antima Comet": {
+      "codename": "Antima Comet",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Apollo": {
+      "codename": "Flame Assassin",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Arka Sodara": {
+      "codename": "Roshan",
+      "reachable": true,
+      "reachable_passive": false,
+      "tier": "needs_prereq"
+    },
+    "Arms Race": {
+      "codename": "Arms Race",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Asteri Cannon": {
+      "codename": "Giga Cannon",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Auric Impulse": {
+      "codename": "Bond",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Auride Core": {
+      "codename": "Hate Reactor",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Barrier": {
+      "codename": "Sound Barrier",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Blood Pact": {
+      "codename": "Unholy Barrier",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Blood Phage": {
+      "codename": "Blood Phage",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Bloodrager": {
+      "codename": "Gnoll",
+      "reachable": true,
+      "reachable_passive": false,
+      "tier": "needs_prereq"
+    },
+    "Bombarder": {
+      "codename": "Bombarder",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Borehole Patroller": {
+      "codename": "Borehole Patroller",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Cauterizer": {
+      "codename": "Demolition Mech",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Centrifuge": {
+      "codename": "Centrifuge",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Centurion": {
+      "codename": "Battalion",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Chieftain": {
+      "codename": "Tank",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Chrono Filter": {
+      "codename": "Electrophore",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Cluster Bolt": {
+      "codename": "Meteor Shower",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Colossus": {
+      "codename": "Colossus",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Corpus": {
+      "codename": "Corpus",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Cryo Ray": {
+      "codename": "Distractorod",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Cynestra": {
+      "codename": "Marauder",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Deadeye Operative": {
+      "codename": "Nether Warrior",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Defense Grid": {
+      "codename": "Defense Grid",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Doomed Drone": {
+      "codename": "Doomed Drone",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Doomed Mech": {
+      "codename": "Doomed Mech",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Doomed Wall": {
+      "codename": "Doomwall",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Drake": {
+      "codename": "Drake",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Ebb Turbine": {
+      "codename": "Ebb Turbine",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Electrovore": {
+      "codename": "Fickle Marine",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Endotherm Kit": {
+      "codename": "Disruption Kit",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Energy Matrix": {
+      "codename": "Golem",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Feral Warden": {
+      "codename": "HPMan",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Ferritin Sac": {
+      "codename": "Ferritin Sac",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Fission Turret": {
+      "codename": "Deconstructible Tower",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Flame Animus": {
+      "codename": "Piranha Academy",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Frost Brooder": {
+      "codename": "Psychosis Cannon",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Frostbite": {
+      "codename": "Screech Blast",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Galvani Drone": {
+      "codename": "Galvani Drone",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Gauss Charge": {
+      "codename": "Flame Kin",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Gauss Fabricator": {
+      "codename": "Fabricator",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Gaussite Symbiote": {
+      "codename": "Gasplant",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Grenade Mech": {
+      "codename": "Blade",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Grimbotch": {
+      "codename": "Doomed Infantry",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Hannibull": {
+      "codename": "Statue",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Hellhound": {
+      "codename": "Grenadier",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Husk": {
+      "codename": "House",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Iceblade Golem": {
+      "codename": "Minimarshal",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Immolite": {
+      "codename": "Cowardly Marine",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Infusion Grid": {
+      "codename": "Hotel",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Innervi Field": {
+      "codename": "Innervi Field",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Iso Kronus": {
+      "codename": "Cyclic Attacker",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Kinetic Driver": {
+      "codename": "Arsonist",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Lancetooth": {
+      "codename": "Lancetooth",
+      "reachable": true,
+      "reachable_passive": false,
+      "tier": "needs_prereq"
+    },
+    "Lucina Spinos": {
+      "codename": "Angelic",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Mahar Rectifier": {
+      "codename": "Viletrope",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Manticore": {
+      "codename": "Manticore",
+      "reachable": true,
+      "reachable_passive": false,
+      "tier": "needs_prereq"
+    },
+    "Mega Drone": {
+      "codename": "Mega Drone",
+      "reachable": true,
+      "reachable_passive": false,
+      "tier": "needs_prereq"
+    },
+    "Militia": {
+      "codename": "Militia",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Mobile Animus": {
+      "codename": "Mobile Animus",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Nitrocybe": {
+      "codename": "Nitrocybe",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Nivo Charge": {
+      "codename": "Volatile Blast",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Odin": {
+      "codename": "Furion",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Omega Splitter": {
+      "codename": "Supertreant",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Ossified Drone": {
+      "codename": "Neo Overlord",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Oxide Mixer": {
+      "codename": "Oxide Mixer",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Perforator": {
+      "codename": "Trickster",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Photonic Fibroid": {
+      "codename": "Photonic Fibroid",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Pixie": {
+      "codename": "Pixie",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Plasmafier": {
+      "codename": "BFD",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Plexo Cell": {
+      "codename": "Uberdefcell",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Polywall": {
+      "codename": "Polywall",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Protoplasm": {
+      "codename": "Pixieflower",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Redeemer": {
+      "codename": "Rukh",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Resophore": {
+      "codename": "Butter on Blood",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Savior": {
+      "codename": "Savior",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Scorchilla": {
+      "codename": "Rocket Artillery",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Sentinel": {
+      "codename": "Sentinel",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Shadowfang": {
+      "codename": "Flame Warrior",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Shiver Yeti": {
+      "codename": "Jester",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Shredder": {
+      "codename": "Panther",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Steelforge": {
+      "codename": "Conscription",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Synthesizer": {
+      "codename": "Factory",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Tantalum Ray": {
+      "codename": "Tantalum Ray",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Tatsu Nullifier": {
+      "codename": "Nightmare Cannon",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Tesla Coil": {
+      "codename": "Tesla Coil",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "The Wincer": {
+      "codename": "Beam of Wincing",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Thermite Core": {
+      "codename": "Adrenaline Reactor",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Thorium Dynamo": {
+      "codename": "Thorium Dynamo",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Thunderhead": {
+      "codename": "Thunderhead",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Tia Thurnax": {
+      "codename": "Ephemeron",
+      "reachable": true,
+      "reachable_passive": false,
+      "tier": "needs_prereq"
+    },
+    "Trinity Drone": {
+      "codename": "Machine",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Tyranno Smorcus": {
+      "codename": "Tyranno Smorcus",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Urban Sentry": {
+      "codename": "Urban Sentry",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Vai Mauronax": {
+      "codename": "Vai Mauronax",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Valkyrion": {
+      "codename": "Valkyrion",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Venge Cannon": {
+      "codename": "Ion Cannon",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Vivid Drone": {
+      "codename": "Vivid Drone",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Wild Drone": {
+      "codename": "Wild Drone",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Xaetron": {
+      "codename": "Xaetron",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Xeno Guardian": {
+      "codename": "Stone Guardian",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    },
+    "Zemora Voidbringer": {
+      "codename": "NeoContraption",
+      "reachable": true,
+      "reachable_passive": true,
+      "tier": "passive"
+    }
+  }
+}

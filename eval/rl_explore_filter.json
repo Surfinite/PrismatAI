@@ -1,0 +1,13 @@
+{
+  "description": "Units with NO legal off-book whole-turn buy even given ample resources of every type + sac fodder -> excluded from axis-2 RL widening. Empty here because the engine card library models every unit as buyable; the game-rules 'token' exclusion (Wild Drone, Doomed Drone) is a deck-construction concept the engine does not encode, so it cannot be derived from the iterator.",
+  "mode": "AllBuy",
+  "exclude": [],
+  "needs_prereq_hint": [
+    "Arka Sodara",
+    "Bloodrager",
+    "Lancetooth",
+    "Manticore",
+    "Mega Drone",
+    "Tia Thurnax"
+  ]
+}
