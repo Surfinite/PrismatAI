@@ -63,6 +63,12 @@
     {
         "default"    : false,
         "cards"      : ["Drake", "Grenade Mech", "Odin"]
+    },
+
+    "Ability_Filter_Live_NoIG" :
+    {
+        "default"    : false,
+        "cards"      : ["Drake", "Grenade Mech", "Odin", "Hotel"]
     }
 },
 
@@ -86,6 +92,7 @@
         "AbilityAvoidResourceWaste":  { "type":"ActionAbility_AvoidResourceWaste"},
         "AbilityAttackDefaultLive":   { "type":"ActionAbility_AttackDefault",   "filter":"Ability_Filter_Live"},
         "AbilityActivateUtilityLive": { "type":"ActionAbility_ActivateUtility", "filter":"Ability_Filter_Live"},
+        "AbilityActivateUtilityNoIG": { "type":"ActionAbility_ActivateUtility", "filter":"Ability_Filter_Live_NoIG"},
         "AbilityAttackDefaultClick":  { "type":"ActionAbility_AttackDefault"},
         "AbilityActivateUtilityClick":{ "type":"ActionAbility_ActivateUtility"},
         "V5_ACDefault":             { "type":"ActionAbility_Combination", "combination": ["AbilityEconomyDefault", "AbilityAttackDefaultLive", "AbilityActivateUtilityLive", "AbilityFrontlineGKWill", "AbilitySnipeGKWill", "AbilityChillGKWill", "AbilityAvoidAttackWaste"] },
@@ -99,6 +106,10 @@
         "V5_CSNF":                  { "type":"ActionAbility_Combination", "combination": ["V5_ACDefaultNF", "BuyOpeningBook", "AvoidBreach_SolveChill", "AbilityAvoidDefenseWaste"] },
         "V5_CSClickNC":             { "type":"ActionAbility_Combination", "combination": ["V5_ACDefaultClickNoChill", "BuyOpeningBook", "AvoidBreach_SolveChill", "AbilityAvoidDefenseWaste"] },
         "V5_CSClickNF":             { "type":"ActionAbility_Combination", "combination": ["V5_ACDefaultClickNF", "BuyOpeningBook", "AvoidBreach_SolveChill", "AbilityAvoidDefenseWaste"] },
+
+        "V5_ACDefault_NoIG":        { "type":"ActionAbility_Combination", "combination": ["AbilityEconomyDefault", "AbilityAttackDefaultLive", "AbilityActivateUtilityNoIG", "AbilityFrontlineGKWill", "AbilitySnipeGKWill", "AbilityChillGKWill", "AbilityAvoidAttackWaste"] },
+        "V5_ACEasy_NoIG":           { "type":"ActionAbility_Combination", "combination": ["V5_ACDefault_NoIG", "BuyOpeningBook"] },
+        "V5_CS_NoIG":               { "type":"ActionAbility_Combination", "combination": ["V5_ACEasy_NoIG", "AvoidBreach_SolveChill", "AbilityAvoidDefenseWaste"] },
 
     "DefenseDefault" :          { "type":"Defense_Default"},
     "DefenseRandom" :           { "type":"Defense_Random"},
@@ -181,6 +192,7 @@
     "HardIterator_Root" :   { "type":"PPPortfolio", "PartialPlayers": [ ["DefenseSolver"], ["ACAvoidBreach_ChillSolver"], ["BuyEconTech", "BuyTechEcon", "BCGAttack_Root", "BCGWill_Root", "BCGDef_Root"], ["BreachGreedyKnapsack"] ] },
     "HardIterator" :        { "type":"PPPortfolio", "include":"BaseIterator", "PartialPlayers": [ [], ["ACAvoidBreach_ChillSolver"], [], [] ] },
     "HardIterator_5var_Root" : { "type":"PPPortfolio", "PartialPlayers": [ ["DefenseSolver"], ["V5_CS2", "V5_CS", "V5_CSNF", "V5_CSClickNC", "V5_CSClickNF"], ["BuyEconTech", "BuyTechEcon", "BCGAttack_Root", "BCGWill_Root", "BCGDef_Root"], ["BreachGreedyKnapsack"] ] },
+    "HardIterator_5var_IGopt_Root" : { "type":"PPPortfolio", "PartialPlayers": [ ["DefenseSolver"], ["V5_CS2", "V5_CS", "V5_CSNF", "V5_CSClickNC", "V5_CSClickNF", "V5_CS_NoIG"], ["BuyEconTech", "BuyTechEcon", "BCGAttack_Root", "BCGWill_Root", "BCGDef_Root"], ["BreachGreedyKnapsack"] ] },
     "HardIterator_5var" :      { "type":"PPPortfolio", "include":"BaseIterator", "PartialPlayers": [ [], ["V5_CS"], [], [] ] },
     "EasyIterator" :        { "type":"PPPortfolio", "include":"BaseIterator", "PartialPlayers": [ [], ["ACEasy"], [], [] ] },
     
@@ -228,8 +240,9 @@
     "DSNN_Mixed35_5var_F1s": { "type":"Player_UCT", "TimeLimit":1000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3 },
     "LiveHardestAI" :       { "type":"Player_StackAlphaBeta", "TimeLimit":7000, "MaxChildren":40, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"Playout", "PlayoutPlayer":"Playout"},
     "LiveHardestAIUCT" :    { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"Playout", "PlayoutPlayer":"Playout"},
-    "RL_SelfPlay" :         { "type":"Player_UCT", "TimeLimit":0, "MaxChildren":40, "MaxTraversals":512, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3, "SelfPlaySampling":true, "TemperatureTau":1.0, "TemperatureK":6, "EpsilonUniform":0.25 },
-    "RL_Eval" :             { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3 },
+    "RL_SelfPlay" :         { "type":"Player_UCT", "TimeLimit":0, "MaxChildren":40, "MaxTraversals":512, "RootMoveIterator":"HardIterator_5var_IGopt_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3, "SelfPlaySampling":true, "TemperatureTau":1.0, "TemperatureK":6, "EpsilonUniform":0.25 },
+    "RL_Eval" :             { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_IGopt_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3 },
+    "RL_Eval_iter0" :       { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_IGopt_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3 },
     "DSNN_Mixed35_F500" :   { "type":"Player_UCT", "TimeLimit":500,  "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_Root", "MoveIterator":"HardIterator", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin" },
 
     "DSNN_F500" :           { "type":"Player_UCT", "TimeLimit":500, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_Root", "MoveIterator":"HardIterator", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mbonly.bin" },
@@ -268,6 +281,7 @@
     {"run":false, "type":"Tournament", "name":"AB_5var_Smoke",        "rounds":2,   "UpdateIntervalSec":5,  "Threads":1, "RandomCards":8, "players":[{"name":"DSNN_Mixed35_5var_F1s","group":1},{"name":"DSNN_M35_1s_c03","group":2}]},
     {"run":false, "type":"Tournament", "name":"RNG_Repro_Check", "rounds":4, "Seed":777, "UpdateIntervalSec":5, "Threads":1, "RandomCards":8, "players":[{"name":"DSNN_Mixed35_5var_F1s","group":1},{"name":"DSNN_Mixed35_5var_F1s","group":2}]},
     {"run":false, "type":"Tournament", "name":"RL_SelfPlay_Smoke", "rounds":2, "Seed":101, "UpdateIntervalSec":5, "Threads":1, "RandomCards":8, "saveReplays":"asset/replays/rl_smoke", "exportTrainingV2":"asset/training/rl_smoke_v2", "players":[{"name":"RL_SelfPlay","group":1},{"name":"RL_SelfPlay","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RL_ForcedIG_Smoke", "rounds":2, "Seed":55, "Threads":1, "RandomCards":8, "ForcedCards":["Hotel"], "saveReplays":"asset/replays/forced_ig", "players":[{"name":"RL_SelfPlay","group":1},{"name":"RL_SelfPlay","group":2}]},
 
     {"run":false, "type":"Tournament", "name":"RL_Eval_iter0_forced",  "rounds":64, "Seed":2026, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_Eval","group":1},{"name":"RL_Eval_iter0","group":2}]},
     {"run":false, "type":"Tournament", "name":"RL_Eval_iter0_general", "rounds":64, "Seed":2026, "Threads":8, "RandomCards":8, "players":[{"name":"RL_Eval","group":1},{"name":"RL_Eval_iter0","group":2}]},
