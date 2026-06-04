@@ -1084,6 +1084,23 @@ MoveIteratorPtr AIParameters::parseMoveIterator(const PlayerID player, const std
             }
         }
     }
+    else if (moveIteratorTypeName == "AbilitySubset")
+    {
+        // Wraps an inner PPPortfolio ('include') whose ability variant excludes the filtered
+        // card; emits each filter-card fire-count (0..N) as a distinct child. ROOT-only use.
+        PRISMATA_ASSERT(iteratorValue.HasMember("include") && iteratorValue["include"].IsString(),
+                        "AbilitySubset iterator requires a string 'include' (the inner PPPortfolio)");
+        PRISMATA_ASSERT(iteratorValue.HasMember("subsetFilter") && iteratorValue["subsetFilter"].IsString(),
+                        "AbilitySubset iterator requires a string 'subsetFilter'");
+
+        MoveIteratorPtr inner = parseMoveIterator(player, iteratorValue["include"].GetString(), root);
+        CardFilter subsetFilter = parseCardFilter(iteratorValue["subsetFilter"].GetString(), root);
+
+        MoveIterator_AbilitySubset * sub = new MoveIterator_AbilitySubset(player);
+        sub->setInnerPortfolio(inner);
+        sub->setSubsetFilter(subsetFilter);
+        mip = MoveIteratorPtr(sub);
+    }
     else
     {
         PRISMATA_ASSERT(false, "Unknown MoveIterator Class Name: %s", moveIteratorTypeName.c_str());

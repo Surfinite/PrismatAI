@@ -54,6 +54,9 @@
     <ClCompile Include="..\source\ai\MoveIterator.cpp">
       <Filter>move iterators</Filter>
     </ClCompile>
+    <ClCompile Include="..\source\ai\MoveIterator_AbilitySubset.cpp">
+      <Filter>move iterators</Filter>
+    </ClCompile>
     <ClCompile Include="..\source\ai\MoveIterator_All.cpp">
       <Filter>move iterators</Filter>
     </ClCompile>
@@ -289,6 +292,9 @@
       <Filter>partial players</Filter>
     </ClInclude>
     <ClInclude Include="..\source\ai\MoveIterator.h">
+      <Filter>move iterators</Filter>
+    </ClInclude>
+    <ClInclude Include="..\source\ai\MoveIterator_AbilitySubset.h">
       <Filter>move iterators</Filter>
     </ClInclude>
     <ClInclude Include="..\source\ai\MoveIterator_All.h">

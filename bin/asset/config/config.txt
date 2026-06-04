@@ -68,7 +68,13 @@
     "Ability_Filter_Live_NoIG" :
     {
         "default"    : false,
-        "cards"      : ["Drake", "Grenade Mech", "Odin", "Hotel"]
+        "cards"      : ["Drake", "Grenade Mech", "Odin", "Hotel", "Infusion Grid"]
+    },
+
+    "IG_Only" :
+    {
+        "default"    : false,
+        "cards"      : ["Hotel", "Infusion Grid"]
     }
 },
 
@@ -192,7 +198,8 @@
     "HardIterator_Root" :   { "type":"PPPortfolio", "PartialPlayers": [ ["DefenseSolver"], ["ACAvoidBreach_ChillSolver"], ["BuyEconTech", "BuyTechEcon", "BCGAttack_Root", "BCGWill_Root", "BCGDef_Root"], ["BreachGreedyKnapsack"] ] },
     "HardIterator" :        { "type":"PPPortfolio", "include":"BaseIterator", "PartialPlayers": [ [], ["ACAvoidBreach_ChillSolver"], [], [] ] },
     "HardIterator_5var_Root" : { "type":"PPPortfolio", "PartialPlayers": [ ["DefenseSolver"], ["V5_CS2", "V5_CS", "V5_CSNF", "V5_CSClickNC", "V5_CSClickNF"], ["BuyEconTech", "BuyTechEcon", "BCGAttack_Root", "BCGWill_Root", "BCGDef_Root"], ["BreachGreedyKnapsack"] ] },
-    "HardIterator_5var_IGopt_Root" : { "type":"PPPortfolio", "PartialPlayers": [ ["DefenseSolver"], ["V5_CS2", "V5_CS", "V5_CSNF", "V5_CSClickNC", "V5_CSClickNF", "V5_CS_NoIG"], ["BuyEconTech", "BuyTechEcon", "BCGAttack_Root", "BCGWill_Root", "BCGDef_Root"], ["BreachGreedyKnapsack"] ] },
+    "HardIterator_5var_NoIG_Root" : { "type":"PPPortfolio", "PartialPlayers": [ ["DefenseSolver"], ["V5_CS_NoIG"], ["BuyEconTech", "BuyTechEcon", "BCGAttack_Root", "BCGWill_Root", "BCGDef_Root"], ["BreachGreedyKnapsack"] ] },
+    "HardIterator_5var_IGsubset_Root" : { "type":"AbilitySubset", "include":"HardIterator_5var_NoIG_Root", "subsetFilter":"IG_Only" },
     "HardIterator_5var" :      { "type":"PPPortfolio", "include":"BaseIterator", "PartialPlayers": [ [], ["V5_CS"], [], [] ] },
     "EasyIterator" :        { "type":"PPPortfolio", "include":"BaseIterator", "PartialPlayers": [ [], ["ACEasy"], [], [] ] },
     
@@ -240,9 +247,9 @@
     "DSNN_Mixed35_5var_F1s": { "type":"Player_UCT", "TimeLimit":1000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3 },
     "LiveHardestAI" :       { "type":"Player_StackAlphaBeta", "TimeLimit":7000, "MaxChildren":40, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"Playout", "PlayoutPlayer":"Playout"},
     "LiveHardestAIUCT" :    { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"Playout", "PlayoutPlayer":"Playout"},
-    "RL_SelfPlay" :         { "type":"Player_UCT", "TimeLimit":0, "MaxChildren":40, "MaxTraversals":512, "RootMoveIterator":"HardIterator_5var_IGopt_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3, "SelfPlaySampling":true, "TemperatureTau":1.0, "TemperatureK":6, "EpsilonUniform":0.25 },
-    "RL_Eval" :             { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_IGopt_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3 },
-    "RL_Eval_iter0" :       { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_IGopt_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3 },
+    "RL_SelfPlay" :         { "type":"Player_UCT", "TimeLimit":0, "MaxChildren":40, "MaxTraversals":512, "RootMoveIterator":"HardIterator_5var_IGsubset_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3, "SelfPlaySampling":true, "TemperatureTau":1.0, "TemperatureK":6, "EpsilonUniform":0.25 },
+    "RL_Eval" :             { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_IGsubset_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3 },
+    "RL_Eval_iter0" :       { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_IGsubset_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin", "UCTConstant":0.3 },
     "DSNN_Mixed35_F500" :   { "type":"Player_UCT", "TimeLimit":500,  "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_Root", "MoveIterator":"HardIterator", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_35prop.bin" },
 
     "DSNN_F500" :           { "type":"Player_UCT", "TimeLimit":500, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_Root", "MoveIterator":"HardIterator", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mbonly.bin" },

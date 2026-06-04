@@ -35,6 +35,7 @@
     <ClCompile Include="..\source\ai\Heuristics.cpp" />
     <ClCompile Include="..\source\ai\IsomorphicCardSet.cpp" />
     <ClCompile Include="..\source\ai\MoveIterator.cpp" />
+    <ClCompile Include="..\source\ai\MoveIterator_AbilitySubset.cpp" />
     <ClCompile Include="..\source\ai\MoveIterator_All.cpp" />
     <ClCompile Include="..\source\ai\MoveIterator_AllAbility.cpp" />
     <ClCompile Include="..\source\ai\MoveIterator_AllBreach.cpp" />
@@ -127,6 +128,7 @@
     <ClInclude Include="..\source\ai\Heuristics.h" />
     <ClInclude Include="..\source\ai\IsomorphicCardSet.h" />
     <ClInclude Include="..\source\ai\MoveIterator.h" />
+    <ClInclude Include="..\source\ai\MoveIterator_AbilitySubset.h" />
     <ClInclude Include="..\source\ai\MoveIterator_All.h" />
     <ClInclude Include="..\source\ai\MoveIterator_AllAbility.h" />
     <ClInclude Include="..\source\ai\MoveIterator_AllBreach.h" />
