@@ -140,8 +140,7 @@ effect. This run also confirmed the live `matchup_clean.js` seat-independent lin
 | STEAMAI live anchor run | `PrismataAI.exe.ORIG` not on disk | Task 14 |
 | `human_val.py` live run (6s/12s yardstick) | needs `.ORIG` + A12 standalone-loads-config | Task 14 |
 | `action_coverage.py` runtime | `js_engine/query_move.js` + exporter `ig_present`/`ig_click_count` stamps | Task 10 / Task 5 |
-| `RL_Eval_iter0_*` block execution | `RL_Eval_iter0` player not defined yet | Task 12 / 13 |
-| `ForcedCards` semantics | parser doesn't consume the field yet | Task 12 |
+| `RL_Eval_iter0_*` block execution | wide-untrained iter-0 weights not yet generated (`RL_Eval_iter0` is defined but still points at the `neural_weights_mixed_35prop.bin` placeholder) | Task 14 |
 
 The orchestration wiring of the live anchor runs (mapping `run_cpp_tournament` / `run_steam`
 results into `manifest['anchors']`) is left as documented hooks; live runs happen in Task 14.
