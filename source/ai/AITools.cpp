@@ -271,6 +271,14 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
 
 bool AITools::PlayerShouldResign(const GameState & state, const PlayerID playerID)
 {
+    // RL self-play / eval decision (frozen for the first campaign): the AI does NOT resign.
+    // Games play to a real terminal / turn-cap so win-rate eval is unbiased and self-play value
+    // targets are ground-truth. (A generic Playout-player verdict is unreliable for a strong NN,
+    // and the playout is costly.) Flip ENABLE_RESIGNATION to re-enable the null-safe playout
+    // criterion below. Applied identically to candidate and anchors on the standalone path.
+    static const bool ENABLE_RESIGNATION = false;
+    if (!ENABLE_RESIGNATION) { return false; }
+
     const PlayerID enemyID = state.getEnemy(playerID);
 
     EvaluationType selfScore = Eval::WillScoreSum(state, playerID);
