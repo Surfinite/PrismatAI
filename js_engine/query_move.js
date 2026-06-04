@@ -26,7 +26,7 @@
  * CLI:
  *   node query_move.js --request <file> --player <name> --weights <bin> --dave-exe <path>
  *                      [--root-iterator <name>] [--move-iterator <name>]
- *                      [--time-limit <ms>] [--timeout <ms>]
+ *                      [--time-limit <ms>] [--max-traversals <int>] [--timeout <ms>]
  *
  * Prints the parsed response object as JSON to stdout. Exit 0 on success, nonzero on error.
  */
@@ -44,6 +44,7 @@ function parseArgs(argv) {
         rootIterator: 'HardIterator_5var_Root',
         moveIterator: 'HardIterator_5var',
         timeLimit: 7000,
+        maxTraversals: 100000,
         timeout: 60000,
     };
     for (let i = 2; i < argv.length; i++) {
@@ -57,6 +58,7 @@ function parseArgs(argv) {
             case '--root-iterator': args.rootIterator = next(); break;
             case '--move-iterator': args.moveIterator = next(); break;
             case '--time-limit': args.timeLimit = parseInt(next(), 10); break;
+            case '--max-traversals': args.maxTraversals = parseInt(next(), 10); break;
             case '--timeout': args.timeout = parseInt(next(), 10); break;
             case '-h':
             case '--help': args.help = true; break;
@@ -72,7 +74,7 @@ function usage() {
     console.error(
         'Usage: node query_move.js --request <file> --player <name> --weights <bin> --dave-exe <path>\n' +
         '                          [--root-iterator <name>] [--move-iterator <name>]\n' +
-        '                          [--time-limit <ms>] [--timeout <ms>]\n'
+        '                          [--time-limit <ms>] [--max-traversals <int>] [--timeout <ms>]\n'
     );
 }
 
@@ -153,7 +155,7 @@ function injectPlayer(aiParameters, opts) {
         type: 'Player_UCT',
         TimeLimit: opts.timeLimit,
         MaxChildren: 40,
-        MaxTraversals: 100000,
+        MaxTraversals: opts.maxTraversals,
         RootMoveIterator: opts.rootIterator,
         MoveIterator: opts.moveIterator,
         Eval: 'NeuralNet',
@@ -267,6 +269,7 @@ async function main() {
         rootIterator: args.rootIterator,
         moveIterator: args.moveIterator,
         timeLimit: args.timeLimit,
+        maxTraversals: args.maxTraversals,
     });
 
     const requestJson = JSON.stringify({
