@@ -1,6 +1,7 @@
 #pragma once
 
 #include <limits>
+#include <vector>
 
 #include "Timer.h"
 #include "GameState.h"
@@ -25,6 +26,12 @@ class UCTSearch
     UCTNode                 _rootNode;
 
     GameState               _initialState;
+
+    // Root diagnostics from the most recent REAL move selection (allowSampling==true).
+    // Win-rate / description calls (allowSampling==false) never touch these.
+    std::vector<size_t>     _lastRootVisits;   // per-root-child visit counts
+    int                     _lastChosenIdx = -1;
+    int                     _lastArgmaxIdx = -1;
 
 public:
 
@@ -55,6 +62,11 @@ public:
     void                setMemoryPool(UCTMemoryPool * pool);
     UCTSearchResults &  getResults();
     const UCTNode &     getRootNode();
+
+    // Root diagnostics accessors (populated only on real move selection).
+    const std::vector<size_t> & lastRootVisits() const { return _lastRootVisits; }
+    int                 lastChosenIdx() const { return _lastChosenIdx; }
+    int                 lastArgmaxIdx() const { return _lastArgmaxIdx; }
 
     // graph printing functions
     void                printSubTree(const UCTNode & node, GameState state, std::string filename, size_t maxDepth);

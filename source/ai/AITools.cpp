@@ -4,6 +4,7 @@
 #include "PrismataAssert.h"
 #include "Game.h"
 #include "Timer.h"
+#include "Player_UCT.h"   // dynamic_cast for optional aivisits diagnostics
 
 #include <cstdlib>   // std::getenv (FORCE_DSNN env override)
 #include <fstream>   // std::ifstream (FORCE_DSNN sentinel-file check)
@@ -220,6 +221,34 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
         // "aiclicks" is an array of click objects
         clickString = AITools::GetClickString(m, initialState);
         aistring << "\"aicomment\":\"AI Move Successfully Found\", ";
+
+        // Optional UCT root diagnostics. Strictly gated on aiParameters.EmitDiagnostics==true,
+        // so normal play (flag absent) is byte-identical. Only meaningful for Player_UCT.
+        bool emitDiagnostics = false;
+        if (document.HasMember("aiParameters") && document["aiParameters"].IsObject())
+        {
+            const rapidjson::Value & ap = document["aiParameters"];
+            if (ap.HasMember("EmitDiagnostics") && ap["EmitDiagnostics"].IsBool())
+            {
+                emitDiagnostics = ap["EmitDiagnostics"].GetBool();
+            }
+        }
+        if (emitDiagnostics)
+        {
+            Player_UCT * uctPlayer = dynamic_cast<Player_UCT *>(aiPlayer.get());
+            if (uctPlayer != nullptr)
+            {
+                const std::vector<size_t> & visits = uctPlayer->lastRootVisits();
+                aistring << "\"aivisits\": [";
+                for (size_t i = 0; i < visits.size(); ++i)
+                {
+                    aistring << (i ? ", " : "") << visits[i];
+                }
+                aistring << "], ";
+                aistring << "\"aiargmax\": " << uctPlayer->lastArgmaxIdx() << ", ";
+                aistring << "\"aichosen\": " << uctPlayer->lastChosenIdx() << ", ";
+            }
+        }
     }
     catch (std::exception e)
     {

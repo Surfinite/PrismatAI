@@ -19,6 +19,11 @@ public:
     UCTSearchParameters & getParams();
     UCTSearchResults & getResults();
 
+    // Root diagnostics from the most recent real move selection (delegated to the search).
+    const std::vector<size_t> & lastRootVisits() const { return _search.lastRootVisits(); }
+    int lastArgmaxIdx() const { return _search.lastArgmaxIdx(); }
+    int lastChosenIdx() const { return _search.lastChosenIdx(); }
+
     virtual std::string getDescription() { return m_description + "\n" + _search.getDescription(); };
     PlayerPtr clone();
 };

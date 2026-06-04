@@ -78,6 +78,25 @@ void UCTSearch::doSearch(const GameState & initialState, Move & move)
 
 UCTNode * UCTSearch::getBestRootNode(bool allowSampling)
 {
+    // Capture root diagnostics ONLY on the real move-selection call (allowSampling==true).
+    // The win-rate / description paths pass false and must not perturb anything (incl. these).
+    if (allowSampling && _rootNode.numChildren() > 0)
+    {
+        _lastRootVisits.resize(_rootNode.numChildren());
+        size_t maxVisits = 0;
+        _lastArgmaxIdx = 0;
+        for (size_t c = 0; c < _rootNode.numChildren(); ++c)
+        {
+            const size_t v = _rootNode.getChild(c).numVisits();
+            _lastRootVisits[c] = v;
+            if (v > maxVisits)
+            {
+                maxVisits = v;
+                _lastArgmaxIdx = (int)c;
+            }
+        }
+    }
+
     // Self-play-only: sample the root move during the tau=1 opening (first K player-turns).
     // Only fires on the real move-selection call (allowSampling); the description/win-rate
     // paths pass false so they don't perturb the seeded RNG stream.
@@ -95,6 +114,7 @@ UCTNode * UCTSearch::getBestRootNode(bool allowSampling)
         const double u2 = Random::Real01();
         const size_t idx = MoveSampler::sampleRootIndex(
             visits, _params.temperatureTau(), _params.epsilonUniform(), u1, u2);
+        _lastChosenIdx = (int)idx;
         return &_rootNode.getChild(idx);
     }
 
@@ -107,6 +127,18 @@ UCTNode * UCTSearch::getBestRootNode(bool allowSampling)
     else if (_params.rootMoveSelectionMethod() == UCTMoveSelect::MostVisited)
     {
         bestNode = &_rootNode.mostVisitedChild();
+    }
+
+    if (allowSampling && bestNode != NULL)
+    {
+        for (size_t c = 0; c < _rootNode.numChildren(); ++c)
+        {
+            if (&_rootNode.getChild(c) == bestNode)
+            {
+                _lastChosenIdx = (int)c;
+                break;
+            }
+        }
     }
 
     return bestNode;
