@@ -50,6 +50,14 @@ bool UCTSearch::searchShouldStop()
 
 void UCTSearch::doSearch(const GameState & initialState, Move & move)
 {
+    // Reset root diagnostics to their "not available" defaults so a degenerate turn
+    // (root ends up with 0 children, so getBestRootNode never writes them) cannot leave
+    // stale prior-turn indices to be stamped onto the current record. These are
+    // DIAGNOSTIC-only fields (default -1 / empty); resetting them does not affect search.
+    _lastChosenIdx = -1;
+    _lastArgmaxIdx = -1;
+    _lastRootVisits.clear();
+
     _searchTimer.start();
     _rootNode = UCTNode(NULL, initialState, Players::Player_None, Move(), _params);
 

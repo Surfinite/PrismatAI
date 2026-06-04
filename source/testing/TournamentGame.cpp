@@ -1,7 +1,9 @@
 #include "TournamentGame.h"
 #include "Timer.h"
+#include "Player_UCT.h"
 
 #include <iostream>
+#include <memory>
 
 using namespace Prismata;
 
@@ -69,11 +71,13 @@ void TournamentGame::playGame(size_t updateIntervalSec)
             ++plyIndex;
         }
 
-        // Snapshot the pre-move state when recording, so per-action frames can be
-        // reconstructed off the think-timer below. Allocated only when recording;
-        // this is per-turn (not per-search-node), so it is well off the AI hot path.
+        // Snapshot the pre-move state when recording OR exporting V2 records, so
+        // per-action frames can be reconstructed off the think-timer below, and the
+        // V2 exporter can count Infusion-Grid clicks on a pristine pre-move clone.
+        // Allocated only when needed; this is per-turn (not per-search-node), so it
+        // is well off the AI hot path.
         std::unique_ptr<GameState> preMoveState;
-        if (_serializer) { preMoveState = std::make_unique<GameState>(_game.getState()); }
+        if (_serializer || _v2Exporter) { preMoveState = std::make_unique<GameState>(_game.getState()); }
 
         t.start();
         if (!_game.playNextTurn(false))
@@ -89,6 +93,62 @@ void TournamentGame::playGame(size_t updateIntervalSec)
         double ms = t.getElapsedTimeInMilliSec();
         _playerTotalTimeMS[playerToMove] += ms;
         _maxTimeMS[playerToMove] = std::max((size_t)ms, _maxTimeMS[playerToMove]);
+
+        // V2 move-stamp: backfill the move-derived fields onto the just-captured
+        // turn-start record. Done HERE — after the move plays, BEFORE the serializer
+        // block below mutates preMoveState. All under if (_v2Exporter), so normal
+        // (non-export) play is unaffected.
+        if (_v2Exporter)
+        {
+            const Move & move = _game.getPreviousMove();
+
+            // Count Infusion-Grid (engine codename "Hotel") self-sac clicks by the
+            // mover. Walk a SEPARATE local clone so each source instId is valid at
+            // lookup time and preMoveState stays pristine for the serializer block.
+            // Apply each action AFTER the check, so the lookup sees the source before
+            // it is sacced/removed. Net out the rare UNDO of an IG ability.
+            int igClicks = 0;
+            // Hard guard: the IG walk dereferences preMoveState, which is allocated far
+            // above (only when _serializer || _v2Exporter). It is always set when we get
+            // here today, but the allocation and this deref are far apart with a
+            // playNextTurn between them, so guard explicitly. PRISMATA_ASSERT is a SOFT
+            // assert (prints, does not abort), so the if() — not the assert — is what
+            // actually prevents a null deref.
+            PRISMATA_ASSERT(preMoveState != nullptr, "preMoveState must be allocated when _v2Exporter is set");
+            if (preMoveState)
+            {
+                GameState igWalk(*preMoveState);
+                for (ActionID a(0); a < move.size(); ++a)
+                {
+                    const Action & action = move.getAction(a);
+                    if (action.getPlayer() == playerToMove)
+                    {
+                        const ActionID type = action.getType();
+                        if (type == ActionTypes::USE_ABILITY || type == ActionTypes::UNDO_USE_ABILITY)
+                        {
+                            const Card & src = igWalk.getCardByID(action.getID());
+                            if (src.getType().getName() == "Hotel")
+                            {
+                                igClicks += (type == ActionTypes::USE_ABILITY) ? 1 : -1;
+                            }
+                        }
+                    }
+                    igWalk.doAction(action);
+                }
+            }
+            if (igClicks < 0) { igClicks = 0; }
+
+            // UCT root diagnostics from the mover (null-safe: -1 for non-UCT players).
+            int sampledIdx = -1, argmaxIdx = -1;
+            const PlayerPtr mover = _game.getPlayer(playerToMove);
+            if (auto uct = std::dynamic_pointer_cast<Player_UCT>(mover))
+            {
+                sampledIdx = uct->lastChosenIdx();
+                argmaxIdx  = uct->lastArgmaxIdx();
+            }
+
+            _v2Exporter->stampLastMove(igClicks, sampledIdx, argmaxIdx);
+        }
 
         // Per-action replay capture, OFF the think-timer (ms already recorded
         // above). Re-apply the move that was just played onto a clone of the

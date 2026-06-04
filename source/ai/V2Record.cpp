@@ -178,6 +178,23 @@ std::string buildV2RecordJSON(const GameState & state, int plyIndex)
     doc.AddMember("turn_number",   static_cast<int>(state.getTurnNumber()),   a);
     doc.AddMember("active_player", static_cast<int>(state.getActivePlayer()), a);
 
+    // ---- ig_present: does the ACTIVE player have >=1 ALIVE Infusion Grid at turn-start? ----
+    // Infusion Grid's engine codename is "Hotel" (getName()); getUIName() is "Infusion Grid".
+    // RL action-coverage analysis (Task 5) keys the IG-click-count distribution off boards where
+    // the mover actually owns an IG. Computed cheaply from the turn-start state.
+    {
+        const PlayerID active = state.getActivePlayer();
+        bool igPresent = false;
+        const CardIDVector & activeIDs = state.getCardIDs(active);
+        for (size_t i = 0; i < activeIDs.size(); ++i)
+        {
+            const Card & c = state.getCardByID(activeIDs[i]);
+            if (c.isDead()) continue;
+            if (c.getType().getName() == "Hotel") { igPresent = true; break; }
+        }
+        doc.AddMember("ig_present", igPresent ? 1 : 0, a);
+    }
+
     rapidjson::StringBuffer buffer;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
     doc.Accept(writer);

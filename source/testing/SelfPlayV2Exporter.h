@@ -17,8 +17,26 @@ namespace Prismata
 // features are byte-identical to inference features by construction.
 class SelfPlayV2Exporter
 {
+public:
+
+    // Move-derived stamp fields backfilled into a record AFTER its turn's move is
+    // played (the turn-start record is captured BEFORE the action-phase move exists):
+    //   igClickCount - # of Infusion-Grid (codename "Hotel") self-sac USE_ABILITY
+    //                  clicks the active player made in the move actually played.
+    //   sampledIdx   - root child index the search chose after temperature/eps
+    //                  sampling (Player_UCT::lastChosenIdx), or -1 if not a UCT mover.
+    //   argmaxIdx    - most-visited root child index (Player_UCT::lastArgmaxIdx), or -1.
+    struct MoveStamp { int igClickCount = 0; int sampledIdx = -1; int argmaxIdx = -1; };
+
+private:
+
     std::string              _outDir;
     std::vector<std::string> _records;   // per-turn V2 JSON (without outcome), ply order
+
+    // Move-derived stamps, kept strictly 1:1 with _records (one default entry pushed
+    // per capture(); set by stampLastMove() after the turn's move plays). finalize()
+    // backfills these three fields into each record by index.
+    std::vector<MoveStamp> _moveStamps;
 
     // Raw-state parity sidecar. Parallel to _records: one (plyIndex, toJSONString())
     // per captured turn. finalize() writes these to a sibling parity_states/ dir as
@@ -37,6 +55,11 @@ public:
     // Stash a turn-start record. Called once per player-turn at the same leaf the
     // value net is queried. plyIndex is the 0-based ply index within the game.
     void capture(const GameState & state, int plyIndex);
+
+    // Set the move-derived fields on the most-recently-captured record. Called once
+    // per player-turn AFTER the action-phase move is played (see TournamentGame).
+    // No-op if no record has been captured yet.
+    void stampLastMove(int igClickCount, int sampledIdx, int argmaxIdx);
 
     // Backfill outcome_p0 + total_plies into every stashed record and write the
     // JSONL file. outcome_p0 = (winner==Player_One ? 1.0 : Player_None ? 0.5 : 0.0).

@@ -17,12 +17,24 @@ void SelfPlayV2Exporter::capture(const GameState & state, int plyIndex)
 {
     _records.push_back(buildV2RecordJSON(state, plyIndex));
 
+    // Keep the move-stamp vector strictly 1:1 with _records. A default entry is
+    // pushed here so the three vectors stay aligned even if stampLastMove() is never
+    // called for this record (e.g. a code path that skips stamping); finalize()
+    // indexes _moveStamps by record index.
+    _moveStamps.push_back(MoveStamp{});
+
     // Parity sidecar: stash the raw turn-start state in the exact bare-doc shape
     // that PrismataAI.exe --dump-features consumes. state.toJSONString() emits
     // {whiteMana, blackMana, turn, phase, cards, ...supply..., table}, which the
     // GameState(const rapidjson::Value&) constructor round-trips. finalize() writes
     // these out so the export-parity harness can be scaled to ~1000 self-play states.
     _rawStates.emplace_back(plyIndex, state.toJSONString());
+}
+
+void SelfPlayV2Exporter::stampLastMove(int igClickCount, int sampledIdx, int argmaxIdx)
+{
+    if (_moveStamps.empty()) return;
+    _moveStamps.back() = MoveStamp{ igClickCount, sampledIdx, argmaxIdx };
 }
 
 bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
@@ -59,12 +71,19 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
         return false;
     }
 
-    // Backfill the two game-level fields via a robust parse-then-reserialize, so we
-    // depend on no string-layout contract (where the record ends, trailing chars).
-    // outcome_p0 is added as a double so it serializes as a float that vectorize_v2
-    // ingests via float(outcome_p0).
-    for (const std::string & rec : _records)
+    // Backfill the game-level fields (outcome_p0, total_plies) plus the per-record
+    // move-derived fields (ig_click_count, sampled_idx, argmax_idx) via a robust
+    // parse-then-reserialize, so we depend on no string-layout contract (where the
+    // record ends, trailing chars). outcome_p0 is added as a double so it serializes
+    // as a float that vectorize_v2 ingests via float(outcome_p0).
+    //
+    // Index with i (not a range-for) so we can read the parallel _moveStamps entry.
+    // _moveStamps is 1:1 with _records, so i must advance for EVERY record — including
+    // ones skipped on parse error — to keep the index aligned to the record processed.
+    for (size_t i = 0; i < _records.size(); ++i)
     {
+        const std::string & rec = _records[i];
+
         rapidjson::Document doc;
         doc.Parse(rec.c_str());
         if (doc.HasParseError())
@@ -74,10 +93,17 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
             continue;
         }
 
+        auto & alloc = doc.GetAllocator();
+
         rapidjson::Value outcomeMember;
         outcomeMember.SetDouble(outcomeP0);
-        doc.AddMember("outcome_p0", outcomeMember, doc.GetAllocator());
-        doc.AddMember("total_plies", totalPlies, doc.GetAllocator());
+        doc.AddMember("outcome_p0", outcomeMember, alloc);
+        doc.AddMember("total_plies", totalPlies, alloc);
+
+        const MoveStamp & ms = _moveStamps[i];
+        doc.AddMember("ig_click_count", ms.igClickCount, alloc);
+        doc.AddMember("sampled_idx",    ms.sampledIdx,   alloc);
+        doc.AddMember("argmax_idx",     ms.argmaxIdx,    alloc);
 
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -128,6 +154,7 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
     // Clear accumulators so a second finalize() call cannot re-emit duplicate JSONL
     // lines or duplicate sp_<gameId>_*.json sidecar files (idempotent re-finalize).
     _records.clear();
+    _moveStamps.clear();
     _rawStates.clear();
 
     return ok;
