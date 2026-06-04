@@ -1,10 +1,19 @@
-# Tactical cases (O7 regression suite)
+# Tactical cases (O7 regression suite) — Infusion-Grid CLICK COUNT
 
 Curated tactical positions consumed by `eval/tactical_suite.py`. Each `*.json` file is one
 case. The suite replays the case through dave's `PrismataAI.exe` responder (UCT + NeuralNet,
 the real deploy path) via `js_engine/query_move.js` and asserts a tactical property of the
-returned move — currently **whether the Infusion Grid (engine codename `Hotel`) `USE_ABILITY`
-click fires**.
+returned move — the **COUNT of Infusion Grid self-sac `USE_ABILITY` clicks**.
+
+## Why a count (not a binary fire/skip)
+
+Infusion Grid self-sacs a 4HP unit → four 1HP Husks, paying 1 red, for defensive granularity.
+The real decision is not fire-vs-skip but **how many** IGs to self-sac (usually 1 is correct,
+not all). The deployed greedy root iterator `HardIterator_5var_Root` over-clicks (fires every
+legal IG). The widened `HardIterator_5var_IGsubset_Root` (a `MoveIterator_AbilitySubset`) emits
+one root child per IG-click count `{0..N}`, so the net can choose the count. **The count metric
+is therefore only meaningful under the widened iterator** — which is why the suite CLI defaults
+to `--root-iterator HardIterator_5var_IGsubset_Root` / `--move-iterator HardIterator_5var`.
 
 ## Case format
 
@@ -13,29 +22,71 @@ click fires**.
   "name": "human_readable_id",
   "bucket": "known_move" | "looks_forced",
   "request": { "mergedDeck": [...], "gameState": {...}, "aiParameters": {...} }, // F6 CurrentInfo
-  "expect": { "fires_hotel": true | false } | null,  // the asserted property (null = no gate)
-  "hotel_inst_id": 1234 | null,   // forward-compat; see note below
+  "root_iterator": "HardIterator_5var_IGsubset_Root",  // optional per-case override (else CLI default)
+  "move_iterator": "HardIterator_5var",                // optional per-case override (else CLI default)
+  "expect": { "ig_click_count": 1 } | null,            // asserted COUNT (null = informational, no gate)
   "note": "where it came from / why it matters"
 }
 ```
 
-- **`known_move`** — run through the suite as a PASS/FAIL gate against `expect.fires_hotel`.
-- **`looks_forced`** — NOT a gate. Appended to `eval/backlog_action_space.md` as a watch-list of
-  positions where the iterator may be pinning the move. These only become *meaningful for
-  Infusion-Grid optionality once **Task 12** wires the IG-optional iterator* (before that, the
-  deployed iterator always fires IG when legal, so an "IG-skip" expectation is unreachable).
+- **`known_move`** — run through the suite as a PASS/FAIL gate. PASS iff
+  `count_ig_clicks(resp) == expect.ig_click_count`.
+- **`looks_forced`** — NOT a gate (`expect: null`). Appended to `eval/backlog_action_space.md` as
+  an informational watch-list of positions with no known-correct IG-click count yet.
+- **`root_iterator` / `move_iterator`** — optional per-case overrides; fall back to the CLI
+  `--root-iterator` / `--move-iterator` (which themselves default to the widened IGsubset pair).
+  The IG-click count is only net-selectable under the widened root, so keep these on the IGsubset
+  iterator for any case whose `expect` is a count < fire-all.
+
+## What the metric counts
+
+`count_ig_clicks(resp)` (in `eval/tactical_suite.py`, shared with `eval/action_coverage.py`)
+counts Infusion-Grid **ability-use** clicks in `resp["aiclicks"]`:
+
+```jsonc
+{ "type": "inst clicked" | "inst shift clicked",
+  "args": { "cardName": "Infusion Grid", "health": 4, ... } }   // ability-use; args is a DICT — COUNTED
+```
+
+It deliberately does **not** count IG **buys**, which are a different click whose `args` is a
+**string**:
+
+```jsonc
+{ "type": "card clicked" | "card shift clicked", "args": "Infusion Grid" }   // buy — NOT counted
+```
+
+**Name note (verified Jun 4 2026):** the engine source (`Card.cpp:933`) emits the engine
+**codename** `"Hotel"` for internal-name decks, but a live **F6 dump carries display names**
+which the responder echoes back, so the ability click on the real ktink case reports
+`args.cardName == "Infusion Grid"`. The counter matches **either** name (`IG_NAMES =
+("Infusion Grid", "Hotel")`).
+
+**Shift-batching caveat:** a single `"inst shift clicked"` could in principle batch several
+identical IG self-sacs into one click object (the response carries no per-click multiplicity),
+which the counter would under-count as 1. Curated cases are chosen so this is unambiguous —
+`ktink_t9_ig` fires exactly one `"inst clicked"` IG ability-use (count 1, verified).
+
+## Curated cases
+
+- **`ktink_t9_ig`** — the canonical gating case. Sourced from replay **KtInk-pMiQf**, P1 (Master
+  Bot = the DSNN AI) **turn-9**, captured as an F6 `CurrentInfo` dump
+  (`docs/scratch/ktink_t9_action_request.json`, embedded inline as the case `request`). A real
+  over-click position: greedy `HardIterator_5var_Root` argmax fires **2** IGs (the bug); the
+  widened `HardIterator_5var_IGsubset_Root` argmax fires **1** (correct — one IG self-sac is
+  enough defensive granularity vs the freeze). `expect.ig_click_count = 1`.
+
+> The earlier `standin_*` placeholder (built from VXGaI, one of 4 old F6 dumps that are
+> unparseable/degenerate) has been removed; `ktink_t9_ig` is the canonical case.
 
 ## Capture workflow
 
-1. Play (or replay) a real DSNN game to the decision you care about — e.g. an Infusion Grid
-   turn where firing vs holding the ability is a genuine choice.
+1. Play (or replay) a real DSNN game to the Infusion-Grid decision you care about.
 2. In the client (dev-mode SWF patch), press **F6** to copy the game-state JSON to the clipboard.
-3. Paste the clipboard. The payload is the `"CurrentInfo"` section (`{mergedDeck, gameState,
-   aiParameters}`); the F6 dump also carries other sections (`TurnStartInfo`, an AI Status Log
-   tail) — `query_move.js` / `tactical_suite.py` brace-match `CurrentInfo` out automatically, so
-   you can keep just that object as the case `request`, or paste the raw dump and extract it with
-   `node js_engine/query_move.js` plumbing.
-4. Set `bucket`, `expect.fires_hotel` (the move you believe is correct), and a descriptive `note`.
+3. The payload is the `"CurrentInfo"` section (`{mergedDeck, gameState, aiParameters}`); the F6
+   dump also carries other sections — `query_move.js` / `tactical_suite.py` brace-match
+   `CurrentInfo` out automatically, so keep just that object as the case `request` (embedded inline).
+4. Set `bucket`, `root_iterator`/`move_iterator` (IGsubset for a count gate), the correct
+   `expect.ig_click_count`, and a descriptive `note`.
 
 ## Running
 
@@ -44,25 +95,9 @@ python eval/tactical_suite.py \
   --player RL_Eval \
   --weights neural_weights_mixed_35prop.bin \
   --dave-exe c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe
-# first run with no eval/tactical_baseline.json -> establishes the baseline (exit 0)
-python eval/tactical_suite.py --write-baseline   # persist current results as the regression baseline
+# first run with no eval/tactical_baseline.json -> writes the baseline (exit 0)
+python eval/tactical_suite.py --write-baseline   # re-persist current results as the regression baseline
 ```
 
-The suite exits nonzero **only** when a case that passed in `eval/tactical_baseline.json` now
-fails (a true regression). New cases never gate.
-
-## Status / what's real vs deferred
-
-- **REAL curated cases are DEFERRED to the user** — they come from your own DSNN games (capture
-  workflow above). Do not fabricate them.
-- **IG-SKIP cases need Task 12** — until the IG-optional iterator is wired, the deployed iterator
-  always fires the Infusion Grid when legal, so a `fires_hotel:false` expectation on an
-  IG-available state is not reachable by the current engine. Those cases only become meaningful
-  after Task 12.
-- **Hotel click shape NEEDS CONFIRMATION on a real IG state.** The responder emits `USE_ABILITY`
-  clicks as `{"type":"inst clicked"|"inst shift clicked", "args":{"cardName":"Hotel", ...}}`
-  (internal name, no per-click instance id). `fires_hotel()` matches on `args.cardName == "Hotel"`;
-  `hotel_inst_id` is retained for forward-compat but unused. Confirm the exact shape against a real
-  Infusion-Grid decision and adjust `tactical_suite.py` if it differs.
-- The current cases directory ships a **clearly-marked STAND-IN** (`standin_*`) that only exercises
-  the harness mechanism (query → classify → PASS) — it is **not** a curated tactical case.
+The suite exits nonzero **only** when a case that matched its expected count in
+`eval/tactical_baseline.json` now differs (a true regression). New cases never gate.

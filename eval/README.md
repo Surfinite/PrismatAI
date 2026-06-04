@@ -139,7 +139,7 @@ effect. This run also confirmed the live `matchup_clean.js` seat-independent lin
 |------|-----------|------|
 | STEAMAI live anchor run | `PrismataAI.exe.ORIG` not on disk | Task 14 |
 | `human_val.py` live run (6s/12s yardstick) | needs `.ORIG` + A12 standalone-loads-config | Task 14 |
-| `action_coverage.py` runtime | `js_engine/query_move.js` + exporter `ig_legal`/`ig_fired` stamps | Task 10 / Task 5 |
+| `action_coverage.py` runtime | `js_engine/query_move.js` + exporter `ig_present`/`ig_click_count` stamps | Task 10 / Task 5 |
 | `RL_Eval_iter0_*` block execution | `RL_Eval_iter0` player not defined yet | Task 12 / 13 |
 | `ForcedCards` semantics | parser doesn't consume the field yet | Task 12 |
 
