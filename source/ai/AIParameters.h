@@ -56,6 +56,11 @@ class AIParameters
     void                parseMoveIterators(const std::string & keyName, const rapidjson::Value & rootValue);
     void                parsePlayers(const std::string & keyName, const rapidjson::Value & rootValue);
     void                parseStates(const std::string & keyName, const rapidjson::Value & rootValue);
+
+    // Parses all AI-parameter sections from rootValue into the CURRENT singleton (NO reset).
+    // addHumanPlayers: append the two Player_GUI "Human" entries (true only for the full reset path).
+    // doParsePlayers:  parse the "Players" section (false to load defs only -- avoids eager NN weight loads).
+    void                parseSections(const rapidjson::Value & rootValue, bool addHumanPlayers, bool doParsePlayers);
     
     CardFilter          parseCardFilter(const std::string & filterVariable, const rapidjson::Value & root);
     PPPtr               parsePartialPlayer(const PlayerID player, const std::string & playerVariable, const rapidjson::Value & root);
@@ -73,6 +78,13 @@ public:
     void                parseJSONValue(const rapidjson::Value & rootValue);
     void                parseJSONString(const std::string & jsonString);
     void                parseFile(const std::string & filename);
+
+    // A12: merge a per-request blob (incl. its Players) ON TOP of the current singleton WITHOUT resetting.
+    void                parseJSONValueNoReset(const rapidjson::Value & rootValue);
+    // A12: reset, then load DEFINITIONS ONLY (no Players -> no eager NN weight loads) from a config file.
+    // On file open/parse failure, prints a stderr warning and returns false WITHOUT resetting (caller can
+    // fall back to blob-only). Returns true after a successful reset + defs load.
+    bool                parseConfigDefsForMerge(const std::string & filename);
 
     PlayerPtr           getPlayer(const PlayerID player, const std::string & playerName);
     PPPtr               getPartialPlayer(const PlayerID player, const std::string & playerName);

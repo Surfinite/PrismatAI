@@ -38,7 +38,32 @@ std::string AITools::InitializeAI(const std::string & initString)
         cardInitElapsed = t.getElapsedTimeInMilliSec();
         t.start();
 
-        AIParameters::Instance().parseJSONValue(document["aiParameters"]);
+        // A12: load our config-defined (widened) iterator/partial/filter DEFINITIONS first (NO players,
+        // so no eager NN weight loads), then merge the per-request SWF blob ON TOP without resetting, so
+        // an injected player referencing a config-only iterator (HardIterator_5var_Root /
+        // HardIterator_5var) resolves by name on the Steam-protocol path. Falls back to the old
+        // blob-only behaviour if config.txt isn't found.
+        std::string cfgPath = "asset/config/config.txt";
+        {
+            const std::string exeDir = NeuralNet::getExecutableDir();   // same mechanism --dump-features uses
+            if (!exeDir.empty())
+            {
+                std::ifstream cfgTest(exeDir + "/" + cfgPath);
+                if (cfgTest.good()) { cfgPath = exeDir + "/" + cfgPath; }
+            }
+        }
+        // parseConfigDefsForMerge returns true only after it successfully reset the singleton and loaded
+        // our config defs (no players). On a missing OR unparseable config.txt it returns false WITHOUT
+        // resetting, so we fall back to the old blob-only path (parseJSONValue, which resets) -- this also
+        // closes the gap where a config.txt *parse* error previously left the singleton un-reset before merge.
+        if (AIParameters::Instance().parseConfigDefsForMerge(cfgPath))
+        {
+            AIParameters::Instance().parseJSONValueNoReset(document["aiParameters"]);  // merge the blob on top
+        }
+        else
+        {
+            AIParameters::Instance().parseJSONValue(document["aiParameters"]);          // fallback: blob only (old behaviour)
+        }
         playerInitElapsed = t.getElapsedTimeInMilliSec();
 
         aistring << "\"aiinitcomment\":\"AI Initialization Successful\", ";

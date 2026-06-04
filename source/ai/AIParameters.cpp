@@ -1,6 +1,9 @@
 #include "AIParameters.h"
 #include "NeuralNet.h"
 
+#include <fstream>     // std::ifstream (A12: parseConfigDefsForMerge file read)
+#include <algorithm>   // std::find (A12: dedup name vectors on the no-reset merge path)
+
 using namespace Prismata;
 
 // Create a per-player NeuralNet instance from config.
@@ -57,17 +60,22 @@ AIParameters & AIParameters::Instance()
     return params;
 }
 
-void AIParameters::parseJSONValue(const rapidjson::Value & rootValue)
-{  
-    Instance() = AIParameters();
-
+void AIParameters::parseSections(const rapidjson::Value & rootValue, bool addHumanPlayers, bool doParsePlayers)
+{
     PRISMATA_ASSERT(rootValue.HasMember("Partial Players"),  "AIParameters: No 'Partial Players' Options Found");
     PRISMATA_ASSERT(rootValue.HasMember("Move Iterators"),   "AIParameters: No 'Move Iterators' Options Found");
-    PRISMATA_ASSERT(rootValue.HasMember("Players"),          "AIParameters: No 'Players' Options Found");
+
+    // Only require "Players" when we will actually parse it. A defs-only call
+    // (doParsePlayers == false, the A12 pre-load path) is contractually allowed
+    // to pass a blob that omits the Players section.
+    if (doParsePlayers)
+    {
+        PRISMATA_ASSERT(rootValue.HasMember("Players"), "AIParameters: No 'Players' Options Found");
+    }
 
     Timer t;
     t.start();
-    
+
     std::cout << "Parsing Buy Limits...\n";
     for (size_t i(0); i < _buyLimitKeyNames.size(); ++i)
     {
@@ -98,10 +106,13 @@ void AIParameters::parseJSONValue(const rapidjson::Value & rootValue)
         parseMoveIterators(_moveIteratorKeyNames[i], rootValue);
     }
 
-    std::cout << "Parsing Players...\n";
-    for (size_t i(0); i < _playerKeyNames.size(); ++i)
+    if (doParsePlayers)
     {
-        parsePlayers(_playerKeyNames[i], rootValue);
+        std::cout << "Parsing Players...\n";
+        for (size_t i(0); i < _playerKeyNames.size(); ++i)
+        {
+            parsePlayers(_playerKeyNames[i], rootValue);
+        }
     }
 
     std::cout << "Parsing States...\n";
@@ -110,10 +121,13 @@ void AIParameters::parseJSONValue(const rapidjson::Value & rootValue)
         parseStates(_stateKeyNames[i], rootValue);
     }
 
-    // add two human players
-    _playerNames.push_back("Human");
-    _playerMap[Players::Player_One]["Human"] = PlayerPtr(new Player_GUI(Players::Player_One));
-    _playerMap[Players::Player_Two]["Human"] = PlayerPtr(new Player_GUI(Players::Player_Two));
+    if (addHumanPlayers)
+    {
+        // add two human players
+        _playerNames.push_back("Human");
+        _playerMap[Players::Player_One]["Human"] = PlayerPtr(new Player_GUI(Players::Player_One));
+        _playerMap[Players::Player_Two]["Human"] = PlayerPtr(new Player_GUI(Players::Player_Two));
+    }
 
     std::cout << "Parsing Complete!\n";
 
@@ -125,6 +139,51 @@ void AIParameters::parseJSONValue(const rapidjson::Value & rootValue)
     std::cout << "Players:            " << _playerMap[0].size()        << ", parses: " << _playerParses << std::endl;
     std::cout << "States:             " << _stateMap.size()            << std::endl;
     std::cout << "Parse Time:         " << ms << "ms"                  << std::endl;
+}
+
+void AIParameters::parseJSONValue(const rapidjson::Value & rootValue)
+{
+    // Reset the singleton then parse the full blob (players + Human). Behaviour MUST remain
+    // byte-identical to the historical implementation -- the tournament path depends on this.
+    Instance() = AIParameters();
+    parseSections(rootValue, /*addHumanPlayers*/ true, /*doParsePlayers*/ true);
+}
+
+void AIParameters::parseJSONValueNoReset(const rapidjson::Value & rootValue)
+{
+    // A12: merge a per-request blob (incl. its Players) on top of the current singleton, NO reset,
+    // NO Human players. Same-named filters/partials/iterators are skipped by the section parsers'
+    // existing guards (so already-loaded config defs win); new names are added.
+    parseSections(rootValue, /*addHumanPlayers*/ false, /*doParsePlayers*/ true);
+}
+
+bool AIParameters::parseConfigDefsForMerge(const std::string & filename)
+{
+    // A12: reset + load DEFINITIONS ONLY (no Players -> no eager NN weight loads).
+    // Mirror parseFile's file read, but do NOT hard-assert on a missing file: if we can't open
+    // or parse it, warn and return false WITHOUT resetting so the caller can fall back to blob-only.
+    std::stringstream ss;
+    {
+        std::ifstream fin(filename.c_str());
+        if (!fin.good())
+        {
+            fprintf(stderr, "AIParameters: WARNING: could not open config defs file '%s'; skipping pre-load\n", filename.c_str());
+            return false;
+        }
+        ss << fin.rdbuf();
+    }
+    const std::string json = ss.str();
+
+    rapidjson::Document document;
+    if (document.Parse(json.c_str()).HasParseError())
+    {
+        fprintf(stderr, "AIParameters: WARNING: parse error in config defs file '%s'; skipping pre-load\n", filename.c_str());
+        return false;
+    }
+
+    Instance() = AIParameters();
+    parseSections(document, /*addHumanPlayers*/ false, /*doParsePlayers*/ false);
+    return true;
 }
 
 void AIParameters::parseStates(const std::string & keyName, const rapidjson::Value & rootValue)
@@ -278,7 +337,11 @@ void AIParameters::parsePartialPlayers(const std::string & keyName, const rapidj
             parsePartialPlayer(Players::Player_Two, name, rootValue);
         }
 
-        _partialPlayerNames.push_back(name);
+        // On the no-reset merge path (A12) a name shared between config.txt and the blob would
+        // otherwise be appended twice, inflating getPartialPlayerNames().size(). On the reset path
+        // names are unique, so this find() always returns end() and behaviour is unchanged.
+        if (std::find(_partialPlayerNames.begin(), _partialPlayerNames.end(), name) == _partialPlayerNames.end())
+            _partialPlayerNames.push_back(name);
     }
 
     std::sort(_partialPlayerNames.begin(), _partialPlayerNames.end());
@@ -331,7 +394,11 @@ void AIParameters::parsePlayers(const std::string & keyName, const rapidjson::Va
             parsePlayer(Players::Player_Two, name, rootValue);
         }
 
-        _playerNames.push_back(name);
+        // On the no-reset merge path (A12) a name shared between config.txt and the blob would
+        // otherwise be appended twice, inflating getPlayerNames().size() (used in an AITools log line).
+        // On the reset path names are unique, so this find() always returns end() and behaviour is unchanged.
+        if (std::find(_playerNames.begin(), _playerNames.end(), name) == _playerNames.end())
+            _playerNames.push_back(name);
     }
 
     std::sort(_playerNames.begin(), _playerNames.end());
