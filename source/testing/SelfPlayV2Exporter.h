@@ -26,7 +26,11 @@ public:
     //   sampledIdx   - root child index the search chose after temperature/eps
     //                  sampling (Player_UCT::lastChosenIdx), or -1 if not a UCT mover.
     //   argmaxIdx    - most-visited root child index (Player_UCT::lastArgmaxIdx), or -1.
-    struct MoveStamp { int igClickCount = 0; int sampledIdx = -1; int argmaxIdx = -1; };
+    //   rootChildren - number of root children the search actually had
+    //                  (Player_UCT::rootChildren), or 0 if not a UCT mover.
+    //   rootTruncated- whether the MaxChildren cap bound at the root AND the iterator still
+    //                  had candidates (Player_UCT::rootTruncated); observe-only telemetry.
+    struct MoveStamp { int igClickCount = 0; int sampledIdx = -1; int argmaxIdx = -1; int rootChildren = 0; bool rootTruncated = false; };
 
 private:
 
@@ -59,7 +63,7 @@ public:
     // Set the move-derived fields on the most-recently-captured record. Called once
     // per player-turn AFTER the action-phase move is played (see TournamentGame).
     // No-op if no record has been captured yet.
-    void stampLastMove(int igClickCount, int sampledIdx, int argmaxIdx);
+    void stampLastMove(int igClickCount, int sampledIdx, int argmaxIdx, int rootChildren, bool rootTruncated);
 
     // Backfill outcome_p0 + total_plies into every stashed record and write the
     // JSONL file. outcome_p0 = (winner==Player_One ? 1.0 : Player_None ? 0.5 : 0.0).

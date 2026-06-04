@@ -23,6 +23,8 @@ public:
     const std::vector<size_t> & lastRootVisits() const { return _search.lastRootVisits(); }
     int lastArgmaxIdx() const { return _search.lastArgmaxIdx(); }
     int lastChosenIdx() const { return _search.lastChosenIdx(); }
+    bool rootTruncated() const { return _search.rootTruncated(); }
+    size_t rootChildren() const { return _search.lastRootVisits().size(); }
 
     virtual std::string getDescription() { return m_description + "\n" + _search.getDescription(); };
     PlayerPtr clone();

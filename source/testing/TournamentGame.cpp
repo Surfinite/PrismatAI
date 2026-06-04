@@ -138,16 +138,20 @@ void TournamentGame::playGame(size_t updateIntervalSec)
             }
             if (igClicks < 0) { igClicks = 0; }
 
-            // UCT root diagnostics from the mover (null-safe: -1 for non-UCT players).
+            // UCT root diagnostics from the mover (null-safe defaults for non-UCT players).
             int sampledIdx = -1, argmaxIdx = -1;
+            int rootChildren = 0;
+            bool rootTruncated = false;
             const PlayerPtr mover = _game.getPlayer(playerToMove);
             if (auto uct = std::dynamic_pointer_cast<Player_UCT>(mover))
             {
-                sampledIdx = uct->lastChosenIdx();
-                argmaxIdx  = uct->lastArgmaxIdx();
+                sampledIdx    = uct->lastChosenIdx();
+                argmaxIdx     = uct->lastArgmaxIdx();
+                rootChildren  = (int)uct->rootChildren();
+                rootTruncated = uct->rootTruncated();
             }
 
-            _v2Exporter->stampLastMove(igClicks, sampledIdx, argmaxIdx);
+            _v2Exporter->stampLastMove(igClicks, sampledIdx, argmaxIdx, rootChildren, rootTruncated);
         }
 
         // Per-action replay capture, OFF the think-timer (ms already recorded

@@ -32,6 +32,7 @@ class UCTSearch
     std::vector<size_t>     _lastRootVisits;   // per-root-child visit counts
     int                     _lastChosenIdx = -1;
     int                     _lastArgmaxIdx = -1;
+    bool                    _rootTruncated = false;   // MaxChildren cap bound at the root + iterator had more (candidates dropped)
 
 public:
 
@@ -67,6 +68,7 @@ public:
     const std::vector<size_t> & lastRootVisits() const { return _lastRootVisits; }
     int                 lastChosenIdx() const { return _lastChosenIdx; }
     int                 lastArgmaxIdx() const { return _lastArgmaxIdx; }
+    bool                rootTruncated() const { return _rootTruncated; }
 
     // graph printing functions
     void                printSubTree(const UCTNode & node, GameState state, std::string filename, size_t maxDepth);

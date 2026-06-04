@@ -31,10 +31,10 @@ void SelfPlayV2Exporter::capture(const GameState & state, int plyIndex)
     _rawStates.emplace_back(plyIndex, state.toJSONString());
 }
 
-void SelfPlayV2Exporter::stampLastMove(int igClickCount, int sampledIdx, int argmaxIdx)
+void SelfPlayV2Exporter::stampLastMove(int igClickCount, int sampledIdx, int argmaxIdx, int rootChildren, bool rootTruncated)
 {
     if (_moveStamps.empty()) return;
-    _moveStamps.back() = MoveStamp{ igClickCount, sampledIdx, argmaxIdx };
+    _moveStamps.back() = MoveStamp{ igClickCount, sampledIdx, argmaxIdx, rootChildren, rootTruncated };
 }
 
 bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
@@ -104,6 +104,8 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
         doc.AddMember("ig_click_count", ms.igClickCount, alloc);
         doc.AddMember("sampled_idx",    ms.sampledIdx,   alloc);
         doc.AddMember("argmax_idx",     ms.argmaxIdx,    alloc);
+        doc.AddMember("root_children",  ms.rootChildren, alloc);
+        doc.AddMember("root_truncated", ms.rootTruncated, alloc);
 
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);

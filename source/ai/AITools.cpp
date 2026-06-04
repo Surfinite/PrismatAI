@@ -247,6 +247,7 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
                 aistring << "], ";
                 aistring << "\"aiargmax\": " << uctPlayer->lastArgmaxIdx() << ", ";
                 aistring << "\"aichosen\": " << uctPlayer->lastChosenIdx() << ", ";
+                aistring << "\"aitruncated\": " << (uctPlayer->rootTruncated() ? "true" : "false") << ", ";
             }
         }
     }

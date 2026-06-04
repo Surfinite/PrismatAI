@@ -57,6 +57,7 @@ void UCTSearch::doSearch(const GameState & initialState, Move & move)
     _lastChosenIdx = -1;
     _lastArgmaxIdx = -1;
     _lastRootVisits.clear();
+    _rootTruncated = false;
 
     _searchTimer.start();
     _rootNode = UCTNode(NULL, initialState, Players::Player_None, Move(), _params);
@@ -76,6 +77,13 @@ void UCTSearch::doSearch(const GameState & initialState, Move & move)
 
         updateResults();
     }
+
+    // Observe-only root-truncation telemetry. Computed AFTER the traversal loop (in
+    // non-PUCT mode root children expand lazily during traverse(), so the root child set
+    // and iterator pending-state are only final here) and BEFORE getBestRootNode(true).
+    // True iff the MaxChildren cap bound while the move iterator still had candidates.
+    // Does NOT change search behaviour or move selection.
+    _rootTruncated = _rootNode.wasChildGenerationTruncated();
 
     // choose the move to return
     UCTNode * bestNode = getBestRootNode(true);
