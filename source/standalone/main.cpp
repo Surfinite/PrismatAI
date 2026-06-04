@@ -5,11 +5,17 @@
 #include "V2Record.h"
 #include "Random.h"
 #include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
+#include "Move.h"
+#include "Action.h"
+#include "Constants.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <stdio.h>
 #include <random>
+#include <set>
 
 #ifdef WIN32
     #include <Windows.h>
@@ -92,6 +98,142 @@ int main(int argc, char *argv[])
         NeuralNet::Instance().buildCardTypeMapping();
         NeuralNet::Instance().dumpFeaturesJSON(state, outPath);
         return 0;
+    }
+
+    // --- Off-book buy-reachability probe (axis-2 audit, search-FREE) ---
+    // Usage: PrismataAI.exe --probe-buys <stateJson> <outJson> [iteratorName]
+    // Collects the distinct BUY unit codenames purchasable off-book from the given state.
+    // Two modes selected by iteratorName:
+    //   "AllBuy" (default): EXHAUSTIVE structural reachability -- for every buyable card in
+    //            the set, report it if a single BUY is legal (in-set + affordable + supply).
+    //            Mirrors MoveIterator_AllBuy::processBuyableCards' numBuyable>0 test. This is
+    //            position-independent (any legally-buyable unit is reported) and is what the
+    //            116-unit axis-2 audit consumes.
+    //   <named PPPortfolio, e.g. "HardIterator_Root">: drive that config iterator's
+    //            (OB-off) whole-turn enumeration and collect the BUY codenames it EMITS --
+    //            i.e. what the deployed AI's heuristic buy partials actually choose
+    //            (need-driven, position-dependent).
+    // Writes {"buyable_units":[...]} (codenames, sorted) to outJson. Mirrors --dump-features'
+    // card-library + state load. Not part of the AI move protocol.
+    if (argc >= 4 && std::string(argv[1]) == "--probe-buys")
+    {
+        const std::string statePath = argv[2];
+        const std::string outPath   = argv[3];
+        const std::string iterName  = (argc >= 5) ? argv[4] : "AllBuy";
+
+        std::ifstream sin(statePath);
+        if (!sin.is_open())
+        {
+            fprintf(stderr, "probe-buys: cannot open state file %s\n", statePath.c_str());
+            return 1;
+        }
+        std::string stateStr((std::istreambuf_iterator<char>(sin)), std::istreambuf_iterator<char>());
+        sin.close();
+
+        // Load the 116-unit training card library (resolve relative to the exe like --dump-features).
+        std::string cardLibPath = "asset/config/cardLibrary.jso";
+        std::string cfgPath     = "asset/config/config.txt";
+        {
+            const std::string exeDir = NeuralNet::getExecutableDir();
+            if (!exeDir.empty())
+            {
+                std::ifstream clTest(exeDir + "/" + cardLibPath);
+                if (clTest.good()) { cardLibPath = exeDir + "/" + cardLibPath; }
+                std::ifstream cfgTest(exeDir + "/" + cfgPath);
+                if (cfgTest.good()) { cfgPath = exeDir + "/" + cfgPath; }
+            }
+        }
+        Prismata::InitFromCardLibrary(cardLibPath);
+
+        // Load config DEFINITIONS (iterators/partials/filters; no Players -> no NN weight loads)
+        // so the named iterator resolves. main()'s normal Steam path loads this inside
+        // InitializeAIAndGetAIMove, which this offline hook never reaches, so do it explicitly.
+        if (!AIParameters::Instance().parseConfigDefsForMerge(cfgPath))
+        {
+            fprintf(stderr, "probe-buys: could not load config defs from %s\n", cfgPath.c_str());
+            return 1;
+        }
+
+        rapidjson::Document doc;
+        if (doc.Parse(stateStr.c_str()).HasParseError())
+        {
+            fprintf(stderr, "probe-buys: JSON parse error in %s\n", statePath.c_str());
+            return 1;
+        }
+        const rapidjson::Value & gs = doc.HasMember("gameState") ? doc["gameState"] : doc;
+        const GameState state(gs);
+
+        const PlayerID player = state.getActivePlayer();
+        std::set<std::string> buyable;
+        size_t childCount = 0;
+
+        if (iterName == "AllBuy")
+        {
+            // Exhaustive structural reachability: a unit is off-book reachable iff a single
+            // BUY of it is legal from this state (in the buyable set + affordable + supply>0).
+            // This is exactly the numBuyable>0 test in MoveIterator_AllBuy::processBuyableCards,
+            // without enumerating the (combinatorially explosive) whole-turn buy cross-product.
+            for (CardID i(0); i < state.numCardsBuyable(); ++i)
+            {
+                const CardType type = state.getCardBuyableByIndex(i).getType();
+                const Action buy(player, ActionTypes::BUY, type.getID());
+                if (state.isLegal(buy))
+                {
+                    buyable.insert(type.getName());
+                    ++childCount;
+                }
+            }
+        }
+        else
+        {
+            // Drive the named config iterator's whole-turn enumeration (heuristic buy partials).
+            MoveIteratorPtr iter = AIParameters::Instance().getMoveIterator(player, iterName);
+            iter->setState(state);   // PPPortfolio::setState calls reset() internally
+            iter->reset();           // explicit, mirrors the canonical drive loop
+
+            GameState child;
+            Move move;
+            while (iter->generateNextChild(child, move))
+            {
+                ++childCount;
+                for (size_t a(0); a < move.size(); ++a)
+                {
+                    const Action & act = move.getAction(a);
+                    if (act.getType() == ActionTypes::BUY)
+                    {
+                        buyable.insert(state.getCardBuyableByID(act.getID()).getType().getName());
+                    }
+                }
+            }
+        }
+
+        rapidjson::Document out;
+        out.SetObject();
+        rapidjson::Document::AllocatorType & alloc = out.GetAllocator();
+        rapidjson::Value arr(rapidjson::kArrayType);
+        for (const std::string & name : buyable)
+        {
+            rapidjson::Value v;
+            v.SetString(name.c_str(), (rapidjson::SizeType)name.size(), alloc);
+            arr.PushBack(v, alloc);
+        }
+        out.AddMember("buyable_units", arr, alloc);
+
+        std::ofstream fout(outPath, std::ios::binary);
+        if (!fout)
+        {
+            fprintf(stderr, "probe-buys: cannot open output file %s\n", outPath.c_str());
+            return 1;
+        }
+        rapidjson::StringBuffer sb;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+        out.Accept(writer);
+        fout << sb.GetString();
+        fout.close();
+
+        fprintf(stderr, "probe-buys: iterator=%s children=%zu distinct-buyable=%zu -> %s\n",
+                iterName.c_str(), childCount, buyable.size(), outPath.c_str());
+        return fout.good() ? 0 : 1;
     }
 
     // --- RNG determinism self-test ---

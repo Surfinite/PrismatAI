@@ -227,6 +227,8 @@
         "DSNN_M35_1s_c20": {"type": "Player_UCT", "TimeLimit": 1000, "MaxChildren": 40, "MaxTraversals": 100000, "RootMoveIterator": "HardIterator_Root", "MoveIterator": "HardIterator", "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_35prop.bin", "UCTConstant": 2.0},
         "HardestAI_1s": {"type": "Player_StackAlphaBeta", "TimeLimit": 1000, "MaxChildren": 40, "RootMoveIterator": "HardIterator_Root", "MoveIterator": "HardIterator", "Eval": "Playout", "PlayoutPlayer": "Playout"},
 
+        "RL_Explore": {"type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000, "RootMoveIterator": "HardIterator_Root", "MoveIterator": "HardIterator", "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_35prop.bin", "UCTConstant": 0.3},
+
         "DSNN_M35_OB_c01": {"type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000, "RootMoveIterator": "HardIterator_OB2_Root", "MoveIterator": "HardIterator", "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_35prop.bin", "UCTConstant": 0.1},
         "DSNN_M35_OB_c03": {"type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000, "RootMoveIterator": "HardIterator_OB2_Root", "MoveIterator": "HardIterator", "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_35prop.bin", "UCTConstant": 0.3},
         "DSNN_M35_OB_c07": {"type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000, "RootMoveIterator": "HardIterator_OB2_Root", "MoveIterator": "HardIterator", "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_35prop.bin", "UCTConstant": 0.7},
