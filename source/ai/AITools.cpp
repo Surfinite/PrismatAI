@@ -289,6 +289,15 @@ bool AITools::PlayerShouldResign(const GameState & state, const PlayerID playerI
     PlayerPtr p1 = AIParameters::Instance().getPlayer(0, (playerID == 0) ? "Playout" : "PlayoutBuyNothing");
     PlayerPtr p2 = AIParameters::Instance().getPlayer(1, (playerID == 1) ? "Playout" : "PlayoutBuyNothing");
 
+    // If the playout players aren't registered for this request (e.g. an aiParameters blob that
+    // doesn't define "Playout"/"PlayoutBuyNothing"), don't run the resignation playout -- skip it
+    // rather than dereferencing a null player. Default: do not resign.
+    if (!p1 || !p2)
+    {
+        fprintf(stderr, "PlayerShouldResign: playout players not registered; skipping resignation check\n");
+        return false;
+    }
+
     // play the game out
     Game g(state, p1, p2);
     g.play();

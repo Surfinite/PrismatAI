@@ -1105,6 +1105,7 @@ PlayerPtr AIParameters::getPlayer(const PlayerID player, const std::string & pla
 {
     auto playerIt = _playerMap[player].find(playerName);
     PRISMATA_ASSERT(playerIt != _playerMap[player].end(), "AIParameters::getPlayer Couldn't find player variable: %d %s", (int)_playerMap[player].size(), playerName.c_str());
+    if (playerIt == _playerMap[player].end()) { return nullptr; }   // avoid UB end()-deref on a missing player
 
     return playerIt->second->clone();
 }
