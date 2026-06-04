@@ -27,6 +27,7 @@ class Tournament
     uint64_t                            _seed;   // "Seed":0 (or absent) = time-based / non-reproducible; any non-zero = fixed seed
     Timer                               _timeElapsed;
 
+    std::vector<std::string>            _forcedCards;   // dominion cards forced into every game's card set (empty = none)
     std::vector<std::string>            _players;
     std::vector<std::string>            _stateDescriptions;
     std::vector<int>                    _playerGroups;

@@ -55,6 +55,7 @@ public:
     bool doAction(const Action & action);
     bool doMove(const Move & move);
     void setStartingState(const PlayerID startPlayer, const CardID numDominionCards);
+    void setStartingState(const PlayerID startPlayer, const CardID numDominionCards, const std::vector<std::string> & forcedCards);
     void generateLegalActions(std::vector<Action> & actions) const;
     void addCard(const PlayerID player, const CardType type, const size_t num, const int creationMethod, const TurnType delay, const TurnType lifespan);
     void addCard(const Card & card);

@@ -2036,27 +2036,52 @@ bool GameState::haveSacCost(const PlayerID player, const std::vector<SacDescript
 }
 
 void GameState::setStartingState(const PlayerID startPlayer, const CardID numDominionCards)
-{   
+{
+    setStartingState(startPlayer, numDominionCards, std::vector<std::string>());
+}
+
+void GameState::setStartingState(const PlayerID startPlayer, const CardID numDominionCards, const std::vector<std::string> & forcedCards)
+{
     // Add base set cards
     for (size_t c(0); c<CardTypes::GetBaseSetCardTypes().size(); ++c)
     {
         addBuyableCardType(CardTypes::GetBaseSetCardTypes()[c]);
     }
-    
+
     std::vector<size_t> pool;
     for (size_t c(0); c<CardTypes::GetDominionCardTypes().size(); ++c)
     {
         pool.push_back(c);
     }
 
-    for (size_t c(0); c<numDominionCards; ++c)
+    // Place forced dominion cards first (removed from the random pool), then random-fill the remainder
+    size_t placed = 0;
+    for (size_t f(0); f<forcedCards.size(); ++f)
+    {
+        if (placed >= numDominionCards) break;
+        if (!CardTypes::CardTypeExists(forcedCards[f])) continue;
+        const CardType ct = CardTypes::GetCardType(forcedCards[f]);
+        addBuyableCardType(ct);
+        for (size_t i(0); i<pool.size(); ++i)
+        {
+            if (CardTypes::GetDominionCardTypes()[pool[i]] == ct)
+            {
+                std::swap(pool[i], pool.back());
+                pool.pop_back();
+                break;
+            }
+        }
+        ++placed;
+    }
+
+    for (size_t c(placed); c<numDominionCards; ++c)
     {
         size_t r = Random::Int(pool.size());
         addBuyableCardType(CardTypes::GetDominionCardTypes()[pool[r]]);
         std::swap(pool[r], pool.back());
         pool.pop_back();
     }
-    
+
     if (CardTypes::CardTypeExists("Drone"))     addCard(startPlayer, CardTypes::GetCardType("Drone"),    6, CardCreationMethod::Manual, 0, 0);
 	if (CardTypes::CardTypeExists("Engineer"))  addCard(startPlayer, CardTypes::GetCardType("Engineer"), 2, CardCreationMethod::Manual, 0, 0);
 

@@ -43,7 +43,18 @@ Tournament::Tournament(const rapidjson::Value & tournamentValue)
     {
         _exportTrainingV2Dir = tournamentValue["exportTrainingV2"].GetString();
     }
-    
+
+    if (tournamentValue.HasMember("ForcedCards") && tournamentValue["ForcedCards"].IsArray())
+    {
+        for (size_t i(0); i < tournamentValue["ForcedCards"].Size(); ++i)
+        {
+            if (tournamentValue["ForcedCards"][i].IsString())
+            {
+                _forcedCards.push_back(tournamentValue["ForcedCards"][i].GetString());
+            }
+        }
+    }
+
     PRISMATA_ASSERT(tournamentValue["players"].Size() >= 2, "Tournament has less than 2 players");
 
     for (size_t i(0); i < tournamentValue["players"].Size(); ++i)
@@ -112,7 +123,7 @@ void Tournament::run()
         for (size_t r(0); r < _rounds; ++r)
         {
             GameState state;
-            state.setStartingState(Players::Player_One, _randomCards);
+            state.setStartingState(Players::Player_One, _randomCards, _forcedCards);
 
             for (size_t p1(0); p1 < _players.size(); ++p1)
             {
@@ -236,7 +247,7 @@ void Tournament::run()
         for (size_t r(0); r < _rounds; ++r)
         {
             GameState state;
-            state.setStartingState(Players::Player_One, _randomCards);
+            state.setStartingState(Players::Player_One, _randomCards, _forcedCards);
 
             for (size_t p1(0); p1 < _players.size(); ++p1)
             {
