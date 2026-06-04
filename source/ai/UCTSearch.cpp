@@ -97,14 +97,36 @@ UCTNode * UCTSearch::getBestRootNode(bool allowSampling)
         }
     }
 
-    // Self-play-only: sample the root move during the tau=1 opening (first K player-turns).
+    // Self-play-only root sampling. Two regimes:
+    //   - Opening (turnNumber < K): tau-temperature + epsilon-uniform mix (unchanged).
+    //   - Late game (turnNumber >= K): ONLY when EpsilonLate > 0 — tau->argmax keeps the bulk
+    //     greedy while a small persistent EpsilonLate gives recurring decisions (e.g. Infusion
+    //     Grid) a chance to be explored all game.
+    // CRITICAL: when EpsilonLate == 0 (default) the late-game case is NOT entered (the
+    // "|| epsilonLate > 0" guard ensures this), so behaviour — including the number of
+    // Random::Real01() draws — is byte-identical to before.
     // Only fires on the real move-selection call (allowSampling); the description/win-rate
     // paths pass false so they don't perturb the seeded RNG stream.
+    const bool inOpening = _rootNode.getState().getTurnNumber() < _params.temperatureK();
     if (allowSampling
         && _params.selfPlaySampling()
-        && _rootNode.getState().getTurnNumber() < _params.temperatureK()
-        && _rootNode.numChildren() > 0)
+        && _rootNode.numChildren() > 0
+        && (inOpening || _params.epsilonLate() > 0.0))
     {
+        // Choose (tau, eps) by phase.
+        double tau;
+        double eps;
+        if (inOpening)
+        {
+            tau = _params.temperatureTau();   // opening regime, unchanged
+            eps = _params.epsilonUniform();
+        }
+        else
+        {
+            tau = 1e-9;                        // argmax-equivalent: bulk stays greedy
+            eps = _params.epsilonLate();       // small persistent uniform-exploration chance
+        }
+
         std::vector<size_t> visits(_rootNode.numChildren());
         for (size_t c = 0; c < _rootNode.numChildren(); ++c)
         {
@@ -113,7 +135,7 @@ UCTNode * UCTSearch::getBestRootNode(bool allowSampling)
         const double u1 = Random::Real01();
         const double u2 = Random::Real01();
         const size_t idx = MoveSampler::sampleRootIndex(
-            visits, _params.temperatureTau(), _params.epsilonUniform(), u1, u2);
+            visits, tau, eps, u1, u2);
         _lastChosenIdx = (int)idx;
         return &_rootNode.getChild(idx);
     }

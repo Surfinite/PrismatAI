@@ -859,6 +859,8 @@ PlayerPtr AIParameters::parsePlayer(const PlayerID player, const std::string & p
         }
         if (args.HasMember("EpsilonUniform") && args["EpsilonUniform"].IsNumber())
             params.setEpsilonUniform(args["EpsilonUniform"].GetDouble());
+        if (args.HasMember("EpsilonLate") && args["EpsilonLate"].IsNumber())
+            params.setEpsilonLate(args["EpsilonLate"].GetDouble());
 
         if (params.evalMethod() == EvaluationMethods::NeuralNet)
         {
