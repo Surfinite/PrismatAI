@@ -198,6 +198,56 @@ console.log('\nTest 5: count-agnostic across Base+3 .. Base+11');
 }
 
 // ---------------------------------------------------------------------------
+// Test 6: in_card_set is PER-GAME buy-box membership, NOT a global token property.
+//   - Every "token" unit could be a buyable randomizer pick in some set; conversely a
+//     unit can be buyable AND also spawned as tokens (in-play count > purchasable supply).
+//   - Membership therefore comes from THIS game's cardSet (randomizer) — never a global
+//     token blacklist. The SAME unit name flips with the game's set.
+// ---------------------------------------------------------------------------
+console.log('\nTest 6: in_card_set is per-game (same unit flips with the set)');
+{
+    // Game A: a unit (use a normally-token name to make the point) IS in the randomizer set.
+    const stateA = makeMockState(['Gauss Charge', 'Pixie'], []);
+    const exA = extractTrainingExampleV2(stateA, ['Gauss Charge', 'Pixie'], 0);
+    assert(exA.supply['Gauss Charge'] && exA.supply['Gauss Charge'][2] === 1,
+        "unit in THIS game's set -> in_card_set=1 (even a normally-token name)",
+        `got ${JSON.stringify(exA.supply['Gauss Charge'])}`);
+
+    // Game B: the same unit is NOT in this game's set (created-only) -> in_card_set=0.
+    const stateB = makeMockState(['Pixie'], ['Gauss Charge']);  // Gauss Charge as a created token, supply 0
+    const exB = extractTrainingExampleV2(stateB, ['Pixie'], 0);
+    assert(!('Gauss Charge' in exB.supply),
+        'same unit NOT in this set (created-only, supply 0) -> excluded',
+        `got ${JSON.stringify(exB.supply['Gauss Charge'])}`);
+}
+
+// ---------------------------------------------------------------------------
+// Test 7: a "needs"/created token that is ALSO buyable in the SAME set. The total in-play
+//   count (bought + created) can exceed the purchasable supply; in_card_set must remain 1
+//   and the supply-remaining values are whatever the engine reports (created instances live
+//   on the board / `table`, they do NOT decrement the buy-box supply array).
+// ---------------------------------------------------------------------------
+console.log('\nTest 7: needs-and-buyable unit in the same set stays in_card_set=1');
+{
+    const advanced = ['Pixie'];                 // Pixie is BOTH in the buy box AND need-created
+    const state = makeMockState(advanced, []);
+    const idx = state.cards.findIndex((c) => c.UIName === 'Pixie');
+    state.whiteSupply[idx] = 3;                 // buy-box remaining (some purchased)
+    state.blackSupply[idx] = 7;
+    // Created/needs copies on the board push in-play count above remaining supply; they are
+    // board instances, not buy-box supply — recorded in `table`, never in the supply array.
+    state.table = [
+        { deadness: C.DEADNESS_ALIVE, card: { UIName: 'Pixie' }, owner: 0, health: 1, damage: 0,
+          constructionTime: 0, delay: 0, blocking: false, role: C.ROLE_DEFAULT,
+          disruptDamage: 0, lifespan: -1, charge: 0 },
+    ];
+    const ex = extractTrainingExampleV2(state, advanced.slice(), 0);
+    assertEqual(ex.supply['Pixie'][0], 3, 'Pixie whiteRemaining reported as-is (not reduced by created tokens)');
+    assertEqual(ex.supply['Pixie'][1], 7, 'Pixie blackRemaining reported as-is');
+    assertEqual(ex.supply['Pixie'][2], 1, 'Pixie in_card_set=1 (buyable in this set, regardless of needs)');
+}
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 console.log(`\n${'='.repeat(50)}`);
