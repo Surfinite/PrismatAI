@@ -53,8 +53,14 @@ function extractTrainingExampleV2(gameState, cardSet, plyIndex) {
     const supply = {};
     for (let i = 0; i < gameState.cards.length; i++) {
         const card = gameState.cards[i];
-        const ws = gameState.whiteSupply[i] || 0;
-        const bs = gameState.blackSupply[i] || 0;
+        // REMAINING supply, not the initial total. The engine keeps whiteSupply/blackSupply
+        // at the constant initial cap and tracks purchases in whiteBought/blackBought, so
+        // remaining = total - bought. This MUST match C++ inference (NeuralNet.cpp uses
+        // cb.getSupplyRemaining) and the C++ exporter (V2Record.cpp getSupplyRemaining).
+        // Writing the raw total here is a train↔inference skew (the model would train on a
+        // ~constant cap but evaluate on a decreasing remaining count).
+        const ws = Math.max(0, (gameState.whiteSupply[i] || 0) - (gameState.whiteBought[i] || 0));
+        const bs = Math.max(0, (gameState.blackSupply[i] || 0) - (gameState.blackBought[i] || 0));
         const inSet = (card.baseSet || cardSet.includes(card.UIName)) ? 1 : 0;
         // Include if unit has supply OR is in the card set (even if sold out)
         if (ws > 0 || bs > 0 || inSet) {

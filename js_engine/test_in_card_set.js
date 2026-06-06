@@ -65,8 +65,10 @@ const BASE_UNITS = [
  */
 function makeMockState(advancedInGame, tokens) {
     const cards = [];
-    const whiteSupply = [];
+    const whiteSupply = [];   // INITIAL total (the engine keeps this constant)
     const blackSupply = [];
+    const whiteBought = [];    // copies purchased so far; remaining = whiteSupply - whiteBought
+    const blackBought = [];
 
     // Base units: baseSet=true. Give the last base unit supply 0 to prove a SOLD-OUT
     // base unit still stays in_card_set=1 and present in the supply dict.
@@ -75,6 +77,8 @@ function makeMockState(advancedInGame, tokens) {
         const soldOut = (i === BASE_UNITS.length - 1);
         whiteSupply.push(soldOut ? 0 : 10);
         blackSupply.push(soldOut ? 0 : 10);
+        whiteBought.push(0);
+        blackBought.push(0);
     });
 
     // Advanced units in this game's randomizer set: baseSet=false, have supply.
@@ -82,6 +86,8 @@ function makeMockState(advancedInGame, tokens) {
         cards.push({ UIName: name, baseSet: false });
         whiteSupply.push(10);
         blackSupply.push(10);
+        whiteBought.push(0);
+        blackBought.push(0);
     });
 
     // Created tokens: baseSet=false, NOT in the randomizer set, supply 0 (cannot be bought).
@@ -89,6 +95,8 @@ function makeMockState(advancedInGame, tokens) {
         cards.push({ UIName: name, baseSet: false });
         whiteSupply.push(0);
         blackSupply.push(0);
+        whiteBought.push(0);
+        blackBought.push(0);
     });
 
     return {
@@ -96,6 +104,8 @@ function makeMockState(advancedInGame, tokens) {
         cards,
         whiteSupply,
         blackSupply,
+        whiteBought,
+        blackBought,
         numTurns: 5,
         turn: 0,
         playerMana: () => ({ pool: [0, 0, 0, 0, 0, 0] }),
@@ -245,6 +255,32 @@ console.log('\nTest 7: needs-and-buyable unit in the same set stays in_card_set=
     assertEqual(ex.supply['Pixie'][0], 3, 'Pixie whiteRemaining reported as-is (not reduced by created tokens)');
     assertEqual(ex.supply['Pixie'][1], 7, 'Pixie blackRemaining reported as-is');
     assertEqual(ex.supply['Pixie'][2], 1, 'Pixie in_card_set=1 (buyable in this set, regardless of needs)');
+}
+
+// ---------------------------------------------------------------------------
+// Test 8: supply VALUES are REMAINING (whiteSupply - whiteBought), matching C++
+//   inference (NeuralNet.cpp cb.getSupplyRemaining) and the MB corpus. The engine keeps
+//   whiteSupply at the INITIAL total and tracks purchases in whiteBought, so the extractor
+//   MUST subtract — writing the raw total is a train↔inference skew (model trained on a
+//   ~constant cap, evaluated on a decreasing remaining).
+// ---------------------------------------------------------------------------
+console.log('\nTest 8: supply values are REMAINING (total - bought)');
+{
+    const advanced = ['Pixie', 'Barrier'];
+    const state = makeMockState(advanced, []);
+    // Drone (base, idx 1) total 10; 3 white / 4 black bought -> remaining 7 / 6.
+    const drone = state.cards.findIndex((c) => c.UIName === 'Drone');
+    state.whiteBought[drone] = 3;
+    state.blackBought[drone] = 4;
+    // Pixie (advanced) total 10; 10 white bought -> remaining 0 (sold out but still in set).
+    const pixie = state.cards.findIndex((c) => c.UIName === 'Pixie');
+    state.whiteBought[pixie] = 10;
+    const ex = extractTrainingExampleV2(state, advanced.slice(), 0);
+    assertEqual(ex.supply['Drone'][0], 7, 'Drone p0 remaining = 10 - 3');
+    assertEqual(ex.supply['Drone'][1], 6, 'Drone p1 remaining = 10 - 4');
+    assertEqual(ex.supply['Drone'][2], 1, 'Drone still in_card_set=1');
+    assertEqual(ex.supply['Pixie'][0], 0, 'Pixie p0 remaining = 10 - 10 (sold out)');
+    assertEqual(ex.supply['Pixie'][2], 1, 'Pixie still in_card_set=1 despite sold out');
 }
 
 // ---------------------------------------------------------------------------
