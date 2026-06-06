@@ -65,6 +65,13 @@ distribution. Decide explicitly before the real campaign; don't default to 8 by 
 - **B1 (main code lift):** complete `eval/run_eval.py::main()` — currently a skeleton that writes empty `anchors{}`.
   Wire: flip per-anchor config blocks → `run_cpp_tournament` → `parse_tournament_stdout` → Wilson/clustered CIs
   (A3/A4) → STEAMAI at fixed-N (A8) seat-independent (A7) → manifest. **The gate to real eval numbers.**
+  > ✅ **DONE 2026-06-06 (`8f02684`).** `build_manifest()` (injectable runners) flips the 4 anchor blocks,
+  > runs/parses iter0 + narrow, fixed-N steam (A7/A8, soft-skip+DEFERRED if `.ORIG` absent), emits §3 GO inputs
+  > (d_rl=iter0/forced, d_reg=iter0/general, `GO_suggested`) with `decision:"(human call)"`. Flat anchor cells
+  > match the dashboard; full forced+general under `.pools`. Tests `eval/tests/test_run_eval_main.py` (7) + the
+  > 17 existing eval tests green; dashboard integration confirmed. **Still needs the deferred prereqs to produce
+  > REAL numbers** (calibrated N+ε, wide-untrained iter-0 weights, `.ORIG`, populated calib/IG batteries — §Run
+  > prerequisites). The candidate-vs-parent sequential promotion gate (A3) remains a separate, block-less concern.
 - **B2:** populate `eval/calib_states/` + an IG battery (~20 states each; replay real games to action-phase via the ktink method).
 - **B3 (setup):** confirm `PrismataAI.exe.ORIG` on disk (STEAMAI anchor); decide N (calibrate vs 512 for proof-of-life).
 - **C:** RL **self-play smoke** on v2.2 (`RL_SelfPlay` self-play, ForcedCards Hotel, exportTrainingV2; confirm IG-subset
