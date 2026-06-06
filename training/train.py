@@ -772,10 +772,10 @@ def get_git_hash():
     return "unknown"
 
 
-def get_schema_hash():
-    """Hash the schema_v1.json file if it exists."""
+def get_schema_hash(filename="schema_v1.json"):
+    """Hash the given schema file (default legacy schema_v1.json; DeepSets passes schema_v2.json)."""
     schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               "schema_v1.json")
+                               filename)
     if os.path.exists(schema_path):
         with open(schema_path, "rb") as f:
             return hashlib.sha256(f.read()).hexdigest()[:16]
@@ -1002,6 +1002,7 @@ def main():
     if use_deepsets:
         # V2 HDF5 format — skip V1 sanity check, load V2 datasets directly
         schema_version = "v2_deepsets"
+        schema_file = "schema_v2.json"   # stamp the CURRENT DeepSets schema, NOT legacy schema_v1.json
 
         if args.streaming:
             # Streaming mode: read from disk in chunks, minimal RAM usage
@@ -1038,6 +1039,7 @@ def main():
 
         # Read num_units from schema
         schema_version = get_schema_version()
+        schema_file = "schema_v1.json"   # legacy PNET path
         schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    "schema_v1.json")
         if os.path.exists(schema_path):
@@ -1203,7 +1205,7 @@ def main():
         "timestamp": timestamp,
         "git_hash": get_git_hash(),
         "schema_version": schema_version,
-        "schema_hash": get_schema_hash(),
+        "schema_hash": get_schema_hash(schema_file),
         "hyperparameters": hparams,
         "data": {
             "train_file": os.path.abspath(args.train_file),

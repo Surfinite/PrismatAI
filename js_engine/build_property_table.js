@@ -1,15 +1,18 @@
 'use strict';
 
 /**
- * build_property_table.js — Build static property table for DeepSets architecture.
+ * build_property_table.js — ⚠️ DEPRECATED (2026-06-06). DO NOT RUN.
  *
- * Reads cardLibrary.jso and training/data/unit_index.json, constructs Card objects
- * for all 116 canonical units, and extracts 13 static properties per unit.
+ * Emits a STALE **13-property** static table and writes training/property_table.json — but the
+ * CURRENT schema is **37-property** (v2.2). Running this silently overwrites the live
+ * property_table.json with the wrong columns, corrupting the DeepSets feature schema for every
+ * subsequent vectorize/train/export.
  *
- * Output: training/property_table.json
+ * The current 37-prop table is built via the Python path:
+ *   docs/scratch/resource_conversions/build_feature_table.py  (+ apply_props_v2_2.py for v2.2).
  *
- * Usage:
- *   node js_engine/build_property_table.js
+ * This script now ABORTS unless `--force-stale-13prop` is passed (kept only for historical reference).
+ * Original purpose: construct Card objects for all 116 units and extract 13 static properties.
  */
 
 const fs = require('fs');
@@ -97,6 +100,18 @@ function extractProperties(card) {
 // Main
 // ---------------------------------------------------------------------------
 function main() {
+    // ⚠️ DEPRECATED guard — this emits a 13-prop table; the live schema is 37-prop (v2.2).
+    // Refuse to overwrite training/property_table.json unless explicitly forced.
+    if (!process.argv.includes('--force-stale-13prop')) {
+        console.error(
+            'REFUSING TO RUN: build_property_table.js is DEPRECATED — it produces a 13-property table\n' +
+            'and would overwrite the current 37-property training/property_table.json (schema v2.2),\n' +
+            'silently corrupting the DeepSets feature schema.\n' +
+            'The 37-prop table is built via the Python path:\n' +
+            '  docs/scratch/resource_conversions/build_feature_table.py (+ apply_props_v2_2.py).\n' +
+            'If you REALLY mean to regenerate the legacy 13-prop table, re-run with --force-stale-13prop.');
+        process.exit(1);
+    }
     // Load unit_index.json (display name → index)
     const unitIndexData = JSON.parse(fs.readFileSync(UNIT_INDEX_PATH, 'utf-8'));
     const unitIndexMap = unitIndexData.units; // { "Engineer": 0, "Drone": 1, ... }

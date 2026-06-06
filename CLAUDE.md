@@ -88,35 +88,42 @@ node js_engine/build_replay_viewer.js [output.html]
 ```bash
 node fetch_expert_replays.js    # fetch from API (incremental)
 node filter_expert_replays.js   # filter (instant)
-node extract_training_data.js   # extract from S3 (incremental, legacy)
+node extract_training_data.js   # ⚠️ DEPRECATED — stale ./lib (Feb 2026) TS parser; NOT for training data (see Training pipeline)
 ```
 
-**Training pipeline (current — DeepSets):**
+**Training pipeline (current — DeepSets, FAITHFUL js_engine extractor):**
+> ⚠️ **Human extraction MUST use `js_engine/extract_training_jsengine.js`** — it replays each
+> `commandList` click-by-click through PrismatAlpha's OWN faithful JS engine (`Analyzer`; turn-START
+> snapshot via `beginTurnHistory`) and emits **V2 records DIRECTLY** via the SAME `extractTrainingExampleV2`
+> the MB corpus uses (validate-and-drop unfaithful replays → `<output>.dropped.txt`). The OLD
+> `prismata-replay-parser/extract_training_data.js` → `convert_human_to_v2.py` path uses a **stale
+> third-party TS parser (`./lib`, Feb 2026)** that silently diverges from MB on card_set / turn_number /
+> p0_attack — **DEPRECATED; do NOT use for training data.** (`human_1800_v2` was built with the faithful
+> extractor — verified Jun 6 via `card_set`=8.4 advanced-only vs the old path's 19.2.)
+>
+> ⚠️ **Known MB↔human `in_card_set` inconsistency (UNRESOLVED, Jun 6):** the MB corpora
+> (`fleet_v3_v2`/`fleet_v4_v2`/`local_mbvmb_v2`) mark `in_card_set` = full deck **incl. base** (~19);
+> the human extractor marks **advanced-only** (~8). Root cause: `matchup_clean.js:1402` passes
+> `config.cardSet` (full deck) while `extract_training_jsengine.buildAdvancedCardSet` passes the
+> randomizer set. The v2.2 model + RL init trained on this mismatch. Decide one convention → re-extract
+> the changed side + retrain. (The human-val H5 matches the human side, so it's a valid human-side metric.)
 ```bash
-# 1. Extract: local .json.gz → V1 JSONL (all turns, both players)
-#    102,697 eligible replays in replays_archive/ (both 1500+, balance-passed)
-cd c:/libraries/prismata-replay-parser
-node extract_training_data.js \
-    --codes eligible_1500_codes.txt \
-    --output human_1500_all.jsonl \
-    --local-dir replays_archive
+# 1. Extract human replays → V2 JSONL DIRECTLY (no convert step; codes pre-validated from JSON):
+node js_engine/extract_training_jsengine.js \
+    --codes c:/libraries/prismata-replay-parser/final_training_codes_1800.txt \
+    --replays-dir c:/libraries/prismata-replay-parser/replays_archive \
+    --output training/data/human_1800_v2.jsonl
 
-# 2. Convert: V1 JSONL → V2 JSONL (DeepSets instance format)
-cd c:/libraries/PrismataAI
-python training/convert_human_to_v2.py \
-    --input c:/libraries/prismata-replay-parser/human_1500_all.jsonl \
-    --output training/data/human_1500_v2.jsonl
-
-# 3. Vectorize: V2 JSONL → HDF5 (padded tensors for training)
+# 2. Vectorize: V2 JSONL → HDF5 (15-global v2.2 via schema_v2.json)
 python training/vectorize_v2.py \
-    --input training/data/human_1500_v2.jsonl \
-    --output training/data/human_1500_v2.h5
+    --input training/data/human_1800_v2.jsonl \
+    --output training/data/human_1800_v2.h5 --schema training/schema_v2.json
 
-# 4. Train DeepSets model
+# 3. Train DeepSets model (data_dir then model_dir)
 python training/train.py training/data training/models/deepsets_human \
     --model deepsets --streaming --epochs 100 --batch-size 512 --lr 3e-4 --patience 15
 
-# 5. Export weights (DSN2 binary format for C++ inference)
+# 4. Export weights (DSN2 binary for C++ inference)
 python training/export_weights_v2.py \
     training/models/deepsets_human/best_model.pt \
     bin/asset/config/neural_weights.bin
