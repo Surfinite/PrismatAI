@@ -94,9 +94,8 @@ it could no longer construct a 14-global reference model. Fixed in the follow-up
 
 The numpy-over-`.bin` oracle (`export_weights_v2.numpy_forward`) was already generation-agnostic.
 
-**Pre-existing test debt (separate, NOT addressed here):** `training/tests/test_model_deepsets.py`
-feeds 14-global inputs (`make_batch(globals_dim=14)` + two inline `torch.rand(1,14)`) against the
-now-15-global default model → 7/10 fail on HEAD (proven pre-existing, not caused by the
-parameterization). Six are pure-shape (fix: `globals_dim=15`); the seventh
-(`test_mirror_value_approximately_negated`) needs its player-swap logic extended to the `under_attack`
-15th global. Left for a dedicated test-update pass.
+**Pre-existing test debt — RESOLVED (main@721d836):** `training/tests/test_model_deepsets.py` fed
+14-global inputs (`make_batch(globals_dim=14)` + two inline `torch.rand(1,14)`) against the now-15-global
+default model → 7/10 failed on HEAD (proven pre-existing, not caused by the parameterization). Fixed by
+deriving the globals width from `model._num_global` at each call site (schema-agnostic; `under_attack` is
+invariant under the mirror test's player-swap), `make_batch` default 14→15. **10/10 pass.**
