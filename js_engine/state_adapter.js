@@ -81,11 +81,17 @@ function instToUnit(inst) {
  *   - Fragile units: inst.health tracks remaining HP directly
  *   - Non-fragile units: currentHP = inst.health - inst.damage (damage accumulates)
  *
- * Role-based ability inference:
- *   - is_blocking: role===ROLE_ASSIGNED AND inst.blocking===true
- *   - ability_used: role===ROLE_ASSIGNED AND NOT blocking
- *   Note: inst.abilityUsed does NOT exist on Inst; role-based inference matches
- *   existing instToUnit() convention. At start-of-turn snapshots this is typically 0.
+ * is_blocking / ability_used (SWF-faithful):
+ *   - is_blocking  = inst.blocking — the unit is in BLOCKING MODE (will absorb incoming
+ *     attack = its contribution to total defense). This is exactly what the SWF's
+ *     canBlockAtStartOfPhase() returns. A unit assigned AS A BLOCKER stays role=DEFAULT
+ *     (MOVE_DEFEND never sets ROLE_ASSIGNED); only ability-use (MOVE_ASSIGN) sets ASSIGNED
+ *     and flips blocking -> assignedBlocking. So is_blocking must NOT be gated on
+ *     role===ROLE_ASSIGNED — that gate is contradictory and made is_blocking 0% in the human
+ *     corpus while the MB corpus + the SWF mark ~26-30%.
+ *   - ability_used = role===ROLE_ASSIGNED AND NOT blocking — the unit spent its turn on its
+ *     ability (e.g. Cryo Ray). inst.abilityUsed does NOT exist on Inst; this role-based
+ *     reading is the faithful signal (status==Assigned is set by useAbility).
  *
  * @param {Inst} inst - Card instance from state.table (must be alive)
  * @returns {Object} {
@@ -106,7 +112,7 @@ function instToRichUnit(inst) {
         owner:              inst.owner,           // 0 or 1
         is_constructing:    isBuilding ? 1 : 0,
         turns_until_ready:  Math.max(inst.constructionTime, inst.delay),
-        is_blocking:        (inst.blocking && inst.role === C.ROLE_ASSIGNED) ? 1 : 0,
+        is_blocking:        inst.blocking ? 1 : 0,
         ability_used:       (inst.role === C.ROLE_ASSIGNED && !inst.blocking) ? 1 : 0,
         current_hp:         Math.max(0, currentHp),
         hp_fraction:        baseHealth > 0 ? Math.max(0, currentHp) / baseHealth : 0,

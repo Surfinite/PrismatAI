@@ -282,6 +282,51 @@ console.log('\nTest 10: Plasmafier with charge=2');
 }
 
 // ---------------------------------------------------------------------------
+// Test 11: Realistic blocker — default-role unit in blocking mode. SWF-faithful
+// is_blocking = inst.blocking (canBlockAtStartOfPhase returns inst.blocking). A unit
+// assigned AS A BLOCKER stays role=DEFAULT — MOVE_DEFEND never sets ROLE_ASSIGNED; only
+// ability-use (MOVE_ASSIGN) does. So is_blocking must NOT require role==ASSIGNED (the old
+// gate made is_blocking 0% in the human corpus while MB / the SWF mark ~26-30%).
+// ---------------------------------------------------------------------------
+console.log('\nTest 11: Default-role Wall in blocking mode (SWF-faithful is_blocking)');
+{
+    const inst = makeInst({
+        card: { UIName: 'Wall', startingHealth: 3, fragile: false },
+        owner: 0,
+        role: C.ROLE_DEFAULT,
+        blocking: true,
+        health: 3,
+        damage: 0,
+        lifespan: -1,
+        charge: 0
+    });
+    const result = instToRichUnit(inst);
+    assertEqual(result.is_blocking,  1, 'is_blocking=1 (blocking flag set, role=DEFAULT — the realistic blocker)');
+    assertEqual(result.ability_used, 0, 'ability_used=0 (not assigned)');
+}
+
+// ---------------------------------------------------------------------------
+// Test 12: Non-blocking ability unit that used its ability (e.g. Cryo Ray): role=ASSIGNED,
+// blocking=false -> ability_used=1, is_blocking=0. Confirms the two stay a clean partition.
+// ---------------------------------------------------------------------------
+console.log('\nTest 12: Cryo Ray used ability (role=assigned, blocking=false)');
+{
+    const inst = makeInst({
+        card: { UIName: 'Cryo Ray', startingHealth: 3, fragile: true },
+        owner: 1,
+        role: C.ROLE_ASSIGNED,
+        blocking: false,
+        health: 3,
+        damage: 0,
+        lifespan: -1,
+        charge: 0
+    });
+    const result = instToRichUnit(inst);
+    assertEqual(result.is_blocking,  0, 'is_blocking=0 (not in blocking mode)');
+    assertEqual(result.ability_used, 1, 'ability_used=1 (assigned, not blocking)');
+}
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 console.log(`\n${'='.repeat(50)}`);
