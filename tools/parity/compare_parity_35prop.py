@@ -70,7 +70,7 @@ def build_inputs(dump, num_units):
         supply[u, 1] = s["p1"]
         supply[u, 2] = 1.0
     globs = np.array(dump["globals"], dtype=np.float32)
-    assert globs.shape == (14,), f"expected 14 globals, got {globs.shape}"
+    assert globs.shape[0] in (14, 15), f"expected 14 or 15 globals, got {globs.shape}"  # 15 = schema v2.2 (+under_attack)
     return feats, ids, count, supply, globs
 
 
