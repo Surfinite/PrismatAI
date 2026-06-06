@@ -23,8 +23,13 @@ from model_deepsets import PrismataDeepSets
 # ---------------------------------------------------------------------------
 
 def make_batch(batch_size=4, max_instances=200, instance_features=10,
-               num_units=116, globals_dim=14):
-    """Create a random batch of model inputs."""
+               num_units=116, globals_dim=15):
+    """Create a random batch of model inputs.
+
+    globals_dim defaults to the current schema (15 = v2.2). Tests pass
+    globals_dim=model._num_global so they stay correct across schema revisions
+    (14 = schema <=v2.1, 15 = v2.2 +under_attack).
+    """
     instance_feats = torch.randn(batch_size, max_instances, instance_features)
     # Set owner (feature 0) to 0 or 1
     instance_feats[:, :, 0] = (torch.rand(batch_size, max_instances) > 0.5).float()
@@ -48,7 +53,7 @@ class TestForwardPass:
         model.eval()
 
         batch_size = 4
-        feats, ids, counts, supply, globs = make_batch(batch_size=batch_size)
+        feats, ids, counts, supply, globs = make_batch(batch_size=batch_size, globals_dim=model._num_global)
 
         with torch.no_grad():
             out = model(feats, ids, counts, supply, globs)
@@ -60,7 +65,7 @@ class TestForwardPass:
         model = PrismataDeepSets()
         model.eval()
 
-        feats, ids, counts, supply, globs = make_batch()
+        feats, ids, counts, supply, globs = make_batch(globals_dim=model._num_global)
         with torch.no_grad():
             out = model(feats, ids, counts, supply, globs)
 
@@ -71,7 +76,7 @@ class TestForwardPass:
         model = PrismataDeepSets()
         model.eval()
 
-        feats, ids, counts, supply, globs = make_batch()
+        feats, ids, counts, supply, globs = make_batch(globals_dim=model._num_global)
         with torch.no_grad():
             out = model(feats, ids, counts, supply, globs)
 
@@ -88,7 +93,7 @@ class TestPermutationInvariance:
         model = PrismataDeepSets()
         model.eval()
 
-        feats, ids, counts, supply, globs = make_batch(batch_size=1, max_instances=20)
+        feats, ids, counts, supply, globs = make_batch(batch_size=1, max_instances=20, globals_dim=model._num_global)
         # Only use 10 real instances
         counts = torch.tensor([10], dtype=torch.long)
 
@@ -135,7 +140,7 @@ class TestPaddingInvariance:
 
         counts_5 = torch.tensor([5], dtype=torch.long)
         supply = torch.rand(1, 116, 3)
-        globs = torch.rand(1, 14)
+        globs = torch.rand(1, model._num_global)
 
         # Now create a version with extra non-zero data in the padded region
         # but instance_counts still says 5 — the model should ignore them
@@ -192,7 +197,7 @@ class TestSymmetryAugmentation:
         supply[0, 0, 1] = 3.0  # P1 has 3 of unit 0
 
         # Globals: [p0_gold, p0_blue, ..., p1_gold, ...]
-        globs = torch.rand(1, 14)
+        globs = torch.rand(1, model._num_global)
 
         # Mirror: swap owner labels, swap supply P0/P1, swap globals P0/P1
         feats_mirror = feats.clone()
@@ -256,7 +261,7 @@ class TestGradientFlow:
         model = PrismataDeepSets()
         model.train()
 
-        feats, ids, counts, supply, globs = make_batch(batch_size=4)
+        feats, ids, counts, supply, globs = make_batch(batch_size=4, globals_dim=model._num_global)
 
         out = model(feats, ids, counts, supply, globs)
         # Binary cross-entropy compatible loss
