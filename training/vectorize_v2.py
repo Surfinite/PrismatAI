@@ -60,7 +60,7 @@ NUM_INSTANCE_FEATURES = len(INSTANCE_FEATURE_NAMES)  # 10
 GLOBAL_FEATURE_NAMES = [
     "p0_gold", "p0_blue", "p0_red", "p0_green", "p0_energy", "p0_attack",
     "p1_gold", "p1_blue", "p1_red", "p1_green", "p1_energy", "p1_attack",
-    "turn_number", "active_player",
+    "turn_number", "active_player", "under_attack",
 ]
 
 NUM_GLOBAL_FEATURES = len(GLOBAL_FEATURE_NAMES)  # 14
@@ -179,12 +179,12 @@ def vectorize_supply(supply, unit_index, num_units=116):
 
 
 def vectorize_globals(record, caps):
-    """Convert a V2 record to the 14-dim global feature vector.
+    """Convert a V2 record to the 15-dim global feature vector.
 
     Feature order (matching schema_v2.json global_features):
       p0_gold, p0_blue, p0_red, p0_green, p0_energy, p0_attack,
       p1_gold, p1_blue, p1_red, p1_green, p1_energy, p1_attack,
-      turn_number, active_player
+      turn_number, active_player, under_attack
 
     Note: blue, red, green order is NOT alphabetical. Matches schema.
 
@@ -193,10 +193,16 @@ def vectorize_globals(record, caps):
         caps: normalization caps dict (keys: gold, blue, red, green, energy, attack, turn_number)
 
     Returns:
-        float32 ndarray shape (14,)
+        float32 ndarray shape (15,)
     """
     p0_res = record.get("p0_resources", {})
     p1_res = record.get("p1_resources", {})
+
+    # under_attack: 1 if the active player faces incoming attack (opponent attack > 0).
+    # Derived from existing fields (no re-extraction); invariant under mirror augmentation.
+    active = int(record.get("active_player", 0))
+    opp_attack = record.get("p1_attack", 0) if active == 0 else record.get("p0_attack", 0)
+    under_attack = 1.0 if opp_attack > 0 else 0.0
 
     gvec = np.array([
         clamp_divide(p0_res.get("gold", 0),   caps["gold"]),
@@ -212,7 +218,8 @@ def vectorize_globals(record, caps):
         clamp_divide(p1_res.get("energy", 0), caps["energy"]),
         clamp_divide(record.get("p1_attack", 0), caps["attack"]),
         clamp_divide(record.get("turn_number", 0), caps["turn_number"]),
-        float(record.get("active_player", 0)),
+        float(active),
+        under_attack,
     ], dtype=np.float32)
 
     return gvec

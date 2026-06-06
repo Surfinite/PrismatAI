@@ -340,6 +340,7 @@ def verify_export(output_path: str, model: PrismataDeepSets,
 
     max_instances = 200
     num_units     = hdr["num_units"]
+    num_global    = tensors["value_head.0.weight"].shape[1] - 2*hdr["encoder_hidden"] - hdr["supply_hidden"]
 
     test_cases = []
 
@@ -349,7 +350,7 @@ def verify_export(output_path: str, model: PrismataDeepSets,
         np.zeros(max_instances, dtype=np.int64),
         0,
         np.zeros((num_units, 3), dtype=np.float32),
-        np.zeros(14, dtype=np.float32),
+        np.zeros(num_global, dtype=np.float32),
     )))
 
     # Case 2: random non-zero
@@ -361,7 +362,7 @@ def verify_export(output_path: str, model: PrismataDeepSets,
         rng.randint(0, num_units, size=max_instances).astype(np.int64),
         50,
         rng.rand(num_units, 3).astype(np.float32),
-        rng.rand(14).astype(np.float32),
+        rng.rand(num_global).astype(np.float32),
     )))
 
     all_passed = True

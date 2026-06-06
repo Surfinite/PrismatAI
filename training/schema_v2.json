@@ -1,14 +1,15 @@
 {
     "schema_version": "v2",
+    "feature_revision": "v2.2",
     "architecture": "deepsets",
     "num_units": 116,
     "unit_index_hash": "c86aac391aed5530d7f9f9d6ae4567a40b39a128e6ff982c911c37b90d83ac2e",
-    "token_dim": 77,
+    "token_dim": 79,
     "embedding_dim": 32,
-    "num_static_properties": 35,
+    "num_static_properties": 37,
     "num_instance_features": 10,
     "num_supply_features": 3,
-    "num_global_features": 14,
+    "num_global_features": 15,
     "max_instances": 200,
     "normalization_caps": {
         "gold": 20, "blue": 5, "red": 5, "green": 15,
@@ -22,20 +23,21 @@
     "static_properties": [
         "buy_cost_gold", "buy_cost_green", "buy_cost_blue", "buy_cost_red",
         "buy_cost_energy", "base_health", "fragile", "default_blocking",
-        "base_build_time", "base_lifespan", "base_attack", "has_ability",
+        "base_build_time", "base_lifespan", "has_ability",
         "max_stamina",
         "auto_gold", "auto_green", "auto_blue", "auto_red", "auto_energy",
         "click_gold", "click_green", "click_blue", "click_red", "click_energy",
         "chill_amount",
         "click_cost_gold", "click_cost_green", "click_cost_blue", "click_cost_red",
         "click_cost_energy", "click_cost_hp", "click_selfsac", "auto_selfsac",
-        "click_sac_units", "buy_sac_units", "hp_regen"
+        "click_sac_units", "buy_sac_units", "hp_regen",
+        "auto_attack", "click_attack", "frontline"
     ],
     "supply_features": ["p0_supply", "p1_supply", "in_card_set"],
     "global_features": [
         "p0_gold", "p0_blue", "p0_red", "p0_green", "p0_energy", "p0_attack",
         "p1_gold", "p1_blue", "p1_red", "p1_green", "p1_energy", "p1_attack",
-        "turn_number", "active_player"
+        "turn_number", "active_player", "under_attack"
     ],
     "label_strategies": {
         "A": "hard_binary_outcome_p0",

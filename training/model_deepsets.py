@@ -33,7 +33,7 @@ class PrismataDeepSets(nn.Module):
         self,
         num_units: int = 116,
         d_embed: int = 32,
-        num_properties: int = 35,
+        num_properties: int = 37,
         num_instance_features: int = 10,
         encoder_hidden: int = 128,
         supply_hidden: int = 32,
@@ -62,9 +62,9 @@ class PrismataDeepSets(nn.Module):
         # Shared instance encoder
         # Input: [embedding | static_properties | instance_state]
         # Dims:  [d_embed   | num_properties    | num_instance_features]
-        #      = [32        | 35               | 10] = 77
+        #      = [32        | 37               | 10] = 79
         # ------------------------------------------------------------------ #
-        token_dim = d_embed + num_properties + num_instance_features  # 77
+        token_dim = d_embed + num_properties + num_instance_features  # 79
         self.instance_encoder = nn.Sequential(
             nn.Linear(token_dim, encoder_hidden),
             nn.ReLU(),
@@ -86,9 +86,9 @@ class PrismataDeepSets(nn.Module):
         # ------------------------------------------------------------------ #
         # Value MLP head
         # Input: P0_pool (encoder_hidden) + P1_pool (encoder_hidden)
-        #        + supply_pool (supply_hidden) + globals (14)
+        #        + supply_pool (supply_hidden) + globals (15)
         # ------------------------------------------------------------------ #
-        value_input_dim = encoder_hidden * 2 + supply_hidden + 14  # 302
+        value_input_dim = encoder_hidden * 2 + supply_hidden + 15  # 303
         self.value_head = nn.Sequential(
             nn.Linear(value_input_dim, value_hidden),
             nn.ReLU(),
@@ -121,7 +121,7 @@ class PrismataDeepSets(nn.Module):
         The JSON format expected:
           {
             "num_units": 116,
-            "num_properties": 35,
+            "num_properties": 37,
             "units": {
               "Engineer": {"index": 0, "properties": [...]},
               ...
