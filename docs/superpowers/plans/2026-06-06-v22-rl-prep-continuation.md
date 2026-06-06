@@ -38,7 +38,32 @@ not hardcoded 15. In `PrismataAI-dave-master/source/ai/NeuralNet.cpp`:
 - Verify `LinearLayer` exposes its input dim (grep the struct; may need to store num_global as a member at load).
 Then rebuild (x64/v145, both targets) and **dual-parity**: (1) v22 (15-global) still passes (`tools/parity/compare_parity_deepsets.py <dumps> --pt swa_model.pt --bin neural_weights_mixed_v22.bin`, worst |Δ|<1e-3); (2) 35prop (14-global) LOADS + ties out to its 35prop ref (`--pt models/deepsets_mixed_35prop/best_model.pt --bin docs/scratch/deepsets_mixed_35prop.bin`). Commit. (Parity dump cmd: `./PrismataAI.exe --dump-features <state.json> <out.json> <weights.bin>`; states in `bin/asset/training/parity_states/sp_*.json`.)
 
-## Human val-set curation (user's plan — NOT done yet; v2.2 run used the MB val)
+## Human val-set curation — ✅ DONE 2026-06-06
+**Deliverable:** `training/data/human_val_1700_v2.h5` — **412,496 examples / 14,353 codes** (0 dropped),
+15-global v2.2, labels ∈[0,1] (mean 0.491), both players **≥1700**, ranked, balance-clean, no bullet/12s,
+no bots, **0 overlap with `human_1800_v2`** (ground-truth-checked on H5 `replay_codes`).
+- ⚠️ **EXTRACTOR CORRECTION (critical):** first built via the stale `prismata-replay-parser/extract_training_data.js`
+  → `convert_human_to_v2.py` (`./lib` Feb-2026 TS parser) — WRONG: it silently diverges from MB/training on
+  card_set/turn_number/p0_attack (the old H5 had `card_set=19.2` all-with-supply). **Rebuilt with the FAITHFUL
+  `js_engine/extract_training_jsengine.js`** (V2-direct, same `extractTrainingExampleV2` as MB) → `card_set=8.2`
+  advanced-only, MATCHING `human_1800_v2` (8.4). Training was always faithful (verified). See the corrected
+  CLAUDE.md "Training pipeline" + the MB↔human `in_card_set` caveat there.
+- **Validated ENTIRELY from the replay JSON** (DB used only to *enumerate* candidate codes — none of its
+  columns trusted). Trust-gap vs the DB-column build was **0** (DB rating/time/format happened to be
+  accurate; this also vindicates the training build, which used the same DB columns).
+- Source = (DB 1500+ balance-clean corpus ∪ today's fresh ladder dump, all re-validated at floor 1700) −
+  `final_training_codes_1800.txt`. Tools (in `prismata-replay-parser/`, uncommitted): `fetch_codes_from_s3.py`,
+  `build_human_val.py`, `ladder_valset_profile.py`; code list `human_val_1700_json.txt`.
+- Decision rationale: 1700 floor (not 1500/1600) for label quality on the production-vector units; ~367k
+  examples is plenty (val-acc SE ±0.34pp games-as-unit, ~14% val fraction, ≈ the MB val's size).
+- ⚠️ **GOTCHA (cost us a re-run):** `extract_training_data.js` keeps a per-output `<output>_processed_codes.txt`
+  dedup file and skips codes already in it. A *killed* extract leaves a partial one → the next run on the same
+  `--output` silently skips those codes (we got 7,897/14,353). **Delete `<output>_processed_codes.txt` (not just
+  the `.jsonl`) when re-running after an interrupt.** `min-rating` defaults to 0 + `emit-all-turns` (both
+  players' turns); the "2000+ only" header comment is STALE. 25.6 examples/game = ~12.8 turns/player ≈ ladder
+  DB's 25.95 (humans resign lost positions, so shorter than MB's run-to-wipeout).
+
+### Original plan (for reference)
 Goal: a HUMAN-vs-human val set, disjoint from training, built by the SAME pipeline that made the training set. Steps:
 1. Collate a NEW candidate list = `replays.db` games where BOTH players **1500+** (exclude MB bot games — `p1/p2_rating<=1`) **∪** a ladder-site dump (~250 more h-v-h codes — user pulls a fresh one from the prismata-ladder workspace). **OPEN: verify whether the recent ladder games were ingested into `replays.db` or just kept as a code list** — check before assuming.
 2. **Subtract the codes actually USED in training** = the `human_1800_v2` corpus list = `C:\libraries\prismata-replay-parser\final_training_codes_1800.txt`. (NOT `eligible_1500_ranked_clean.txt` — that's a different/overlapping *candidate* list, not the train-exclusion set. The thing trained on is `final_training_codes_1800.txt`.)
