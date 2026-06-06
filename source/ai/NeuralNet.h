@@ -31,6 +31,7 @@ class NeuralNet
         int encoder_hidden;         // 128
         int supply_hidden;          // 32
         int value_hidden;           // 256
+        int num_global;             // 14 (schema <=v2.1) or 15 (v2.2: +under_attack); derived from value-head input width at load
     };
 
     DeepSetsConfig          _config;
@@ -113,7 +114,8 @@ public:
 
     // Machine-readable parity oracle: emits the P0-perspective value + raw logit, the
     // exact per-instance unit indices + 10-dim instance features, the buyable supply, and
-    // the 14 normalized globals the forward consumes (plus any alive cards that map to -1).
+    // the num_global normalized globals the forward consumes (14 base, +under_attack at
+    // v2.2), plus any alive cards that map to -1.
     void dumpFeaturesJSON(const GameState & state, const std::string & path) const;
 
     // Directory of the running executable, for cwd-independent asset loading
