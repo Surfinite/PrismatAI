@@ -5,7 +5,13 @@
 > **Training plan V1**: `docs/plans/2026-03-06-training-plan-v1.md`
 > **Self-play master plan**: `docs/plans/2026-02-15-selfplay-training-master-plan.md`
 
-## Current Status (June 1, 2026)
+## ⚠️ WHICH ENGINE — read before touching any C++
+
+**This repo's `source/engine` + `source/ai` are the clean-room `engine_v2`, which is INDICTED** (~33 pts weaker than Dave's original — see *Parity-Gap Experiments* below / `docs/deepsets-training-results.md`). **Do NOT read, build, or modify it for AI or engine work — it is legacy.** The current, strong engine + AI is **engine_v1 in the SEPARATE repo `c:/libraries/PrismataAI-dave-master` (branch `dave-master-jsonclean`, builds x64/v145).** Query/run it via `node js_engine/query_move.js … --dave-exe c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe`. **THIS** repo (`feature/production-vectors`) is for **training (`training/`), the JS engine (`js_engine/`), eval (`eval/`), and docs** — not the C++ engine. ⚠️ The "How to Build and Run" section below builds **engine_v2** and is **legacy**; don't follow it for current work.
+
+## Current Status (June 4, 2026)
+
+**RL self-play loop + Infusion-Grid action space (Jun 3–4).** The full gated RL value-net self-play pipeline was built (`train.py --rl-mode` + replay buffer/human rehearsal; 3-anchor Wilson-CI eval harness; export-parity scaled to ~1000 states; O7 tactical suite + `js_engine/query_move.js`). **The current engine + AI now lives in the SEPARATE repo `c:/libraries/PrismataAI-dave-master` (branch `dave-master-jsonclean`, builds x64/v145)**; this repo's `feature/production-vectors` holds the training/JS/eval/docs side — don't cross-file. Engine prereqs landed: **A12** (standalone now loads `config.txt`, so config-only iterators resolve on the Steam/`query_move` path), **resignation DISABLED** (eval/self-play integrity), **A2** optional late-ε sampler (default off). **Headline:** the deployed AI over-clicks Infusion Grid (internal codename `Hotel`; click = R→selfsac→4 Husks) — rebuilt as **`MoveIterator_AbilitySubset`** (`dave@4bfdb61`) so the value net selects the IG-click COUNT (0..N); on a real over-click state it now picks click-1, not 2. Remaining: exporter IG-count stamps → N-calibration → the iter-0/1 campaign. Continuation prompt: `docs/superpowers/plans/2026-06-04-rl-continuation-session2.md`.
 
 **Repo renamed `PrismatAI → PrismatAlpha`** (May 5–9). GitHub at github.com/Surfinite/PrismatAlpha. Local filesystem path unchanged (`c:\libraries\PrismataAI\`).
 
@@ -21,10 +27,12 @@
 
 **DeadGameBot live** — Plays casual games on the Prismata server using the SteamAI bridge. First live replay Mar 31. State-tracker work ongoing.
 
-**Active work items:**
-1. **Add `Odin` to `Ability_Filter`** (single-line config). Only structural delta vs SWF in the `LiveHardestAI_Root` chain. SWF: `[Drake, Grenade Mech, Odin]`; local: `[Drake, Grenade Mech]`. Worth a small A/B vs STEAMAI to see if it moves the parity gap.
-2. **Verify whether `PrismataAI.exe` has compiled-in OBs.** Test: build a minimal aiParameters JSON with empty `DefaultOpeningBook2`, run `--suggest` on a canonical turn-1 state, observe whether the .exe still plays the standard opener.
-3. **DeadGameBot state-tracker** — divergence after MB turns (no clicks sent)
+**Active work items (RL campaign — see the continuation doc):**
+1. **Exporter IG-count / sampled / argmax + root-truncation stamps** (engine `SelfPlayV2Exporter`/`TournamentGame`) — feeds the IG go-signal + the MaxChildren-binding telemetry.
+2. **N-calibration** (`eval/calibrate_n.py`) → the **iter-0/1 IG-subset campaign** (`eval/run_iteration.ps1`); repoint `RL_Eval_iter0` from the placeholder to real wide-untrained iter-0 weights.
+3. **Curate the ktink turn-9 state** (`docs/scratch/ktink_t9_action_request.json`) as a real IG tactical case; reframe the tactical suite from binary fire/skip → IG-click COUNT.
+
+**Older / parked:** verify `PrismataAI.exe` compiled-in OBs; DeadGameBot state-tracker divergence after MB turns; `Odin` in the live `Ability_Filter` (SWF has it, local doesn't).
 
 ## What This Project Is
 
@@ -37,6 +45,8 @@ A C++ game engine and AI for **Prismata**, a turn-based perfect-information stra
 - The user is "Surfinite" everywhere
 
 ## How to Build and Run
+
+> ⚠️ **LEGACY — this builds `engine_v2` (this repo's indicted clean-room C++).** For current AI/engine work do NOT build this; use the dave-master engine (see "⚠️ WHICH ENGINE" at the top). This section is kept only for the legacy clean-room pipeline.
 
 Build via the Visual Studio solution in `visualstudio/`. Three executables:
 
@@ -122,9 +132,10 @@ python training/export_weights_v2.py \
 - **Internal name system**: Engine uses codenames (e.g., "Tesla Tower" = Tarsier, "Brooder" = Blastforge). Full mapping in `cardLibrary.jso`.
 - **AS3↔C++ naming dictionary**: `role`=`CardStatus`, `disruptDamage`=`m_currentChill`, `MOVE_MELEE`=`ASSIGN_FRONTLINE`, `glassBroken`=breach flag (not a phase — no `Phases::Breach` equivalent in JS), `MOVE_ASSIGN`=`USE_ABILITY`, `MOVE_DEFEND`=`ASSIGN_BLOCKER`. Full dictionary in `docs/plans/engine-logic-audit-plan.md`.
 - **Two git remotes**: `origin` = davechurchill upstream, `PrismatAlpha` = user's fork. Push to `PrismatAlpha`.
+- **Deployable `neural_weights_*.bin` are git-tracked in the MAIN repo `bin/asset/config/`**; a working copy lives in `dave-master/bin/asset/config/` (where the dave engine reads). Export to dave-master; commit the tracked copy in main.
 - **Branch can switch unexpectedly**: Always `git branch --show-current` before branch-dependent operations.
 - **Config tournament toggles**: Check `"run":true` in `config.txt` before launching.
-- **Feature schema contract (DeepSets, current)**: `training/schema_v2.json` + `training/property_table.json`. Per-instance tokens (32 embed + 13 static + 10 instance state = 55-dim). Changes must sync across `vectorize_v2.py`, `model_deepsets.py`, `NeuralNet.cpp`, and `schema_v2.json`.
+- **Feature schema contract (DeepSets, current = v2.2)**: doc `docs/dsnn-feature-schema.md`; machine source `training/schema_v2.json` + `training/property_table.json`. Token = 32 embed + **37 static** + 10 instance = **79**; **15 globals** (incl. `under_attack`); value head 303. `schema_version` stays `v2` (= DeepSets generation); use `feature_revision` for additive changes. **Static props flow via the DSN2 `.bin` header → no C++ edit**; a GLOBAL change needs `vectorize_v2.py` + the per-global *construction* in dave-master `NeuralNet.cpp` (`evaluateValue` build + the `if (num_global>=N)` guard) + bumping `model_deepsets.py`'s default `num_global`. The global *count* now auto-derives from the value-head width at load (`NeuralNet.cpp` `COMBINED`/dump loop, `export_weights_v2.py`, `compare_parity_deepsets.py`) — no manual count edits. Engine loads either supported count (14 or 15) from the `.bin`; a width implying an unsupported count warns (`dave@481f916`).
 - **Legacy flat schema (PrismataNet)**: `training/schema.json` + `training/FEATURES.md`, state_dim=1785. Kept for the value-only baseline; not the current path.
 - **Per-player NN weights**: Players with `"WeightsFile":"neural_weights_X.bin"` in config.txt auto-load their weights in `--suggest` mode. `--weights <path>` CLI arg overrides. Weight files live in `bin/asset/config/`.
 - **DSNN players**: `DSNN_MBonly` (ep98, 82.4%), `DSNN_MBonly_SWA` (SWA avg), `DSNN_Human` (ep26, 78.2%). All use UCT + NeuralNet eval + the `LiveHardestAI_Root` move iterator. Its OB consumption (via `Live_BuyOpeningBook2` in the CS2 portfolio branch → `LiveOpeningBook2`) is byte-identical to what live MB uses (May 16 verification).
@@ -148,6 +159,7 @@ python training/export_weights_v2.py \
 - **Move representation**: `Player::getMove(state, move)` returns `Move` (sequence of `Action`s). BUY resolves via `CardType(action.getID()).getUIName()`.
 - **`--suggest` CLI mode**: `Prismata_Testing.exe --suggest state.json [--player PrismatAlpha_AB] [--think-time 3000] [--weights path/to/weights.bin]`. Output includes `"clicks":[{_type,_id},...]` for wire protocol. If `--weights` is omitted, uses the player's `WeightsFile` from config.txt.
 - **mergedDeck buyCost format**: Digits = gold, `G` = green, `B` = blue, `C` = red, `H` = energy.
+- **Mana/script codes** (buyCost, `receive`, abilityCost): digits/bare-int = gold, `G`=green, `B`=blue, `C`=red, `H`=energy, `A`=attack. Quantity is letter REPETITION; a leading number is gold only — `5G` = 5 gold + 1 green (Thorium), `3BBCCGG` = 3 gold/2 blue/2 red/2 green.
 - **Replay commandList format**: `_type` (NOT `_action`) and `_id`. `clicksPerTurn` slices commandList. `playerInfo` has NO `playerNumber` key — use array index.
 - **Click counting ≠ buy counting (CRITICAL)**: `card clicked` does NOT guarantee purchase. Must enforce supply limits.
 - **Replay JSON structure**: `deckInfo.mergedDeck` for card data. Derive supply from `rarity`: legendary=1, rare=4, normal=10, trinket=20.
@@ -165,7 +177,7 @@ python training/export_weights_v2.py \
 - **VPS spectator files must be in repo**: `ws_broadcast.py`, `spectator_bridge.py` were VPS-only and got lost on deploy. Now tracked in git.
 - **`prismata_amf3.py` is the canonical module name**: Renamed from `prismata_sniffer.py`. Deploy script and all imports updated.
 - **S3 replay URL must be HTTPS**: `https://saved-games-alpha.s3.amazonaws.com/` (not `s3-website`). HTTP causes mixed content block on HTTPS sites.
-- **VPS deployment gotchas**: See memory file `project_prismata_live_infrastructure.md` for deploy script, credentials path, python symlink, disk constraints, and deploy key details.
+- **VPS deployment / prismata.live ops**: tracked in the separate **prismata-ladder workspace** (not this repo). Deploy scripts, credentials path, python symlink, disk constraints, and deploy keys live there; this repo keeps only the durable spectating gotchas above.
 - **AWS default region is `eu-north-1`**: prismata.live infra is in `us-east-1`. Always pass `--region us-east-1`.
 - **ARM Ubuntu 24.04 has no `python` command**: Only `python3`. Subprocess calls to `python` fail silently. Data box has `/usr/bin/python` symlink.
 - **SSH to data box**: `ssh -i ~/.ssh/<SSH_KEY>.pem -o ProxyCommand="ssh -i ~/.ssh/<SSH_KEY>.pem -W %h:%p ubuntu@<SITE_EIP>" ubuntu@<DATA_BOX_PRIVATE_IP>`
@@ -179,6 +191,7 @@ python training/export_weights_v2.py \
 - **Self-play crash safety**: Timestamped `run_*` subdirs. Restart anytime — only in-flight games lost.
 - **Selfplay shard CRC**: Use `validate_crc=False` for live/crashed data.
 - **Selfplay positions per game**: ~37 records/game (both players' turns).
+- **Real Prismata sets are Base+5 OR Base+8–11** (not always 8); human training data spans these. Self-play at B+8-only under-covers the deployed distribution.
 - **Selfplay shard binary format**: Header 64 bytes + 4-byte CRC32 footer. Record size = 7152 bytes.
 - **Selfplay game counting**: `python -c "import os; base='bin/training/data/selfplay'; total=sum((os.path.getsize(os.path.join(r,f))-68)//7152 for r,_,fs in os.walk(base) for f in fs if f.endswith('.bin') and os.path.getsize(os.path.join(r,f))>68); print(f'{total} records, ~{total//37} games')"`.
 - **Self-play uses playout eval**: `SelfPlay_CI` runs `OriginalHardestAI_1s` vs itself. Neural net NOT used for generation. ~4 games/min per 4-thread process.
@@ -213,6 +226,8 @@ python training/export_weights_v2.py \
 - **Python stdout buffering**: Use `PYTHONUNBUFFERED=1`.
 - **Python cp1252**: Use `PYTHONIOENCODING=utf-8` or ASCII.
 - **`python3` not available**: Use `python` on Windows.
+- **Python on Windows needs `C:/...` paths, not Git-Bash `/c/...`** (h5py/open fail on `/c/`). Distinct from `/tmp` ≠ `C:	mp`.
+- **Adding a derived global to H5s = re-vectorize-only, not re-extract**: derive it from existing columns and replace the `globals` dataset in place (e.g. `under_attack` from `active_player`+attacks); avoids re-parsing the multi-GB JSONLs.
 - **`gcloud` only in Git Bash**: Use full path `C:/google-cloud-sdk/bin/gcloud.cmd` with `shell=True` for subprocess.
 - **PowerShell JSON BOM**: Use `encoding='utf-8-sig'` in Python.
 - **Git Bash mangles `$_`**: Write `.ps1` script files instead of inline PowerShell.

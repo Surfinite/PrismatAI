@@ -174,7 +174,7 @@ if ($LASTEXITCODE -ne 0) { throw "export_weights_v2.py exited $LASTEXITCODE" }
 Write-Host "`n[5/8] export-parity GATE"
 # Pass --pt/--bin so the parity check is candidate.pt vs candidate.bin (this iteration's own
 # PyTorch<->C++ round-trip). Without them, dump_value_batch.py defaults --pt/--bin to None and
-# compare_parity_35prop.py falls back to its HARDCODED interim (ep30) reference — which would
+# compare_parity_deepsets.py falls back to its HARDCODED interim (ep30) reference — which would
 # compare C++(candidate) vs PyTorch(ep30) and fail for the wrong reason on any real iteration.
 python "$tools/parity/dump_value_batch.py" `
     --states-dir $parityStates --weights $candBinPath --dave-bin $bin `

@@ -13,7 +13,7 @@ Input shapes (all batched with batch dim B):
   instance_unit_ids:  (B, MAX_INST)      — unit type index (long)
   instance_counts:    (B,)               — actual (non-padded) instance count per sample
   supply:             (B, 116, 3)        — [p0_sup, p1_sup, in_set] per unit type
-  globals_vec:        (B, 14)            — global game features
+  globals_vec:        (B, num_global)    — global game features (14 = schema <=v2.1, 15 = v2.2)
 
 Output:
   value_logit: (B, 1) — raw logit for P(P0 wins); apply sigmoid for probability
@@ -39,6 +39,7 @@ class PrismataDeepSets(nn.Module):
         supply_hidden: int = 32,
         value_hidden: int = 256,
         dropout: float = 0.1,
+        num_global: int = 15,
     ):
         """
         Args:
@@ -50,6 +51,8 @@ class PrismataDeepSets(nn.Module):
             supply_hidden:         Hidden/output dim of the supply encoder.
             value_hidden:          Hidden dim of the value MLP head.
             dropout:               Dropout probability applied only in the value head.
+            num_global:            Number of per-state global features fed to the value head.
+                                   14 = schema <=v2.1; 15 = v2.2 (+under_attack). Default 15.
         """
         super().__init__()
 
@@ -86,9 +89,9 @@ class PrismataDeepSets(nn.Module):
         # ------------------------------------------------------------------ #
         # Value MLP head
         # Input: P0_pool (encoder_hidden) + P1_pool (encoder_hidden)
-        #        + supply_pool (supply_hidden) + globals (15)
+        #        + supply_pool (supply_hidden) + globals (num_global)
         # ------------------------------------------------------------------ #
-        value_input_dim = encoder_hidden * 2 + supply_hidden + 15  # 303
+        value_input_dim = encoder_hidden * 2 + supply_hidden + num_global  # 302 (14g) or 303 (15g)
         self.value_head = nn.Sequential(
             nn.Linear(value_input_dim, value_hidden),
             nn.ReLU(),
@@ -110,6 +113,7 @@ class PrismataDeepSets(nn.Module):
         # Store config for load_property_table and introspection
         self._num_units = num_units
         self._num_properties = num_properties
+        self._num_global = num_global
 
     # ---------------------------------------------------------------------- #
     # Property table loading
@@ -168,7 +172,7 @@ class PrismataDeepSets(nn.Module):
             instance_unit_ids: (B, MAX_INST) — unit type index per instance (long).
             instance_counts:   (B,) — actual (non-padded) instance count per sample.
             supply:            (B, 116, 3) — [p0_sup, p1_sup, in_set] per unit type.
-            globals_vec:       (B, 14) — global game features.
+            globals_vec:       (B, num_global) — global game features (14=schema<=v2.1, 15=v2.2).
 
         Returns:
             value_logit: (B, 1) — raw logit for P(P0 wins).
@@ -238,7 +242,7 @@ class PrismataDeepSets(nn.Module):
         # ------------------------------------------------------------------ #
         # Value head: concatenate all signals and predict
         # ------------------------------------------------------------------ #
-        combined = torch.cat([p0_pool, p1_pool, supply_pool, globals_vec], dim=-1)  # (B, 302)
+        combined = torch.cat([p0_pool, p1_pool, supply_pool, globals_vec], dim=-1)  # (B, value_input_dim)
         value_logit = self.value_head(combined)  # (B, 1)
 
         return value_logit

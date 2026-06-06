@@ -16,6 +16,17 @@ split + under_attack global) and retrained the mixed model. Read `docs/dsnn-feat
 - H5 globals patched in place to 15-d (under_attack appended; under_attack=1 frac ~52% MB / 44% human).
 
 ## TASK (A) — make the engine load 14- AND 15-global models (do FIRST)
+> ✅ **DONE 2026-06-06 — `dave-master-jsonclean@481f916`.** `num_global` is now derived from the
+> value-head input width at load (`val_linear1.in_dim − (2*ENC_H+SUP_H)`); `COMBINED` (both spots) +
+> the dump loop use it; `under_attack` emitted only `if num_global>=15`. Rebuilt x64/v145
+> (`Prismata_Standalone`→`PrismataAI.exe` refreshed). **Dual-parity PASS:** v22 (15-global) worst
+> |Δ| 2.21e-07; mixed_35prop (14-global, previously crashed) loads + ties out 2.02e-08 (== the
+> FINDINGS_35prop baseline). Write-up: `PrismataAI-dave-master/tools/parity/FINDINGS_dual_global.md`.
+> **Tooling follow-up (deferred, NOT engine):** `compare_parity_deepsets.py` can no longer construct the
+> 14-global torch ref — v2.2 moved `PrismataDeepSets()` defaults to 37-prop and `model_deepsets.py:91`
+> hardcodes the 303-wide value head. Add `num_global`/`num_properties` overrides to model + tool to make
+> the harness first-class for both generations (main-repo schema change).
+
 The v2.2 engine build is currently **15-global-ONLY**: it can't load 14-global (35-prop) `.bin`s
 (value head 303 vs 302) → `DSNN_Mixed35_*` players / the non-gating narrow yardstick crash on it.
 Fix: make `num_global` **derived from the loaded value head** (mirrors how `num_properties` is header-driven),
@@ -25,7 +36,7 @@ not hardcoded 15. In `PrismataAI-dave-master/source/ai/NeuralNet.cpp`:
 - Global build (~line 617-636): always emit the 14 base globals; **`if (num_global >= 15) { compute+emit under_attack }`** else skip.
 - dump-features loop (~line 808): iterate `num_global` (was 15).
 - Verify `LinearLayer` exposes its input dim (grep the struct; may need to store num_global as a member at load).
-Then rebuild (x64/v145, both targets) and **dual-parity**: (1) v22 (15-global) still passes (`tools/parity/compare_parity_35prop.py <dumps> --pt swa_model.pt --bin neural_weights_mixed_v22.bin`, worst |Δ|<1e-3); (2) 35prop (14-global) LOADS + ties out to its 35prop ref (`--pt models/deepsets_mixed_35prop/best_model.pt --bin docs/scratch/deepsets_mixed_35prop.bin`). Commit. (Parity dump cmd: `./PrismataAI.exe --dump-features <state.json> <out.json> <weights.bin>`; states in `bin/asset/training/parity_states/sp_*.json`.)
+Then rebuild (x64/v145, both targets) and **dual-parity**: (1) v22 (15-global) still passes (`tools/parity/compare_parity_deepsets.py <dumps> --pt swa_model.pt --bin neural_weights_mixed_v22.bin`, worst |Δ|<1e-3); (2) 35prop (14-global) LOADS + ties out to its 35prop ref (`--pt models/deepsets_mixed_35prop/best_model.pt --bin docs/scratch/deepsets_mixed_35prop.bin`). Commit. (Parity dump cmd: `./PrismataAI.exe --dump-features <state.json> <out.json> <weights.bin>`; states in `bin/asset/training/parity_states/sp_*.json`.)
 
 ## Human val-set curation (user's plan — NOT done yet; v2.2 run used the MB val)
 Goal: a HUMAN-vs-human val set, disjoint from training, built by the SAME pipeline that made the training set. Steps:
