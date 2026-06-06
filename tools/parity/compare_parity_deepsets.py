@@ -1,17 +1,19 @@
 """
-35-property variant of compare_parity.py.
+DeepSets C++<->PyTorch value-parity, generation-agnostic.
 
-Identical comparison logic, repointed at the 35-prop interim model:
+Compares the C++ engine's --dump-features value/logit against the PyTorch model
+and a numpy-over-.bin forward, for ANY DeepSets feature_revision (13/35/37-prop,
+14/15-global). The architecture is INFERRED from the checkpoint's saved tensor
+shapes (see _infer_config), so it does NOT depend on PrismataDeepSets() defaults
+-- which track the latest schema (v2.2 = 37-prop / 15-global) and would otherwise
+fail to load an older checkpoint. load_state_dict still raises on any real mismatch.
+
+Defaults point at the 35-prop interim pair (14-global), but pass --pt/--bin for any model:
   PT  : training/models/deepsets_mixed_35prop/best_model.pt   (epoch 30)
   BIN : docs/scratch/deepsets_mixed_35prop.bin                (exported from that .pt, round-trip verified)
 
-The epoch-30 .pt has no "model_config" key, so load_model falls back to
-PrismataDeepSets() defaults -- which ARE the 35-prop architecture
-(num_units=116, num_properties=35, dropout=0.1; train.py builds exactly this).
-load_state_dict will raise on any architecture mismatch.
-
 Usage:
-  python compare_parity_35prop.py <dump1.json> [dump2.json ...]
+  python compare_parity_deepsets.py <dump1.json> [dump2.json ...] [--pt PT] [--bin BIN]
 """
 
 import json
@@ -42,12 +44,34 @@ def value_from_logit(logit):
     return 2.0 * sigmoid(logit) - 1.0
 
 
+def _infer_config(sd):
+    """Infer architecture dims from a checkpoint's state_dict, so the tool builds the
+    RIGHT model for any DeepSets generation instead of relying on PrismataDeepSets()
+    defaults (which track the latest schema). num_instance_features is fixed at 10 by
+    design; load_state_dict raises if the inferred token/value dims don't match."""
+    enc_h  = sd["instance_encoder.0.weight"].shape[0]
+    sup_h  = sd["supply_encoder.0.weight"].shape[0]
+    val_in = sd["value_head.0.weight"].shape[1]            # == COMBINED = 2*enc_h + sup_h + num_global
+    return dict(
+        num_units      = sd["unit_embedding.weight"].shape[0],
+        d_embed        = sd["unit_embedding.weight"].shape[1],
+        num_properties = sd["property_table"].shape[1],
+        encoder_hidden = enc_h,
+        supply_hidden  = sup_h,
+        value_hidden   = sd["value_head.0.weight"].shape[0],
+        num_global     = val_in - (2 * enc_h + sup_h),
+    )
+
+
 def load_model(pt_path):
     # weights_only=False: our own trusted checkpoint (carries optimizer state + dicts)
     ckpt = torch.load(pt_path, map_location="cpu", weights_only=False)
-    cfg = ckpt.get("model_config", {})
+    sd = ckpt["model_state_dict"]
+    # Use an explicit model_config if the checkpoint carries one; otherwise infer the
+    # architecture from the saved tensor shapes (robust across schema generations).
+    cfg = ckpt.get("model_config") or _infer_config(sd)
     model = PrismataDeepSets(**cfg)
-    model.load_state_dict(ckpt["model_state_dict"])
+    model.load_state_dict(sd)
     model.eval()
     return model, cfg
 

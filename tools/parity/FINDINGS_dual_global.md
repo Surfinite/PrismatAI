@@ -72,20 +72,31 @@ for s in 01_turn1 02_constr_damage 03_charges_lifespan 04_high_resources 05_late
   ./PrismataAI.exe --dump-features ../tools/parity/states/state_${s}.json ../tools/parity/outv22_state_${s}.json  asset/config/neural_weights_mixed_v22.bin
   ./PrismataAI.exe --dump-features ../tools/parity/states/state_${s}.json ../tools/parity/out35int_state_${s}.json C:/libraries/PrismataAI/docs/scratch/deepsets_mixed_35prop.bin
 done
-# CASE 1 (15-global) — script defaults now match the v2.2 PrismataDeepSets() defaults:
 cd c:/libraries/PrismataAI-dave-master/tools/parity
-python compare_parity_35prop.py outv22_state_*.json \
+# CASE 1 (15-global):
+python compare_parity_deepsets.py outv22_state_*.json \
   --pt C:/libraries/PrismataAI/training/models/deepsets_mixed_v22/swa_model.pt \
   --bin C:/libraries/PrismataAI-dave-master/bin/asset/config/neural_weights_mixed_v22.bin
+# CASE 2 (14-global) — defaults point at the 35prop interim pair; no flags, no hand-patch:
+python compare_parity_deepsets.py out35int_state_*.json
 ```
 
-## Tooling caveat (follow-up, NOT this change)
+## Tooling: harness now first-class for both generations (RESOLVED)
 
-`compare_parity_35prop.py` cannot construct the 14-global reference model any more: its docstring
-assumed `PrismataDeepSets()` defaults are the 35-prop architecture, but v2.2 bumped those defaults to
-37-prop/15-global (and `model_deepsets.py:91` hardcodes the 303-wide value head). CASE 2 above was run
-by constructing `PrismataDeepSets(num_properties=35)` and swapping `value_head[0]` to a 302-wide
-`nn.Linear` before `load_state_dict`. To make the harness first-class for both generations, add
-`num_global`/`num_properties` overrides to the model + tool (main-repo schema change; out of scope for
-the engine fix here). The numpy-over-`.bin` oracle (`export_weights_v2.numpy_forward`) needs no torch
-model and already validates both counts.
+The harness used to depend on `PrismataDeepSets()` defaults, which v2.2 bumped to 37-prop/15-global, so
+it could no longer construct a 14-global reference model. Fixed in the follow-up commit:
+- **`model_deepsets.py`** — added a `num_global` ctor param (default 15); `value_input_dim` is now
+  `enc_h*2 + sup_h + num_global` (was a hardcoded `+15`). Backward-compatible.
+- **`compare_parity_deepsets.py`** (renamed from `compare_parity_35prop.py`) — `load_model` now
+  **infers** the full architecture (num_units, d_embed, num_properties, hidden dims, num_global) from the
+  checkpoint's saved tensor shapes, so it builds the right model for ANY generation with no flags. Both
+  CASE 1 (15-global) and CASE 2 (14-global, defaults) PASS through the tool with **no hand-patching**.
+
+The numpy-over-`.bin` oracle (`export_weights_v2.numpy_forward`) was already generation-agnostic.
+
+**Pre-existing test debt (separate, NOT addressed here):** `training/tests/test_model_deepsets.py`
+feeds 14-global inputs (`make_batch(globals_dim=14)` + two inline `torch.rand(1,14)`) against the
+now-15-global default model → 7/10 fail on HEAD (proven pre-existing, not caused by the
+parameterization). Six are pure-shape (fix: `globals_dim=15`); the seventh
+(`test_mirror_value_approximately_negated`) needs its player-swap logic extended to the `under_attack`
+15th global. Left for a dedicated test-update pass.

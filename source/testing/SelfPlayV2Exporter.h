@@ -46,7 +46,7 @@ private:
     // per captured turn. finalize() writes these to a sibling parity_states/ dir as
     // sp_<gameId>_<plyIndex>.json. Each file is the exact bare-doc state shape that
     // PrismataAI.exe --dump-features consumes, feeding the C++<->PyTorch value
-    // export-parity harness (tools/parity/compare_parity_35prop.py) at scale.
+    // export-parity harness (tools/parity/compare_parity_deepsets.py) at scale.
     std::vector<std::pair<int, std::string>> _rawStates;
 
 public:

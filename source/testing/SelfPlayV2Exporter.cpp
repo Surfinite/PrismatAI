@@ -117,7 +117,7 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
     // dir (e.g. asset/training/rl_smoke_v2 -> asset/training/parity_states) as
     // sp_<gameId>_<plyIndex>.json. These bare-doc state files feed the C++<->PyTorch
     // value export-parity harness (tools/parity/dump_value_batch.py +
-    // compare_parity_35prop.py). This does NOT alter the V2 JSONL output above.
+    // compare_parity_deepsets.py). This does NOT alter the V2 JSONL output above.
     {
         const std::filesystem::path parityDir =
             std::filesystem::path(_outDir).parent_path() / "parity_states";
