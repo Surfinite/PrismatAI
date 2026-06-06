@@ -483,8 +483,18 @@ void NeuralNet::extractInstanceFeatures(const Card & card, int unitIdx, float * 
     out[0] = (float)card.getPlayer();
     out[1] = card.isUnderConstruction() ? 1.0f : 0.0f;
     out[2] = (float)std::max(card.getConstructionTime(), card.getCurrentDelay());
-    out[3] = (card.getStatus() == CardStatus::Assigned && !card.abilityUsedThisTurn()) ? 1.0f : 0.0f;
-    out[4] = card.abilityUsedThisTurn() ? 1.0f : 0.0f;
+    // is_blocking / ability_used: ROLE-BASED, matching the training extractors EXACTLY
+    // (js_engine/state_adapter.js + V2Record.cpp instToRichUnit): is_blocking = assigned AS A
+    // BLOCKER (contributes to defense); ability_used = assigned but NOT blocking (spent its
+    // assignment on its ability). Use status + canBlock() (NOT abilityUsedThisTurn()): the
+    // m_abilityUsedThisTurn flag is a transient that Card::toJSONString() never serializes, so
+    // it defaults to false on any JSON-loaded state (SteamAI/query_move/eval/parity) and would
+    // mis-classify ~47% of (tapped economy) tokens — a train/inference skew. canBlock() is
+    // serialized via "blocking" and is always in-memory-correct, so this matches training in
+    // both the Defense (assigned blocker -> canBlock()==true) and Action (tapped worker ->
+    // canBlock()==false) snapshot phases.
+    out[3] = (card.getStatus() == CardStatus::Assigned && card.canBlock())  ? 1.0f : 0.0f;
+    out[4] = (card.getStatus() == CardStatus::Assigned && !card.canBlock()) ? 1.0f : 0.0f;
 
     // base_health is at property index 5, fragile at index 6
     float baseHP = _property_table[unitIdx * _config.num_properties + 5];
