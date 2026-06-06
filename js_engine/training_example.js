@@ -38,14 +38,24 @@ function extractTrainingExampleV2(gameState, cardSet, plyIndex) {
     const p0Mana = gameState.playerMana(C.COLOR_WHITE);
     const p1Mana = gameState.playerMana(C.COLOR_BLACK);
 
-    // Supply — include ALL units in card set, even sold-out (supply=0).
-    // in_card_set flag must persist so model knows the unit was available.
+    // Supply — include ALL units in the card set, even sold-out (supply=0).
+    // in_card_set flag must persist so the model knows the unit was buyable this game.
+    //
+    // in_card_set = 1 iff the unit is BUYABLE in this game = base + advanced randomizer,
+    // created tokens (Husk, Gauss Charge, ...) excluded. This MUST match C++ inference
+    // (NeuralNet.cpp ~581-591, which marks 1 for every numCardsBuyable() = base+advanced)
+    // and the C++ self-play exporter (V2Record.cpp). Base units (card.baseSet) are always
+    // buyable so are always in-set, regardless of the passed `cardSet` (which lists only the
+    // advanced randomizer units, as both the MB config.cardSet and the human randomizer do).
+    // Deriving base membership from card.baseSet — not from the cardSet list — keeps this
+    // count-agnostic (Base+5 .. Base+11 and larger RL sets) and consistent across BOTH the
+    // MB matchup path and the human replay path that share this extractor.
     const supply = {};
     for (let i = 0; i < gameState.cards.length; i++) {
         const card = gameState.cards[i];
         const ws = gameState.whiteSupply[i] || 0;
         const bs = gameState.blackSupply[i] || 0;
-        const inSet = cardSet.includes(card.UIName) ? 1 : 0;
+        const inSet = (card.baseSet || cardSet.includes(card.UIName)) ? 1 : 0;
         // Include if unit has supply OR is in the card set (even if sold out)
         if (ws > 0 || bs > 0 || inSet) {
             supply[card.UIName] = [ws, bs, inSet];

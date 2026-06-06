@@ -72,12 +72,21 @@ function ratingsFromReplay(replay) {
     return { p0, p1 };
 }
 
-// card_set = the DRAWN advanced units of this game, by display name. The authoritative
-// source is deckInfo.randomizer (per-player arrays, normally identical) — it lists the
-// purchasable random units and EXCLUDES needs-only created tokens (e.g. Gauss Charge),
-// matching MB's config.cardSet semantics so `in_card_set` means the same in both corpora.
-// Fallback (older replays lacking randomizer): non-base merged-deck entries (may include
-// created tokens — a minor over-inclusion).
+// card_set = the DRAWN ADVANCED (non-base) units of this game, by display name. This feeds
+// the V2 record's `card_set` metadata field AND the advanced-membership half of the
+// `in_card_set` supply flag (the BASE half is added separately in extractTrainingExampleV2
+// via card.baseSet, so base does NOT need to be in this list).
+//
+// The authoritative source is deckInfo.randomizer (per-player arrays, normally identical) —
+// it lists exactly the purchasable RANDOM units and EXCLUDES needs-only auxiliaries/created
+// tokens (e.g. Pixie/Gauss Charge are in mergedDeck but NOT in randomizer; the engine seeds
+// buy-box supply only from base+randomizer, so those correctly resolve to in_card_set=0).
+// This is advanced-only by design and matches MB's config.cardSet (also the advanced
+// randomizer set) — so `in_card_set` means the same in both the MB and human corpora.
+//
+// Fallback (rare older replays lacking randomizer): non-base merged-deck entries by display
+// name. This may over-include needs-only auxiliaries (no clean signal to drop them without a
+// randomizer); negligible in practice (modern rated replays all carry randomizer).
 function buildAdvancedCardSet(replay) {
     const di = replay.deckInfo || {};
     const rnd = di.randomizer;
@@ -90,7 +99,7 @@ function buildAdvancedCardSet(replay) {
         if (set.size) return Array.from(set);
     }
     const md = di.mergedDeck || [];
-    return md.filter(c => !c.baseSet).map(c => c.name);
+    return md.filter(c => !c.baseSet).map(c => c.UIName || c.name);
 }
 
 // outcome_p0 = P(player 0 / first / white wins). Replay result: 0 = P0 wins, 1 = P1 wins,
