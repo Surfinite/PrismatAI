@@ -57,6 +57,10 @@ raises root branching at B+10–11 (the `root_truncated` telemetry becomes relev
 spread is the right call for a production RL model and should be planned — ideally matching the human-data set-size
 distribution. Decide explicitly before the real campaign; don't default to 8 by inertia.
 
+> ✅ **DECIDED 2026-06-06 (user):** first campaign is **B+8 only** — it's what all the MasterBot games used, so it
+> concentrates RL signal on the deployed-commonest size and keeps root branching cap-safe (MaxChildren=40). The
+> **B+8–11 spread is deferred** to a later production run (revisit `root_truncated`/MaxChildren co-calibration then).
+
 ## RL-prep roadmap (after A)
 - **B1 (main code lift):** complete `eval/run_eval.py::main()` — currently a skeleton that writes empty `anchors{}`.
   Wire: flip per-anchor config blocks → `run_cpp_tournament` → `parse_tournament_stdout` → Wilson/clustered CIs
