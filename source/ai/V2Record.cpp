@@ -106,7 +106,6 @@ std::string buildV2RecordJSON(const GameState & state, int plyIndex)
     // ---- card_set: the ADVANCED (non-base) buyable units (random units in play) ----
     // Built here from the buy panel; matches serializeState's finalize cardSet notion.
     rapidjson::Value cardSet(rapidjson::kArrayType);
-    std::vector<std::string> advancedNames;   // for the supply inSet flag below
     {
         const CardID numBuyable = state.numCardsBuyable();
         for (CardID i = 0; i < numBuyable; ++i)
@@ -117,7 +116,6 @@ std::string buildV2RecordJSON(const GameState & state, int plyIndex)
                 const std::string & ui = ct.getUIName();
                 rapidjson::Value n(ui.c_str(), static_cast<rapidjson::SizeType>(ui.size()), a);
                 cardSet.PushBack(n, a);
-                advancedNames.push_back(ui);
             }
         }
     }
@@ -150,7 +148,13 @@ std::string buildV2RecordJSON(const GameState & state, int plyIndex)
 
             const int ws = static_cast<int>(cb.getSupplyRemaining(Players::Player_One));
             const int bs = static_cast<int>(cb.getSupplyRemaining(Players::Player_Two));
-            const int inSet = (!ct.isBaseSet()) ? 1 : 0;
+            // in_card_set=1 for EVERY buyable unit (base included). This loop is already over
+            // numCardsBuyable() (the per-game buy box = base + advanced randomizer; created
+            // tokens are not buyable, so excluded), so marking all of them 1 matches BOTH
+            // C++ inference (NeuralNet.cpp ~591) and the JS extractor (base via card.baseSet +
+            // this game's randomizer). The previous `!isBaseSet()` wrongly dropped base units
+            // to 0, an advanced-only convention that diverged from inference.
+            const int inSet = 1;
 
             if (ws > 0 || bs > 0 || inSet)
             {
