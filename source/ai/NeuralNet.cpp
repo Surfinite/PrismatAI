@@ -356,7 +356,7 @@ void NeuralNet::allocateScratchBuffers()
     const int SUP_H = _config.supply_hidden;
     const int VAL_H = _config.value_hidden;
     const int TOKEN_DIM = _config.d_embed + _config.num_properties + _config.num_instance_features;
-    const int COMBINED = ENC_H * 2 + SUP_H + 14;
+    const int COMBINED = ENC_H * 2 + SUP_H + 15;
 
     _scratch.p0_pool.resize(ENC_H);
     _scratch.p1_pool.resize(ENC_H);
@@ -502,7 +502,7 @@ void NeuralNet::extractInstanceFeatures(const Card & card, int unitIdx, float * 
 //      - Supply input = [p0_supply, p1_supply, in_card_set] (3 floats)
 //      - Encode: Linear(3->32)->ReLU->Linear(32->32)->ReLU
 //      - Sum-pool into supply accumulator
-//   3. Concatenate: [P0_pool(128) | P1_pool(128) | supply_pool(32) | globals(14)] = 302
+//   3. Concatenate: [P0_pool(128) | P1_pool(128) | supply_pool(32) | globals(15)] = 303
 //   4. Value MLP: Linear(302->256)->ReLU->Linear(256->256)->ReLU->Linear(256->1)
 //   5. sigmoid -> map to [-1,1]
 
@@ -512,7 +512,7 @@ double NeuralNet::evaluateValue(const GameState & state, const PlayerID maxPlaye
     const int SUP_H = _config.supply_hidden;
     const int VAL_H = _config.value_hidden;
     const int TOKEN_DIM = _config.d_embed + _config.num_properties + _config.num_instance_features;
-    const int COMBINED = ENC_H * 2 + SUP_H + 14;
+    const int COMBINED = ENC_H * 2 + SUP_H + 15;
 
     // Zero-init per-player pooling accumulators (reuse pre-allocated scratch buffers)
     std::fill(_scratch.p0_pool.begin(), _scratch.p0_pool.end(), 0.0f);
@@ -600,7 +600,7 @@ double NeuralNet::evaluateValue(const GameState & state, const PlayerID maxPlaye
     }
 
     // --- 3. Build combined vector ---
-    // [p0_pool(ENC_H) | p1_pool(ENC_H) | supply_pool(SUP_H) | globals(14)] = COMBINED
+    // [p0_pool(ENC_H) | p1_pool(ENC_H) | supply_pool(SUP_H) | globals(15)] = COMBINED
     float * combined = _scratch.combined.data();
     int pos = 0;
     std::memcpy(combined + pos, p0_pool, ENC_H * sizeof(float));
@@ -610,7 +610,7 @@ double NeuralNet::evaluateValue(const GameState & state, const PlayerID maxPlaye
     std::memcpy(combined + pos, supply_pool, SUP_H * sizeof(float));
     pos += SUP_H;
 
-    // Global features (14): V2 normalization caps
+    // Global features (15): V2 normalization caps
     const Resources & p0res = state.getResources(Players::Player_One);
     const Resources & p1res = state.getResources(Players::Player_Two);
 
@@ -630,6 +630,10 @@ double NeuralNet::evaluateValue(const GameState & state, const PlayerID maxPlaye
 
     combined[pos++] = std::min((float)state.getTurnNumber(), 50.0f) / 50.0f;
     combined[pos++] = (float)state.getActivePlayer();
+    // under_attack: 1 if the active player faces incoming attack (enemy attack > 0).
+    // Matches vectorize_v2.py::vectorize_globals (the 15th/last global).
+    const PlayerID uaEnemy = (state.getActivePlayer() == Players::Player_One) ? Players::Player_Two : Players::Player_One;
+    combined[pos++] = (state.getAttack(uaEnemy) > 0) ? 1.0f : 0.0f;
 
     // --- 4. Value MLP: Linear->ReLU->Linear->ReLU->Linear ---
     float * vh1 = _scratch.vh1.data();
@@ -780,7 +784,7 @@ void NeuralNet::dumpFeaturesJSON(const GameState & state, const std::string & pa
 
     // Run the real in-play forward in the P0 frame. This is the SAME evaluateValue the
     // UCT search calls, so the dumped value is the in-play value. It also leaves the
-    // 14 normalized globals in _scratch.combined (tail), the 116x3 supply in
+    // 15 normalized globals in _scratch.combined (tail), the 116x3 supply in
     // _scratch.supplyData, and the raw logit in _scratch.lastLogit.
     double valueP0 = evaluateValue(state, Players::Player_One);
     float  logit   = _scratch.lastLogit;
@@ -788,7 +792,7 @@ void NeuralNet::dumpFeaturesJSON(const GameState & state, const std::string & pa
 
     const int ENC_H = _config.encoder_hidden;
     const int SUP_H = _config.supply_hidden;
-    const int globalsOffset = ENC_H * 2 + SUP_H;  // globals are the last 14 entries of combined
+    const int globalsOffset = ENC_H * 2 + SUP_H;  // globals are the last 15 entries of combined
 
     f << std::setprecision(9);
     f << "{\n";
@@ -799,9 +803,9 @@ void NeuralNet::dumpFeaturesJSON(const GameState & state, const std::string & pa
     f << "  \"turn_number\": " << (int)state.getTurnNumber() << ",\n";
     f << "  \"num_units\": " << _config.num_units << ",\n";
 
-    // 14 normalized globals exactly as consumed by the forward
+    // 15 normalized globals exactly as consumed by the forward
     f << "  \"globals\": [";
-    for (int i = 0; i < 14; ++i)
+    for (int i = 0; i < 15; ++i)
     {
         if (i > 0) f << ", ";
         f << _scratch.combined[globalsOffset + i];

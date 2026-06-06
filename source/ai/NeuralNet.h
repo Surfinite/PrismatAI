@@ -50,7 +50,7 @@ class NeuralNet
     LinearLayer             _sup_linear2;    // (supply_hidden -> supply_hidden)
 
     // Value head (3 linear layers: Linear->ReLU->Linear->ReLU->Linear)
-    LinearLayer             _val_linear1;    // (302 -> value_hidden)
+    LinearLayer             _val_linear1;    // (303 -> value_hidden)
     LinearLayer             _val_linear2;    // (value_hidden -> value_hidden)
     LinearLayer             _val_linear3;    // (value_hidden -> 1)
 
