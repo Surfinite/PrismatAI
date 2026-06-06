@@ -65,9 +65,15 @@ namespace
         const int currentHp = std::max(0, rawHp);
 
         // role===ROLE_ASSIGNED <-> C++ CardStatus::Assigned.
-        // inst.blocking (JS) <-> c.canBlock() (the value serializeState writes as "blocking").
+        // inst.blocking (JS / SWF): the blocking-MODE flag = type-level canBlock(assigned)
+        // (assigned ? assignedBlocking : defaultBlocking) AND NOT under construction. The SWF
+        // stores inst.blocking and sets it false while a unit is building (empirically: a
+        // constructing blocker has inst.blocking=0) — so gate construction. Do NOT use the
+        // fully-gated Card::canBlock() (it also drops delayed + ANY-chill units; the SWF keeps
+        // delayed and partially-chilled units blocking, only full-chill clears the flag).
+        // Residual full-chill edge is a noted JS<->C++ engine-parity follow-up.
         const bool assigned = (c.getStatus() == CardStatus::Assigned);
-        const bool blocking = c.canBlock();
+        const bool blocking = ct.canBlock(assigned) && !c.isUnderConstruction();
 
         const bool isConstructing = (constrTime > 0);
         const int  turnsUntilReady = std::max(constrTime, delay);
@@ -83,7 +89,7 @@ namespace
         o.AddMember("owner",              static_cast<int>(c.getPlayer()),         a);
         o.AddMember("is_constructing",    isConstructing ? 1 : 0,                  a);
         o.AddMember("turns_until_ready",  turnsUntilReady,                         a);
-        o.AddMember("is_blocking",        (assigned && blocking) ? 1 : 0,          a);
+        o.AddMember("is_blocking",        blocking ? 1 : 0,                        a);
         o.AddMember("ability_used",       (assigned && !blocking) ? 1 : 0,         a);
         o.AddMember("current_hp",         currentHp,                               a);
         o.AddMember("hp_fraction",        hpFraction,                              a);
