@@ -25,6 +25,12 @@ token = [ unit_embedding(32) | static_properties(37) | instance_state(10) ]   = 
 - **`instance_state` (10)** — per-INSTANCE live state, in the H5 / computed in C++ at inference:
   `owner, is_constructing, turns_until_ready, is_blocking, ability_used, current_hp, hp_fraction,
   is_frozen, lifespan_remaining, stamina_remaining`.
+  - **`is_blocking`** = the SWF blocking-MODE flag `inst.blocking` (the unit will absorb incoming
+    attack — its contribution to total defense). NOT gated on `role==ASSIGNED` (a blocker stays
+    `role=DEFAULT`). C++: `getType().canBlock(status==Assigned) && !isUnderConstruction()`.
+  - **`ability_used`** = `role==ASSIGNED && !is_blocking` (the unit spent its turn on its ability,
+    e.g. Cryo Ray). For no-stamina ability units this is the only "used its ability this turn"
+    signal. See the v2.2.1 changelog for the consistency history.
 
 Two side pathways feed the value head alongside the pooled tokens:
 - **`supply` (116 × 3)** — `[p0_supply, p1_supply, in_card_set]` per unit type → supply encoder.
@@ -100,6 +106,40 @@ v2.2: dump-features → `under_attack`=1 (defense) / 0 (action); export self-che
 | v2.0 | 2026-05 | 13 / 14 / 55 / 302 | initial DeepSets per-instance schema |
 | v2.1 | 2026-05-31 | 35 / 14 / 77 / 302 | +22 production-vector props (auto/click split, chill, costs, sac/selfsac, regen) |
 | **v2.2** | **2026-06-05/06** | **37 / 15 / 79 / 303** | `base_attack`→`auto_attack`+`click_attack`; +`frontline`; +`under_attack` global |
+| **v2.2.1** | **2026-06-06** | **37 / 15 / 79 / 303** (dims unchanged) | **train↔inference FEATURE-COMPUTATION consistency fixes** (no schema/dim change) — see below |
+
+### v2.2.1 — train↔inference consistency fixes (2026-06-06)
+
+Dims unchanged; this revision corrects four silent train/inference skews in how features were
+*computed* (caught + guarded by `training/tests/test_three_way_feature_parity.py`, the committed
+three-way gate). The four producers — human JS extractor (`state_adapter.js`/`training_example.js`),
+MB extractor (`extract_fleet_training_data.py`), C++ self-play exporter (`V2Record.cpp`), and C++
+inference (`NeuralNet.cpp`) — now agree element-for-element.
+
+1. **`in_card_set` = base + advanced** (was advanced-only in the human corpus). The shared JS
+   extractor marked only the randomizer units; base units (always buyable) must be `in_card_set=1`,
+   matching C++ inference (`numCardsBuyable()`). Count-agnostic (Base+5..Base+11, larger RL sets).
+   *Fix:* `training_example.js` `inSet = card.baseSet || cardSet.includes(name)`; `V2Record.cpp`
+   `inSet=1` over the buyable loop. MB was already correct.
+2. **`supply` = REMAINING, not initial total** (human corpus wrote the constant cap). The engine
+   keeps `whiteSupply` at the initial total and tracks purchases in `whiteBought`; remaining =
+   total − bought, matching C++ `getSupplyRemaining`. *Fix:* `training_example.js`
+   `ws = max(0, whiteSupply - whiteBought)`. MB was already remaining.
+3. **`is_blocking` = `inst.blocking`** (the SWF blocking-MODE flag = "contributes to total
+   defense"), **not** `inst.blocking && role==ASSIGNED`. A unit assigned AS A BLOCKER stays
+   `role=DEFAULT` (the SWF `MOVE_DEFEND` never sets `ASSIGNED`), so the role gate zeroed the
+   feature in the human corpus (0% vs SWF/MB ~26-30%). C++ equiv:
+   `getType().canBlock(status==Assigned) && !isUnderConstruction()` (ungated type-level flag +
+   construction gate; partial-chill/delay keep blocking, per the SWF — full-chill clears it, a
+   noted JS↔C++ engine-parity edge). `ability_used = role==ASSIGNED && !blocking` (unchanged).
+4. **`is_blocking`/`ability_used` at inference** were derived from `abilityUsedThisTurn()` — a
+   transient `Card::toJSONString` never serializes, so it desynced on any JSON-loaded state. Now
+   role/`canBlock`-based like every training extractor.
+
+Only the **human** corpora were re-extracted (MB verified already-consistent: is_blocking
+construction-gated 0/145203, supply=remaining, in_card_set=base+adv). Selection val switched to the
+**human** val (`human_val_1700_v2`) so the production-vector / ability-rich-unit payoff is
+measurable; MB val reported as a secondary number.
 
 v2.2 retrain (mixed: fleet_v3_v2+fleet_v4_v2+human_1800_v2, val local_mbvmb_v2, 100ep SWA@80, XPU)
 tracks the `mixed_35prop` baseline near-identically (clean A/B: same data/seed/recipe) — val loss a
