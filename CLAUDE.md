@@ -101,12 +101,17 @@ node extract_training_data.js   # ⚠️ DEPRECATED — stale ./lib (Feb 2026) T
 > p0_attack — **DEPRECATED; do NOT use for training data.** (`human_1800_v2` was built with the faithful
 > extractor — verified Jun 6 via `card_set`=8.4 advanced-only vs the old path's 19.2.)
 >
-> ⚠️ **Known MB↔human `in_card_set` inconsistency (UNRESOLVED, Jun 6):** the MB corpora
-> (`fleet_v3_v2`/`fleet_v4_v2`/`local_mbvmb_v2`) mark `in_card_set` = full deck **incl. base** (~19);
-> the human extractor marks **advanced-only** (~8). Root cause: `matchup_clean.js:1402` passes
-> `config.cardSet` (full deck) while `extract_training_jsengine.buildAdvancedCardSet` passes the
-> randomizer set. The v2.2 model + RL init trained on this mismatch. Decide one convention → re-extract
-> the changed side + retrain. (The human-val H5 matches the human side, so it's a valid human-side metric.)
+> ✅ **train↔inference feature consistency — RESOLVED v2.2.1 (Jun 7).** Four silent skews fixed, ALL in the
+> FEATURE layer (not the engine): (1) `in_card_set` = base + advanced randomizer (tokens excluded = C++
+> `numCardsBuyable()`); count-agnostic — NEVER hardcode 8 advanced (sets span Base+5..11+). (2) `supply` =
+> REMAINING (`whiteSupply - whiteBought`), not the constant initial cap. (3) `is_blocking` = the SWF
+> `inst.blocking` blocking-mode flag (defense contribution), NOT `blocking && role==ASSIGNED` (a blocker
+> stays role=DEFAULT; MOVE_DEFEND never sets ASSIGNED); C++ = `getType().canBlock(status==Assigned) &&
+> !isUnderConstruction()`. (4) inference used non-serialized `abilityUsedThisTurn()` → now role/`canBlock`.
+> MB was already correct (verified feature-identical: 1000-game + C++ cross-check). Deployed:
+> `neural_weights_mixed_v221.bin` (SWA RL init; parity 1.09e-06; MB-val 0.3458/81.8% == v2.2). **GATE:
+> `training/tests/test_three_way_feature_parity.py` (JS extractor == C++ exporter == C++ inference) — run
+> before ANY feature/extractor/exporter change.** Details: `docs/dsnn-feature-schema.md` v2.2.1 changelog.
 ```bash
 # 1. Extract human replays → V2 JSONL DIRECTLY (no convert step; codes pre-validated from JSON):
 node js_engine/extract_training_jsengine.js \
@@ -114,7 +119,7 @@ node js_engine/extract_training_jsengine.js \
     --replays-dir c:/libraries/prismata-replay-parser/replays_archive \
     --output training/data/human_1800_v2.jsonl
 
-# 2. Vectorize: V2 JSONL → HDF5 (15-global v2.2 via schema_v2.json)
+# 2. Vectorize: V2 JSONL → HDF5 (15-global v2.2.1 via schema_v2.json)
 python training/vectorize_v2.py \
     --input training/data/human_1800_v2.jsonl \
     --output training/data/human_1800_v2.h5 --schema training/schema_v2.json
@@ -136,13 +141,15 @@ python training/export_weights_v2.py \
 
 ### Engine & Build
 
+- **C++ feature/parity tooling** (dave-master `Prismata_Standalone`): `--dump-v2-record <stateJson> <out>` = run the V2 EXPORTER (`V2Record.cpp`); `--dump-features <stateJson> <out> <weights.bin>` = run INFERENCE (`NeuralNet.cpp`) → tokens/supply/globals/value. Both parse a gameState JSON (run from anywhere w/ absolute paths; soft asserts "Unknown Card instance property" are harmless). `js_engine/dump_shared_state.js <replay> <ply> <prefix>` emits the paired cppstate+jsrecord. SelfPlayV2Exporter also writes native states to `asset/training/parity_states/sp_<g>_<ply>.json` (compare exporter↔inference with NO `stateToCppJSON` round-trip — which drops `abilityUsedThisTurn` + instance `damage`).
+- **dave-master build (= "v145" = VS 18 / 2026; `cmake` NOT on PATH)**: `"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/Prismata_Standalone.vcxproj //p:Configuration=Release //p:Platform=x64 //m //v:minimal` (also `build/Prismata_Testing.vcxproj`). Output → `bin/`. `bin/PrismataAI.exe` is a manual copy of `Prismata_Standalone.exe` (not a CMake target).
 - **Internal name system**: Engine uses codenames (e.g., "Tesla Tower" = Tarsier, "Brooder" = Blastforge). Full mapping in `cardLibrary.jso`.
 - **AS3↔C++ naming dictionary**: `role`=`CardStatus`, `disruptDamage`=`m_currentChill`, `MOVE_MELEE`=`ASSIGN_FRONTLINE`, `glassBroken`=breach flag (not a phase — no `Phases::Breach` equivalent in JS), `MOVE_ASSIGN`=`USE_ABILITY`, `MOVE_DEFEND`=`ASSIGN_BLOCKER`. Full dictionary in `docs/plans/engine-logic-audit-plan.md`.
 - **Two git remotes**: `origin` = davechurchill upstream, `PrismatAlpha` = user's fork. Push to `PrismatAlpha`.
 - **Deployable `neural_weights_*.bin` are git-tracked in the MAIN repo `bin/asset/config/`**; a working copy lives in `dave-master/bin/asset/config/` (where the dave engine reads). Export to dave-master; commit the tracked copy in main.
 - **Branch can switch unexpectedly**: Always `git branch --show-current` before branch-dependent operations.
 - **Config tournament toggles**: Check `"run":true` in `config.txt` before launching.
-- **Feature schema contract (DeepSets, current = v2.2)**: doc `docs/dsnn-feature-schema.md`; machine source `training/schema_v2.json` + `training/property_table.json`. Token = 32 embed + **37 static** + 10 instance = **79**; **15 globals** (incl. `under_attack`); value head 303. `schema_version` stays `v2` (= DeepSets generation); use `feature_revision` for additive changes. **Static props flow via the DSN2 `.bin` header → no C++ edit**; a GLOBAL change needs `vectorize_v2.py` + the per-global *construction* in dave-master `NeuralNet.cpp` (`evaluateValue` build + the `if (num_global>=N)` guard) + bumping `model_deepsets.py`'s default `num_global`. The global *count* now auto-derives from the value-head width at load (`NeuralNet.cpp` `COMBINED`/dump loop, `export_weights_v2.py`, `compare_parity_deepsets.py`) — no manual count edits. Engine loads either supported count (14 or 15) from the `.bin`; a width implying an unsupported count warns (`dave@481f916`).
+- **Feature schema contract (DeepSets, current = v2.2.1)**: doc `docs/dsnn-feature-schema.md`; machine source `training/schema_v2.json` + `training/property_table.json`. Token = 32 embed + **37 static** + 10 instance = **79**; **15 globals** (incl. `under_attack`); value head 303. `schema_version` stays `v2` (= DeepSets generation); use `feature_revision` for additive changes. **Static props flow via the DSN2 `.bin` header → no C++ edit**; a GLOBAL change needs `vectorize_v2.py` + the per-global *construction* in dave-master `NeuralNet.cpp` (`evaluateValue` build + the `if (num_global>=N)` guard) + bumping `model_deepsets.py`'s default `num_global`. The global *count* now auto-derives from the value-head width at load (`NeuralNet.cpp` `COMBINED`/dump loop, `export_weights_v2.py`, `compare_parity_deepsets.py`) — no manual count edits. Engine loads either supported count (14 or 15) from the `.bin`; a width implying an unsupported count warns (`dave@481f916`).
 - **Legacy flat schema (PrismataNet)**: `training/schema.json` + `training/FEATURES.md`, state_dim=1785. Kept for the value-only baseline; not the current path.
 - **Per-player NN weights**: Players with `"WeightsFile":"neural_weights_X.bin"` in config.txt auto-load their weights in `--suggest` mode. `--weights <path>` CLI arg overrides. Weight files live in `bin/asset/config/`.
 - **DSNN players**: `DSNN_MBonly` (ep98, 82.4%), `DSNN_MBonly_SWA` (SWA avg), `DSNN_Human` (ep26, 78.2%). All use UCT + NeuralNet eval + the `LiveHardestAI_Root` move iterator. Its OB consumption (via `Live_BuyOpeningBook2` in the CS2 portfolio branch → `LiveOpeningBook2`) is byte-identical to what live MB uses (May 16 verification).
@@ -208,6 +215,8 @@ python training/export_weights_v2.py \
 
 ### Training
 
+- **DeepSets offline eval on an H5**: `eval/eval_deepsets_h5.py --model <best/swa_model.pt> --val-file <h5>` (reuses train.py `eval_epoch`; CPU default to avoid XPU contention; handles SWA ckpts). Legacy `training/evaluate_model.py` is flat-PrismataNet ONLY — won't load DeepSets. `mixed_35prop.bin`=14-global, `mixed_v22/v221.bin`=15-global (match weights' global count to the schema for `--dump-features`).
+- **SWA is val-independent**: averages epochs `swa_start..end` regardless of `--val-file`; with `--patience >= --epochs` no early stop, so val only affects `best_model.pt` + the log, not the deployed SWA. `swa_model.pt` = unwrapped `model_state_dict`; `export_weights_v2.py` rebuilds via `PrismataDeepSets()` defaults (37 prop / 15 global).
 - **Quick training tests**: Use `--selfplay-dir bin/training/data/selfplay/2026-02-15_11-31-33/` (4 shards, instant).
 - **Training CRC**: `train.py` uses `validate_crc=False`.
 - **Training RAM limit**: Full dataset = ~50GB+. Use `--streaming` (memory-mapped) or `--max-records 1000000` (32GB).
