@@ -39,22 +39,25 @@ A train↔inference **feature-consistency** session shipped today and it changes
 
 ## 3. Outstanding prep — the actual remaining work (ordered)
 
-**🔴 BLOCKER — do first:**
-1. **Implement `training/rl_data.py`** (plan Task 6). `train.py:1108` imports it; `--rl-mode` `ImportError`s without it. Needs: `select_replay_window(paths, W)`, `rehearsal_fraction_for_iter(K)`, `build_rl_sampler(sp_h5s, human_h5, window, batch_size)`, `colour_balance_weights(active_player)`. Spec §4/§10.5 (sliding buffer W≈5–10; human-only rehearsal ~30%→10% decay; colour balance; **no MB-fleet in value targets**). Build it with the label unit tests (`training/tests/test_labels.py`, `test_rl_data.py`) per plan Task 6 Steps 1–8. *(The Session-2 note claimed this was committed (`9588a5d`); the Jun-7 audit finds it absent — verify with `ls training/rl_data.py` and rebuild from plan Task 6 if missing.)*
+> **Verified Jun 7 (the audit that produced an earlier draft of this doc had several false "missing"
+> claims — re-checked by hand).** ALREADY PRESENT and wired (do NOT rebuild): `training/rl_data.py`
+> (real: `colour_balance_weights`, `build_rl_sampler`, `rehearsal_fraction_for_iter`,
+> `select_replay_window`; imports clean), `eval/rl_campaign.md`, `eval/tactical_cases/` (2 cases),
+> `eval/tactical_baseline.json`, `training/data/human_1800_v2.h5`, and all eval scripts. **There is NO
+> hard code blocker.** Always `ls`/grep before assuming something is missing.
 
-**🟠 Prerequisite content (no heavy compute):**
-2. **Create `eval/rl_campaign.md`** — `run_iteration.ps1` reads it for anchor blocks, the decision rule (`CI_lower(d_rl)>0 ∧ d_rl≥E(+5pp) ∧ d_reg≥−Y(0.03)`), and contamination guards (`PRISMATA_FORCE_DSNN`/`use_dsnn.txt` absent, expected net-hash, fixed-sims). Pre-register effect size E + eval N.
-3. **Populate the curated state batteries** (extract via the JS engine `Analyzer` + `replay_exporter.stateToCppJSON` — **NOT** F6 dumps, which are pre-swoosh DEFENSE phase with IGs tapped/0 red → invalid for IG testing):
-   - `eval/calib_states/` ~20 representative states (varied turn/resources/IG-availability) for `calibrate_n.py`.
-   - `eval/ig_battery/` ~20 states where the active player owns ≥1 Infusion Grid (for `action_coverage.py` argmax click-count distribution).
-   - `eval/tactical_cases/*.json` ≥1 `known_move` case (state + expected `ig_click_count` + bucket) so the tactical regression gate is non-vacuous. Seed `ktink_t9_action_request.json` (a real IG over-click) is a starting fixture.
-4. **Fix the two stale weight refs** (§1): `eval/run_iteration.ps1:51` `$parentBin` → `neural_weights_mixed_v221.bin` (or parameterize `--parent-weights`); `RL_Explore` `WeightsFile` → `v221` (only matters when axis-2 runs).
-5. **Verify the config blocks `run_iteration.ps1` drives exist** in dave `config.txt` (`run:false`): `RL_Eval_iter0_forced/general`, `RL_Step2_Smoke`, `RL_Cal_N*`/`RL_Cal_vs_deploy_N*` — each with an `exportTrainingV2` target where the driver expects shards.
+**🟠 Genuinely missing — content + two stale refs (no heavy compute):**
+1. **Populate the two curated state batteries** (extract via the JS engine `Analyzer` + `replay_exporter.stateToCppJSON` — **NOT** F6 dumps, which are pre-swoosh DEFENSE phase with IGs tapped/0 red → invalid for IG testing):
+   - `eval/calib_states/` — ~20 representative states (varied turn/resources/IG-availability) for `calibrate_n.py`.
+   - `eval/ig_battery/` — ~20 states where the active player owns ≥1 Infusion Grid (for `action_coverage.py` argmax click-count distribution).
+   - (`eval/tactical_cases/` already has 2 cases — just confirm they're real `known_move` cases so the regression gate is non-vacuous; `docs/scratch/ktink_t9_action_request.json` is a real IG over-click fixture if you want more.)
+2. **Fix the two stale `mixed_35prop` weight refs → `neural_weights_mixed_v221.bin`** (this session's repoint missed them): `eval/run_iteration.ps1:51` (`$parentBin`; or pass `--parent-weights`) and `RL_Explore`'s `WeightsFile` in dave `config.txt` (axis-2 only).
+3. **Confirm the config blocks `run_iteration.ps1` drives exist** in dave `config.txt` (`run:false`): `RL_Eval_iter0_forced/general`, `RL_Step2_Smoke`, `RL_Cal_N*`/`RL_Cal_vs_deploy_N*` — each with an `exportTrainingV2` target. (The audit found `ForcedCards:["Hotel"]` in 13 such blocks, so they likely all exist — verify.)
 
 **🟡 Then run (compute):**
-6. **N-calibration** (plan Task 13 / spec §3-M5): with `calib_states/` populated, run `eval/calibrate_n.py` to sweep `N∈{100,256,512,1k,2k,5k}` (the `RL_Cal_N*` blocks), pick the **smallest N passing the non-degeneracy check** (game-length within 2σ of human-1800; P0/P1 WR∈[0.35,0.65]; root visit-entropy above floor; N comfortably > branching factor ≤30). Freeze N into `RL_SelfPlay.MaxTraversals`. (Multi-hour.)
-7. **De-risk iter-0 the cheap way first (spec §8.5 / O4):** generate ONE fixed self-play dataset on the IG-optional config, `--rl-mode` fine-tune once (no loop), eval. A clean offline improvement validates data→train→export→eval with zero self-play-poisoning risk. Optionally O1 (deep-sim ~10k–50k early batch overnight) for cleaner labels.
-8. **Run the gated loop** via `eval/run_iteration.ps1`: iter-0 (wide-untrained anchor = current `v221` on the IG-optional config) → iter-1 → 3-anchor eval {wide-untrained iter-0, `DSNN_Mixed35_5var`, `STEAMAI`} with Wilson CIs + sequential 128→256→512 → human-reviewed promote/reject/inconclusive. **Measure games/hr at the chosen N before any AWS spend.**
+4. **N-calibration** (plan Task 13 / spec §3-M5): with `calib_states/` populated, run `eval/calibrate_n.py` (→ `eval/n_calibration.json`) to sweep `N∈{100,256,512,1k,2k,5k}` (the `RL_Cal_N*` blocks), pick the **smallest N passing the non-degeneracy check** (game-length within 2σ of human-1800; P0/P1 WR∈[0.35,0.65]; root visit-entropy above floor; N comfortably > branching factor ≤30). Freeze N into `RL_SelfPlay.MaxTraversals`. (Multi-hour.)
+5. **De-risk iter-0 the cheap way first (spec §8.5 / O4):** generate ONE fixed self-play dataset on the IG-optional config, `--rl-mode` fine-tune once (no loop), eval. A clean offline improvement validates data→train→export→eval with zero self-play-poisoning risk. Optionally O1 (deep-sim ~10k–50k early batch overnight) for cleaner labels.
+6. **Run the gated loop** via `eval/run_iteration.ps1`: iter-0 (wide-untrained anchor = current `v221` on the IG-optional config) → iter-1 → 3-anchor eval {wide-untrained iter-0, `DSNN_Mixed35_5var`, `STEAMAI`} with Wilson CIs + sequential 128→256→512 → human-reviewed promote/reject/inconclusive. **Measure games/hr at the chosen N before any AWS spend.**
 
 **⚪ Optional / parallel (not blockers):**
 - Linux/WSL2 build is **configured but never compiled** (`build-linux/` has CMakeCache but no binaries). Only needed if you want WSL2 self-play; the proof-of-life is native-Windows, so this is deferrable. To finish: `ninja -C build-linux` (GUI already OFF).
