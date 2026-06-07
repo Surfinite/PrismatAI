@@ -1,6 +1,6 @@
 {
     "schema_version": "v2",
-    "feature_revision": "v2.2",
+    "feature_revision": "v2.2.1",
     "architecture": "deepsets",
     "num_units": 116,
     "unit_index_hash": "c86aac391aed5530d7f9f9d6ae4567a40b39a128e6ff982c911c37b90d83ac2e",
