@@ -389,6 +389,11 @@ def run_selfplay_block(dave_bin, N, vectorize_out, schema=None):
     V2 shards -> vectorize_v2 -> H5 -> metrics_from_h5. Returns the metrics dict."""
     block = f"RL_Cal_N{N}"
     export_dir = os.path.join(dave_bin, "asset", "training", f"rl_cal_N{N}")
+    # Clear stale shards from a prior/aborted run: the C++ export counter resets to 0 each
+    # Prismata_Testing run, so leftover higher-numbered selfplay_*.jsonl would be wrongly
+    # concatenated into this N's metrics (same class as the run_iteration.ps1 Stage-1 clear).
+    for _stale in glob.glob(os.path.join(export_dir, "selfplay_*.jsonl")):
+        os.remove(_stale)
     set_block_run(dave_bin, block, True)
     try:
         p = subprocess.run([os.path.join(dave_bin, "Prismata_Testing.exe")],
