@@ -192,6 +192,11 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
                 params.setTimeLimit((size_t)dsnnTimeLimit);
                 params.setMaxTraversals(100000);
                 params.setMaxChildren(40);
+                // cValue: default 0.3 (strong). Our cValue sweep found 2.0 -- the engine default --
+                // is the WEAKEST setting (strength is monotonic in 1/c). Override via PRISMATA_DSNN_CVALUE.
+                const char * cvalEnv = std::getenv("PRISMATA_DSNN_CVALUE");
+                const double cval = (cvalEnv && cvalEnv[0] != '\0') ? atof(cvalEnv) : 0.3;
+                params.setCValue(cval);
                 params.setRootMoveIterator(Players::Player_One, rootI1);
                 params.setRootMoveIterator(Players::Player_Two, rootI2);
                 params.setMoveIterator(Players::Player_One, moveI1);
@@ -201,8 +206,8 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
 
                 aiPlayer = PlayerPtr(new Player_UCT(activePlayer, params));
 
-                fprintf(stderr, "FORCE_DSNN: '%s' -> UCT+NeuralNet, weights=%s, timeLimit=%dms\n",
-                        requestedName.c_str(), weightsName.c_str(), dsnnTimeLimit);
+                fprintf(stderr, "FORCE_DSNN: '%s' -> UCT+NeuralNet, weights=%s, timeLimit=%dms, cValue=%.2f\n",
+                        requestedName.c_str(), weightsName.c_str(), dsnnTimeLimit, cval);
             }
             else
             {
