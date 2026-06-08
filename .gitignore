@@ -252,12 +252,23 @@ tmp_swf_extract/
 tmp_stdout.txt
 tmp_stderr.txt
 
-# --- Tools directory (sniffer, advisor, stats — local only) ---
-tools/
-# Exception: Godot 3D viewer preprocessor tools
-!tools/card_id_map.js
-!tools/position_calculator.js
-!tools/snapshot_schema.js
+# --- Tools directory: default-deny CONTENTS, explicitly allow real tooling ---
+# Large data/dists/binaries, personal replay-code lists (my_replay_codes_*.txt) and
+# .excalidraw diagrams stay ignored; genuine scripts + harnesses + tests are tracked.
+# Use `tools/*` (NOT `tools/`) so git can honor the negations below — a blanket `tools/`
+# exclude blocks ALL re-includes beneath it (which is why tooling had to be force-added).
+tools/*
+!tools/parity/
+!tools/tests/
+!tools/__tests__/
+!tools/*.py
+!tools/*.js
+!tools/*.sh
+!tools/requirements-explorer.txt
+# ...but never the caches (re-denied even though *.py/*.js re-include their siblings):
+tools/__pycache__/
+tools/parity/__pycache__/
+tools/tests/__pycache__/
 !tools/replay_to_snapshots.js
 !tools/extract_viewer_assets.js
 !tools/audit_visual_fidelity.js
