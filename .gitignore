@@ -269,6 +269,9 @@ tools/*
 tools/__pycache__/
 tools/parity/__pycache__/
 tools/tests/__pycache__/
+
+# --- eval scratch (logs, intermediate comparison data, calib scratch dir) ---
+eval/_*
 !tools/replay_to_snapshots.js
 !tools/extract_viewer_assets.js
 !tools/audit_visual_fidelity.js

@@ -146,3 +146,23 @@ ambiguity on the iter-0 anchor. All fixes below are **applied + verified** this 
 - **Then:** N-calibration (`calibrate_n.py`, now on v221) → freeze N → O4 offline de-risk → gated `run_iteration.ps1`.
 - **Open verification:** the extractor's `--ig-only` active-player heuristic (turn-parity) needs validating
   against the stateToCppJSON active-player convention before trusting it to auto-mine IG states from codes.
+
+### Session-2 results (2026-06-08): N-calibration done + IG human-vs-net
+
+- **N-calibration COMPLETE → `recommended_N = 256`** (`eval/n_calibration.json`). Smallest N passing all
+  non-degeneracy gates under BOTH the (resignation-biased) human band AND the correct MB full-wipeout band
+  [16,45]; N=100 fails game-length (45.3, weak/long play), N≥256 all pass. Game length plateaus ~38-40 (in-band),
+  `wr_vs_deploy` climbs 0.25→0.44 with N, `root_children≈9`/never-truncated (MaxChildren never binds). **256 is
+  frozen into `RL_SelfPlay.MaxTraversals`.** Baseline-corpus caveat fixed this session (resignation vs wipeout —
+  see the `calibrate_n.py --baseline-h5` change; default now `fleet_v4_v2`).
+- **ig_battery populated with 38 real F6 IG states** (5 human games) + ktink; all action-phase, red available,
+  deduped. Tooling: `eval/f6_to_request.py` (F6→request), `eval/ig_human_clicks.js` (oracle_diff align →
+  human IG clicks/turn), `eval/ig_net_clicks.py` (net argmax IG vs human merge).
+- **IG human-vs-net (the headroom read):** v221 matches the human IG-click count **23/38 = 61%** exactly;
+  divergences almost all ±1, with a **mild residual OVER-fire** (10 net>human, 5 net<human). So the IG axis is
+  **broadly human-like but NOT saturated** — small, non-zero headroom (residual over-fire echoing a much-milder
+  version of the old MB over-click). Caveat: human ≠ optimal, so some net-disagreements may be fine/better.
+  Implication: expect a **modest `d_rl`**; read flat-after-triage as low-headroom, not failure (spec §1).
+- **NEXT: O4 cheap offline de-risk** — generate ONE fixed self-play dataset at N=256 on the IG-optional config,
+  `--rl-mode` fine-tune once (no loop), eval. Validates data→train→export→eval with zero self-play-poisoning
+  risk AND shows whether RL nudges the residual IG over-fire down (+ win-rate). Then the gated loop.
