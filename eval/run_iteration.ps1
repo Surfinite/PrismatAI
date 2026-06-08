@@ -134,11 +134,13 @@ if (Test-Path $selfplayDir)  { Remove-Item "$selfplayDir/selfplay_*.jsonl" -Erro
 if (Test-Path $parityStates) { Remove-Item "$parityStates/sp_*.json"        -ErrorAction SilentlyContinue }
 Edit-Config -Op traversals -Name RL_SelfPlay -Value $N
 Edit-Config -Op run -Name RL_Step2_Smoke -Value true
+Push-Location $bin   # the exe resolves asset/config/* (cardLibrary.jso, config.txt) CWD-relative
 try {
     & "$bin/Prismata_Testing.exe"
     if ($LASTEXITCODE -ne 0) { throw "Prismata_Testing.exe (self-play) exited $LASTEXITCODE" }
 }
 finally {
+    Pop-Location
     Edit-Config -Op run -Name RL_Step2_Smoke -Value false
 }
 
