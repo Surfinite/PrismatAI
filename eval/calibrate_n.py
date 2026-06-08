@@ -469,7 +469,7 @@ def degenerate(metrics, base_mu, base_sd):
     N = metrics["N"]
     ml = metrics.get("mean_game_length")
     if ml is not None and base_sd > 0 and abs(ml - base_mu) > LEN_SIGMA * base_sd:
-        return (f"game_length {ml:.1f} outside human {base_mu:.1f}+/-{LEN_SIGMA:.0f}sigma "
+        return (f"game_length {ml:.1f} outside baseline {base_mu:.1f}+/-{LEN_SIGMA:.0f}sigma "
                 f"({LEN_SIGMA * base_sd:.1f})")
     p0 = metrics.get("p0_wr")
     if p0 is not None and not (WR_BAND[0] <= p0 <= WR_BAND[1]):
@@ -492,8 +492,14 @@ def degenerate(metrics, base_mu, base_sd):
 
 def main():
     ap = argparse.ArgumentParser(description="N-calibration sweep + non-degeneracy check (A5).")
-    ap.add_argument("--human-h5", required=True,
-                    help="vectorized human baseline H5 (e.g. training/data/human_1800_v2.h5)")
+    ap.add_argument("--baseline-h5", default=os.path.join(REPO, "training", "data", "fleet_v4_v2.h5"),
+                    help="game-length baseline H5. MUST be a FULL-WIPEOUT corpus (MB self-play), NOT a "
+                         "human corpus: human games end in RESIGNATION (lengths biased SHORT), while RL "
+                         "self-play has resignation DISABLED and plays to wipeout (~5 turns longer). "
+                         "Default: MB fleet_v4_v2 (mu~30.5, 2sigma~[16,45]).")
+    ap.add_argument("--human-h5", default=None,
+                    help="DEPRECATED alias for --baseline-h5 (back-compat). Do NOT pass a human corpus "
+                         "here -- resignation bias makes the game-length band too strict (see --baseline-h5).")
     ap.add_argument("--battery", default=os.path.join(HERE, "calib_states"),
                     help="dir of seeded F6-dump/replay states (~20 spanning turn/resources/IG)")
     ap.add_argument("--dave-bin", default=r"c:/libraries/PrismataAI-dave-master/bin",
@@ -514,9 +520,13 @@ def main():
     dave_exe = args.dave_exe or os.path.join(args.dave_bin, "PrismataAI.exe")
     os.makedirs(args.scratch, exist_ok=True)
 
-    base_mu, base_sd = human_baseline_len(args.human_h5)
-    print(f"human baseline game length: mu={base_mu:.2f} sigma={base_sd:.2f} "
-          f"(2sigma band = [{base_mu - LEN_SIGMA*base_sd:.1f}, {base_mu + LEN_SIGMA*base_sd:.1f}])")
+    baseline_h5 = args.baseline_h5 if (args.baseline_h5 and os.path.exists(args.baseline_h5)) else args.human_h5
+    if not baseline_h5 or not os.path.exists(baseline_h5):
+        ap.error("no length-baseline H5 found; pass --baseline-h5 <MB full-wipeout corpus>")
+    base_mu, base_sd = human_baseline_len(baseline_h5)
+    print(f"length baseline ({os.path.basename(baseline_h5)}, full-wipeout MB): mu={base_mu:.2f} "
+          f"sigma={base_sd:.2f} (2sigma band = "
+          f"[{base_mu - LEN_SIGMA*base_sd:.1f}, {base_mu + LEN_SIGMA*base_sd:.1f}])")
 
     records = []
     for N in args.ns:
