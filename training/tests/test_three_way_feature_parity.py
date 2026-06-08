@@ -44,7 +44,7 @@ import numpy as np  # noqa: E402
 # --- locate dependencies (skip if any missing) ---------------------------------
 DAVE = os.environ.get("DAVE_BIN",
     "c:/libraries/PrismataAI-dave-master/bin/Prismata_Standalone.exe")
-WEIGHTS = "asset/config/neural_weights_mixed_v22.bin"             # 15-global v2.2
+WEIGHTS = "asset/config/neural_weights_mixed_v221.bin"           # 15-global v2.2.1 (deployed RL init)
 REPLAYS_DIR = os.environ.get("REPLAYS_DIR",
     "c:/libraries/prismata-replay-parser/replays_archive")
 DUMP_JS = os.path.join(REPO, "js_engine", "dump_shared_state.js")
@@ -215,6 +215,20 @@ def main():
         print(f"{failed} parity check(s) FAILED — train/inference feature skew present.")
         sys.exit(1)
     print("Three-way feature parity holds.")
+
+
+def test_three_way_feature_parity():
+    """pytest entry point. The body lives in main() (rich direct-run output); this wrapper
+    runs the script and turns its result into a REAL pytest verdict so `python -m pytest` can
+    no longer silently collect ZERO tests. A missing-dependency SKIP surfaces as a visible
+    pytest.skip (NOT a green pass), and any parity FAIL fails the test."""
+    import pytest
+    r = subprocess.run([sys.executable, os.path.abspath(__file__)],
+                       capture_output=True, text=True)
+    out = (r.stdout or "") + (r.stderr or "")
+    if "SKIP three-way feature parity" in out:
+        pytest.skip(out.strip().splitlines()[-1] if out.strip() else "dependencies absent")
+    assert r.returncode == 0 and "Three-way feature parity holds." in out, out[-2000:]
 
 
 if __name__ == "__main__":

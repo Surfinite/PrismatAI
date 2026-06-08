@@ -93,7 +93,7 @@ which the counter would under-count as 1. Curated cases are chosen so this is un
 ```bash
 python eval/tactical_suite.py \
   --player RL_Eval \
-  --weights neural_weights_mixed_35prop.bin \
+  --weights neural_weights_mixed_v221.bin \
   --dave-exe c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe
 # first run with no eval/tactical_baseline.json -> writes the baseline (exit 0)
 python eval/tactical_suite.py --write-baseline   # re-persist current results as the regression baseline

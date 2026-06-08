@@ -62,7 +62,7 @@ To run it:
            --human-h5 training/data/human_1800_v2.h5 \
            --battery eval/calib_states \
            --dave-bin c:/libraries/PrismataAI-dave-master/bin \
-           --weights neural_weights_mixed_35prop.bin
+           --weights neural_weights_mixed_v221.bin
   5. Output: eval/n_calibration.json (per-N metrics incl. the eps curve +
      root_children/root_truncated co-instrumentation + degenerate_reason, and
      recommended_N). Then update RL_SelfPlay's MaxTraversals to recommended_N by hand.
@@ -495,7 +495,7 @@ def main():
                     help="dir holding Prismata_Testing.exe / PrismataAI.exe / asset/config")
     ap.add_argument("--dave-exe", default=None,
                     help="responder exe for query_move.js (default: <dave-bin>/PrismataAI.exe)")
-    ap.add_argument("--weights", default="neural_weights_mixed_35prop.bin",
+    ap.add_argument("--weights", default="neural_weights_mixed_v221.bin",
                     help="frozen production net (resolved under <dave-bin>/asset/config/)")
     ap.add_argument("--schema", default=os.path.join(REPO, "training", "schema_v2.json"))
     ap.add_argument("--ns", type=int, nargs="+", default=NS, help="N grid to sweep")

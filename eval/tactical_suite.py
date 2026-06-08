@@ -229,7 +229,7 @@ def write_backlog(forced_cases):
 def main():
     ap = argparse.ArgumentParser(description="O7 tactical regression suite (Infusion-Grid CLICK COUNT).")
     ap.add_argument("--player", default="RL_Eval", help="injected player name (default: RL_Eval)")
-    ap.add_argument("--weights", default="neural_weights_mixed_35prop.bin",
+    ap.add_argument("--weights", default="neural_weights_mixed_v221.bin",
                     help="candidate weights file (resolved by the responder under asset/config/)")
     ap.add_argument("--dave-exe",
                     default=r"c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe",

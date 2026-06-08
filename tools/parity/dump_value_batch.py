@@ -1,10 +1,10 @@
 """Scale the C++<->PyTorch value export-parity harness to ~1000 self-play states.
 
 Runs PrismataAI.exe --dump-features on each sampled self-play state JSON, then compares
-against the matched PyTorch reference via compare_parity_35prop.py. Exits nonzero if the
+against the matched PyTorch reference via compare_parity_deepsets.py. Exits nonzero if the
 worst |value_cpp - value_torch| >= 1e-3.
 
-The 5-state harness (tools/parity/compare_parity_35prop.py with the 5 final35_state_*.json
+The 5-state harness (tools/parity/compare_parity_deepsets.py with the 5 final35_state_*.json
 fixtures) only covers a handful of hand-picked positions. This driver fans the same
 comparison out over hundreds-to-1000 real self-play states emitted by the
 SelfPlayV2Exporter parity sidecar (bin/asset/training/parity_states/sp_*.json), giving a
@@ -16,7 +16,7 @@ PrismataAI.exe --dump-features consumes directly (no "gameState" wrapper needed)
 MATCHED-TRIPLE RULE: --weights (the C++ --dump-features weights) MUST correspond to
 --pt/--bin (the Python reference), or parity spuriously fails. Defaults use the interim
 35-prop triple that the 5-state harness uses: --weights = the interim
-docs/scratch/deepsets_mixed_35prop.bin, compared against compare_parity_35prop.py's
+docs/scratch/deepsets_mixed_35prop.bin, compared against compare_parity_deepsets.py's
 interim defaults (ep30 .pt + interim .bin). For an RL candidate, pass
 --weights candidate.bin --pt candidate.pt --bin candidate.bin so all three stay matched.
 
@@ -40,16 +40,16 @@ def main():
     ap.add_argument("--states-dir", required=True,
                     help="dir of self-play state JSONs (sp_*.json from the parity sidecar)")
     ap.add_argument("--weights", required=True,
-                    help="weights .bin for the C++ --dump-features pass (absolute, or "
-                         "asset/config-relative as the exe resolves it)")
+                    help="weights .bin for the C++ --dump-features pass — pass an ABSOLUTE path "
+                         "(the exe opens it literally / cwd-relative, NOT asset/config-relative)")
     ap.add_argument("--dave-bin", required=True,
                     help="dave engine bin/ dir (holds PrismataAI.exe + asset/)")
     ap.add_argument("--parity-dir", default="c:/libraries/PrismataAI-dave-master/tools/parity",
-                    help="dir holding compare_parity_35prop.py (dumps written to its _batch_out/)")
+                    help="dir holding compare_parity_deepsets.py (dumps written to its _batch_out/)")
     ap.add_argument("--pt", default=None,
-                    help="PyTorch .pt reference (passed through to compare_parity_35prop.py)")
+                    help="PyTorch .pt reference (passed through to compare_parity_deepsets.py)")
     ap.add_argument("--bin", default=None,
-                    help="DSN2 .bin reference (passed through to compare_parity_35prop.py)")
+                    help="DSN2 .bin reference (passed through to compare_parity_deepsets.py)")
     ap.add_argument("--limit", type=int, default=1000,
                     help="max number of state JSONs to sample (default 1000)")
     args = ap.parse_args()
@@ -79,9 +79,9 @@ def main():
             sys.exit(2)
         dumps.append(out)
 
-    print(f"dumped {len(dumps)} states; invoking compare_parity_35prop.py ...", file=sys.stderr)
+    print(f"dumped {len(dumps)} states; invoking compare_parity_deepsets.py ...", file=sys.stderr)
 
-    # compare_parity_35prop.py takes the dumps as positional args. Passing ~1000 paths at
+    # compare_parity_deepsets.py takes the dumps as positional args. Passing ~1000 paths at
     # once overflows the Windows command-line length limit (WinError 206), so chunk the
     # dumps across several invocations and aggregate the pass/fail across all chunks. The
     # comparison is per-state and independent, so chunking does not change the verdict.
@@ -98,7 +98,7 @@ def main():
     nchunks = (len(dumps) + CHUNK - 1) // CHUNK
     for ci, start in enumerate(range(0, len(dumps), CHUNK)):
         chunk = dumps[start:start + CHUNK]
-        cmd = [sys.executable, "compare_parity_35prop.py"] + chunk + ref_args
+        cmd = [sys.executable, "compare_parity_deepsets.py"] + chunk + ref_args
         # Capture so we can aggregate a single global worst |dval| across all chunks,
         # while still streaming each chunk's table through to the console.
         r = subprocess.run(cmd, cwd=args.parity_dir,

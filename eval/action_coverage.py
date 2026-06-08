@@ -100,7 +100,8 @@ def main():
     ap.add_argument("--dave-exe", required=True)
     ap.add_argument("--weights", required=True)
     ap.add_argument("--manifest", required=True)
-    ap.add_argument("--battery", default="eval/ig_battery")
+    ap.add_argument("--battery", default=os.path.join(HERE, "ig_battery"),
+                    help="dir of IG-owning query_move request JSONs (default: eval/ig_battery)")
     a = ap.parse_args()
     with open(a.manifest) as f:
         m = json.load(f)

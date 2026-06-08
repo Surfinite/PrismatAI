@@ -2,9 +2,10 @@
 # RL Self-Play — one-iteration driver (Task 14)
 #
 # DEFERRED — do not run until the "Run prerequisites" in eval/rl_campaign.md are
-# satisfied (recommended_N + ε from calibrate_n.py; the genuine wide-untrained
-# iter-0 weights repointed onto RL_Eval_iter0; PrismataAI.exe.ORIG on disk;
-# eval/calib_states/ + eval/ig_battery/ populated).
+# satisfied (recommended_N + ε from calibrate_n.py; eval/calib_states/ +
+# eval/ig_battery/ populated). iter-0 anchor = v221 on RL_Eval_iter0 (per the
+# 2026-06-07 decision — NOT a random wide-untrained net); PrismataAI.exe.ORIG is
+# installed in dave bin/.
 #
 # The gate (promote / reject / inconclusive) is a HUMAN decision on the eval
 # manifest + dashboard — this driver only PRODUCES the manifest + dashboard and
@@ -23,7 +24,7 @@
 # =============================================================================
 param(
     [int]$K = 1,        # RL iteration index
-    [int]$N = 512,      # self-play MaxTraversals (PLACEHOLDER; set from calibrate_n.py recommended_N)
+    [int]$N = 0,        # self-play MaxTraversals; 0 => auto-read recommended_N from eval/n_calibration.json (pass -N for a smoke)
     [int]$Window = 5    # replay-buffer window W
 )
 $ErrorActionPreference = 'Stop'
@@ -48,9 +49,9 @@ $modelDir    = "$train/models/rl_iter_$K"
 $bestPt      = "$modelDir/swa_model.pt"
 $candBin     = "neural_weights_rl_iter$K.bin"          # filename only — resolved under bin/asset/config
 $candBinPath = "$bin/asset/config/$candBin"
-$parentBin   = "neural_weights_mixed_35prop.bin"        # current promoted net (gating parent)
+$parentBin   = "neural_weights_mixed_v221.bin"          # current promoted net (gating parent / manifest label)
 $origExe     = "$bin/PrismataAI.exe.ORIG"               # STEAMAI baseline (run_eval contamination assert)
-$parityStates = "$dave/tools/parity"                    # final35_state_*.json battery
+$parityStates = "$bin/asset/training/parity_states"     # native GameState sidecar (sp_*.json) from self-play
 $schema      = "$train/schema_v2.json"
 $propTable   = "$train/property_table.json"
 $humanH5     = "$train/data/human_1800_v2.h5"
@@ -105,6 +106,18 @@ print("cfg %s %s -> %s" % (op, name, value))
     if ($LASTEXITCODE -ne 0) { throw "Edit-Config $Op $Name failed" }
 }
 
+# --- Resolve self-play N (refuse the un-calibrated placeholder) --------------
+if ($N -le 0) {
+    $ncal = "$eval/n_calibration.json"
+    if (-not (Test-Path $ncal)) {
+        throw "N not calibrated: run eval/calibrate_n.py (writes eval/n_calibration.json), then re-run; or pass -N <int> explicitly for a smoke."
+    }
+    $recN = (Get-Content -Raw $ncal | ConvertFrom-Json).recommended_N
+    if (-not $recN) { throw "n_calibration.json has no recommended_N (no N passed the non-degeneracy check) — pass -N explicitly or re-sweep." }
+    $N = [int]$recN
+    Write-Host "N resolved from $ncal : recommended_N = $N"
+}
+
 Write-Host "=== RL iteration $K  (N=$N, W=$Window) ==="
 
 # -----------------------------------------------------------------------------
@@ -114,6 +127,11 @@ Write-Host "=== RL iteration $K  (N=$N, W=$Window) ==="
 #    Set RL_SelfPlay's MaxTraversals to $N first (the calibrated N).
 # -----------------------------------------------------------------------------
 Write-Host "`n[1/8] self-play -> $selfplayDir"
+# Clear stale shards + parity sidecar from any prior iteration: the C++ export game
+# counter resets to 0 each run, so a shorter run would otherwise leave higher-numbered
+# selfplay_*.jsonl that Stage 2's glob would wrongly concatenate into this iter's data.
+if (Test-Path $selfplayDir)  { Remove-Item "$selfplayDir/selfplay_*.jsonl" -ErrorAction SilentlyContinue }
+if (Test-Path $parityStates) { Remove-Item "$parityStates/sp_*.json"        -ErrorAction SilentlyContinue }
 Edit-Config -Op traversals -Name RL_SelfPlay -Value $N
 Edit-Config -Op run -Name RL_Step2_Smoke -Value true
 try {
@@ -207,7 +225,7 @@ if ($LASTEXITCODE -ne 0) { throw "run_eval.py exited $LASTEXITCODE" }
 Write-Host "`n[8/8] action coverage + dashboard"
 python "$eval/action_coverage.py" `
     --selfplay-jsonl-dir $selfplayDir --dave-exe "$bin/PrismataAI.exe" `
-    --weights $candBin --manifest $manifest
+    --weights $candBin --battery "$eval/ig_battery" --manifest $manifest
 if ($LASTEXITCODE -ne 0) { throw "action_coverage.py exited $LASTEXITCODE" }
 python "$eval/render_dashboard.py"
 

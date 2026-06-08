@@ -3,6 +3,10 @@
 > **You are picking up the RL self-play loop.** The build is ~90% done; a short, well-defined prep
 > list + one hard blocker stand between here and the first local iteration. This doc is the
 > authoritative current state (audited 2026-06-07) — trust it over the older docs where they conflict.
+>
+> **⚠️ READ THE LATE-2026-06-07 ADDENDUM AT THE BOTTOM FIRST** — an 8-agent re-audit + fix pass ran after
+> this doc was written. It found 2 run-fatal driver bugs + a stale-weights cluster the §3/§4 lists missed,
+> applied the fixes, and resolved the iter-0 design question. The addendum supersedes §2–§4 where they conflict.
 
 ## 0. Read first (but mind the dates)
 
@@ -80,3 +84,65 @@ A **defensible local go/no-go**, not a finished agent: does RL self-play improve
 
 ---
 *Companion context: `docs/dsnn-feature-schema.md` (v2.2.1), `docs/rl-action-space-partials-map.md`, the three-way parity gate `training/tests/test_three_way_feature_parity.py`, and `eval/eval_deepsets_h5.py`.*
+
+---
+
+## Session addendum — 2026-06-07 (late): independent re-audit + fix pass (AUTHORITATIVE)
+
+An 8-agent evidence-based re-audit re-verified every load-bearing claim above against the actual files in
+both repos (running the tests/commands, not trusting prose). The infra is genuinely solid — but the audit
+found **2 run-fatal driver bugs and a stale-weights cluster the §3/§4 lists missed**, and surfaced a design
+ambiguity on the iter-0 anchor. All fixes below are **applied + verified** this session.
+
+### Decisions (user, 2026-06-07)
+- **iter-0 anchor = v221, NOT a random net.** A random-init anchor would make `d_rl` fire vacuously (beating
+  random is trivial). `RL_Eval_iter0` = `neural_weights_mixed_v221.bin` is correct as-is; `init_random_deepsets.py`
+  is **not needed**. `rl_campaign.md` Run-prereq item 2 was rewritten accordingly (and item 6, the stale
+  "run_eval.main() is a skeleton" note, retired).
+- **Strategic flag (open):** the user reports v221 *already* plays IG correctly once the action space is opened
+  (humans rarely over-click IG; human games are in its training mix). So the IG axis may have **little headroom**
+  → a flat `d_rl` would mean "pipeline validated, axis saturated," NOT "RL fails." Do the **O4 cheap offline
+  de-risk first** (one fixed dataset, fine-tune once, eval) to validate data→train→export→eval; a headroom-bearing
+  axis may be needed to actually demonstrate an RL *win* before AWS.
+
+### Fixes applied this session
+1. **Stale weights repointed → `neural_weights_mixed_v221.bin`** (the §3/§4 lists only named 2 of these):
+   dave `config.txt` `RL_Explore` + all six `RL_SelfPlay_N100..N5000` (the N-cal self-play movers — would have
+   run the multi-hour N-sweep on the wrong 14-global net); `eval/calibrate_n.py` + `eval/tactical_suite.py`
+   `--weights` defaults; `run_iteration.ps1:51 $parentBin`. (The legitimate `DSNN_M35*`/`Mixed35` baselines
+   stay on 35prop by design.) Verified: **0 RL_* players still on 35prop**; config.txt still strict-JSON.
+2. **RUN-FATAL parity gate fixed:** `tools/parity/dump_value_batch.py` spawned `compare_parity_35prop.py`
+   (does not exist) → now `compare_parity_deepsets.py` (identical CLI, generation-agnostic, handles 15-global).
+3. **RUN-FATAL states-dir fixed:** `run_iteration.ps1 $parityStates` pointed at `tools/parity` (dump *outputs*,
+   14-global) → now `$bin/asset/training/parity_states` (the native `sp_*.json` GameState sidecar).
+4. **`PrismataAI.exe` re-synced** to the current build (was a stale 09:00 build predating the is_blocking
+   rebuild) and the genuine **721,920-byte `PrismataAI.exe.ORIG`** installed in dave `bin/` (from the Steam
+   install) → STEAMAI anchor no longer silently deferred.
+5. **`run_iteration.ps1` hardened:** Stage-1 now clears stale `selfplay_*.jsonl` + `sp_*.json` before self-play
+   (export counter resets to 0 each run → cross-iter contamination); N now auto-reads `eval/n_calibration.json`
+   (`-N 0` placeholder refused — must calibrate or pass `-N` explicitly); Stage-8 passes `--battery` explicitly.
+6. **Three-way parity gate hardened:** pinned to `neural_weights_mixed_v221.bin`; added a `def test_*` pytest
+   wrapper so `python -m pytest` no longer collects **0 tests**, and a missing-dep SKIP is now a *visible*
+   `pytest.skip` (not a silent green). Direct run still **52/52**.
+7. **Batteries:** `eval/calib_states/` + `eval/ig_battery/` created and seeded (smoke). New extractor
+   `eval/replay_to_request.js` (replay code + ply → full `{mergedDeck, gameState, aiParameters}` request;
+   `--ig-only` filter). `calib_states` seeded with 3 action-phase states (ktink + gNUTm p4/p6); `ig_battery`
+   has the ktink IG state. **Full IG curation pending user states** (see below).
+
+### Doc corrections
+- `tactical_cases/` has **1** real known-move case (ktink), not "2" as §2/§3 said (gate is non-vacuous but thin —
+  consider adding a 2nd case). `ForcedCards:["Hotel"]` is in **16** config blocks, not 13 (cosmetic).
+- The eval scripts are all real (not stubs); `eval/tests/` = **24 passed**. MB-val of v221 SWA on
+  `local_mbvmb_v2` reproduced **exactly** (0.3458 / 81.8% / 0.1164). C++ telemetry/iterator/RNG/sampler all
+  verified in source + at runtime.
+
+### Remaining before the first real iteration
+- **ig_battery full curation (USER):** best source = **F6 dumps taken in the ACTION phase (post-swoosh)** at a
+  turn where the active player owns a **ready** IG with **red** available — these drop straight into
+  `eval/ig_battery/` (that's exactly how the ktink case was made; replay-code extraction gives turn-START
+  snapshots that are pre-swoosh DEFENSE on attacked turns → IGs tapped). Human games where IG is already bought
+  are ideal. For non-IG `calib_states`, replay codes work — the extractor handles them (codes
+  `6OtS1-OZsWI / Ou1Me-@rcWv / KtInk-pMiQf` are NOT in the local archive → would need fetching).
+- **Then:** N-calibration (`calibrate_n.py`, now on v221) → freeze N → O4 offline de-risk → gated `run_iteration.ps1`.
+- **Open verification:** the extractor's `--ig-only` active-player heuristic (turn-parity) needs validating
+  against the stateToCppJSON active-player convention before trusting it to auto-mine IG states from codes.

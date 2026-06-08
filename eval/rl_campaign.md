@@ -202,28 +202,16 @@ These MUST be satisfied before `eval/run_iteration.ps1 -K 1` is run for real. No
    (A5) → set `MaxTraversals` on `RL_SelfPlay` (and the `-N` arg to the driver) and `EpsilonUniform` on the
    self-play players. Until then the placeholders (N=512, ε=0.25) stand.
 
-2. **Wide-untrained iter-0 weights (MISSING — currently a placeholder).** `RL_Eval_iter0.WeightsFile`
-   currently points at the PLACEHOLDER `neural_weights_mixed_35prop.bin` (the *trained* production net), NOT
-   a genuine pre-RL / wide-untrained net. The iter-0 anchor is the regression-gate reference (A1), so it MUST
-   be the real wide-untrained net. To produce it (DO NOT run here — document only):
-   ```bash
-   # 1. Initialise a DeepSets model at the PRODUCTION architecture with RANDOM weights and save a .pt.
-   #    (e.g. a tiny script that builds model_deepsets.PrismataDeepSets(...) with the production
-   #     hidden_dim / num_layers / token_dim, then torch.save({'model_state_dict': model.state_dict()})
-   #     WITHOUT any training step.)
-   python training/init_random_deepsets.py \
-       --property-table training/property_table.json \
-       --schema training/schema_v2.json \
-       --out training/models/rl_iter0/wide_untrained.pt
-   # 2. Export to the C++ binary.
-   python training/export_weights_v2.py \
-       training/models/rl_iter0/wide_untrained.pt \
-       c:/libraries/PrismataAI-dave-master/bin/asset/config/neural_weights_rl_iter0.bin \
-       --property-table training/property_table.json
-   # 3. Repoint the anchor: set RL_Eval_iter0.WeightsFile -> "neural_weights_rl_iter0.bin" in config.txt.
-   ```
-   (`init_random_deepsets.py` is NOT created in this task — it is the one small piece the deferred run owner
-   must add, or hand-build the random `.pt` inline.)
+2. **iter-0 anchor = v221 (RESOLVED 2026-06-07 — NOT a random net).** `RL_Eval_iter0.WeightsFile` =
+   `neural_weights_mixed_v221.bin`, the pre-RL supervised net, run on the **SAME** IG-optional config + **SAME**
+   eval budget as the candidate. This IS the intended A1 regression-gate reference: `d_rl` then isolates RL's
+   **marginal** contribution over the supervised starting point (a clean controlled A/B). A **random-init**
+   anchor was explicitly **REJECTED** — beating a random net is trivial, so it would make the GO gate fire
+   *vacuously*; and RL inits from v221 (§1), not from scratch, so v221 is the correct "where the widened-axis
+   net started" reference. Therefore `init_random_deepsets.py` is **NOT needed** and the config is already
+   correct (dave `eca0469`). CAVEAT: at iter-1, `d_rl` (candidate vs v221) coincides with the promotion gate
+   (candidate vs parent = v221); from iter-2 on they diverge — `d_rl` measures *cumulative* gain vs the fixed
+   v221 anchor, the promotion gate measures *marginal* gain vs the previous iteration.
 
 3. **STEAMAI baseline `PrismataAI.exe.ORIG` on disk.** `run_eval.py` asserts it exists (the contamination
    guard — without it the eval would silently diff against our DSNN swap-in). It must be the preserved
@@ -238,15 +226,13 @@ These MUST be satisfied before `eval/run_iteration.ps1 -K 1` is run for real. No
 5. **`human_1800_v2.h5`** — EXISTS at `training/data/human_1800_v2.h5`; it is the **rehearsal** mix
    (`--human-file`) AND the game-length baseline file.
 
-6. **`eval/run_eval.py::main()` is an incomplete Task-7 skeleton.** It currently writes
-   `anchors:{}` / `pools:{}` and never invokes its own `run_cpp_tournament` / `sequential_gate` /
-   `run_steam` helpers, so Stage 7 of `run_iteration.ps1` produces an **EMPTY-anchors manifest**
-   (the dashboard then degrades every anchor cell to `-`). Before the eval produces real numbers,
-   the per-anchor wiring MUST be completed: flip the `RL_Eval_iter0_*` / `RL_Eval_narrow_*` config
-   blocks to `run:true`, run the C++ tournament, parse with `parse_tournament_stdout`, compute
-   Wilson / clustered CIs per anchor (A3/A4), and run the STEAMAI anchor at fixed-N per A8 using the
-   A7 seat-independent parsing. (`run_cpp_tournament` / `parse_tournament_stdout` /
-   `parse_matchup_seatindep` already exist — they just aren't called from `main()`.)
+6. **`eval/run_eval.py::main()` is COMPLETE (RESOLVED 2026-06-07 — this prereq is retired).** An earlier
+   draft called it a Task-7 skeleton writing `anchors:{}`/`pools:{}`; that is no longer true. `build_manifest()`
+   runs the real per-anchor wiring: it flips the `RL_Eval_iter0_*` / `RL_Eval_narrow_*` blocks to `run:true`,
+   runs the C++ tournament (`run_cpp_tournament`), parses the candidate's W/L/D (`parse_tournament_stdout`),
+   computes Wilson CIs per anchor, runs the STEAMAI anchor seat-independently (A7/A8), flips the blocks back
+   (in a `finally`), and computes the §3 GO inputs (`d_rl` forced / `d_reg` general). It is unit-tested
+   (`eval/tests/test_run_eval_main.py`, 7 tests). No work remains here.
 
 7. **Stage-1 self-play `rounds`.** `run_iteration.ps1` Stage 1 uses the small smoke block
    (`RL_Step2_Smoke`, `rounds:4`); for a real iteration bump the self-play rounds substantially
