@@ -166,3 +166,65 @@ ambiguity on the iter-0 anchor. All fixes below are **applied + verified** this 
 - **NEXT: O4 cheap offline de-risk** — generate ONE fixed self-play dataset at N=256 on the IG-optional config,
   `--rl-mode` fine-tune once (no loop), eval. Validates data→train→export→eval with zero self-play-poisoning
   risk AND shows whether RL nudges the residual IG over-fire down (+ win-rate). Then the gated loop.
+
+### Session-3 (2026-06-08→09): O4 de-risk → OB+5var confound (substrate was wrong) → N re-sweep + threading
+
+> **⚠️ SUPERSEDES Session-2's `recommended_N=256` and the O4 run — both ran on a HANDICAPPED config (no
+> `LiveOpeningBook2`, 1 of 5 variants; see OB+5var below). A fresh N re-sweep on the corrected config is in progress.**
+
+- **Laptop DSNN bundle (dave `80e8fe7`):** the `use_dsnn.txt` FORCE_DSNN drop-in now defaults to **cValue=0.3**
+  (env `PRISMATA_DSNN_CVALUE`) + 7→10s think, so the Steam swap-in plays a strong DSNN. Bundle at
+  `C:\libraries\dsnn_steam_bundle\` (exe + sentinel + `asset/config/{config.txt, 35prop+v221 weights}` + README).
+  Uses `HardIterator_Root` (non-OB = deployed `DSNN_Mixed35`), NOT the IG-subset/OB iterator.
+
+- **O4 de-risk RAN — pipeline mechanics validated, then killed on the confound.** Found+fixed a run-fatal
+  Stage-1 bug: `run_iteration.ps1` launched `Prismata_Testing.exe` without cwd=`$bin`, so it couldn't open
+  `asset/config/cardLibrary.jso` → abort (the ps1 had never actually been run). Fix = `Push-Location $bin`
+  (main `bd006fa`). Stages 1–6 then ran **clean**: self-play (128g) → vectorize → `--rl-mode` SWA fine-tune →
+  export → **parity gate PASSED over 1000 self-play states** → tactical (no IG regression). So
+  data→train→export→parity→tactical is mechanically sound. Killed at Stage-7 eval once the confound was found
+  (the candidate was getting crushed by full-config anchors — expected on the handicapped substrate).
+
+- **🔴 OB+5var confound — the RL substrate was WRONG (dave `40d3bdc`, FIXED + verified).**
+  `HardIterator_5var_IGsubset_Root` (root iterator ALL RL players use) wraps `HardIterator_5var_NoIG_Root`,
+  which had **collapsed to ONE variant** (`V5_CS_NoIG`) chaining only the **4-entry `DefaultOpeningBook`** —
+  silently dropping the **50-entry `LiveOpeningBook2`** AND 4 of the 5 chill-solver variants. So RL self-play +
+  eval ran a **handicapped opening regime** (couldn't buy the 3rd-Engineer book line; non-OB buy-gen caps
+  Engineers at 2). User caught it. Fix: rebuilt all 5 NoIG variants as **byte-faithful mirrors** of
+  `HardIterator_5var_Root` with ONLY the IG-firing ability stripped (`AbilityActivateUtilityLive/Click → NoIG`;
+  new `AbilityActivateUtilityClickNoIG` = `IG_Only`-filtered ActivateUtility). **Decision: RL runs on the live
+  OB + 5 variants** — config is now **one-change-from-deployed** (IG enumerated 0..N, not auto-fired). Verified:
+  engine parses/runs; runtime differential on an IG-free opening state → new IGsubset iterator == deployed
+  `HardIterator_5var_Root` (`root_children=2, argmax=0` both). NOTE the subset *requires* a NoIG inner
+  (`MoveIterator_AbilitySubset.cpp:226` only enumerates not-yet-used IGs), so re-pointing at the auto-firing
+  full 5var is impossible — the NoIG mirror is the only correct path.
+
+- **Traversal mental model (measured):** a 7s deployment turn = **~5k–22k UCT traversals** (typically ~5–8k),
+  and **never hits the 100k cap** — the *time* limit binds, not `MaxTraversals`. So **N=5000 ≈ deployment
+  strength, N=256 ≈ ~5%** (confirms 256 was far too weak). Eval is decoupled from self-play N (always full 7s →
+  ~5–8k traversals; A1).
+
+- **🟢 Self-play PARALLELIZES (the `Threads:1` setting was wrong — big AWS-cost lever).** The V2 export is
+  **thread-safe by construction**: `Tournament.cpp:163+` runs games as `std::future`s up to `_threads`
+  concurrently, each a separate `TournamentGame` with its own `SelfPlayV2Exporter`, atomic-unique `gameId`, and
+  own output file. `Threads:1` was overly conservative (carryover from the old multi-PROCESS self-play / x86 4 GB
+  limit — neither applies to this x64 build); eval/vs-deploy already run `Threads:8` with NN players. **TODO:
+  empirically verify a `Threads:8` self-play export (game count, no clobber/dup, valid records), then bump
+  `RL_Step2_Smoke` / `RL_SelfPlay` / `RL_Cal_N*` to `Threads:8`.** Self-play then scales with vCPUs.
+
+- **N re-sweep (in progress, corrected config):** grid `{256,512,1000,2000,5000}` (user dropped 100; no 10k since
+  5k≈deployment), MB full-wipeout baseline `[16,45]`. **Key finding: at 32 games/N, `wr_vs_deploy` is too noisy
+  to RANK N** (bounces 0.375/0.469/0.406/0.3125 — indistinguishable; more search can't make it weaker). So the
+  sweep gives a non-degeneracy check, NOT a quality ranking; N choice rests on non-degeneracy (≥512 pass; 256
+  flagged on a noisy `p0_wr 0.656` from 32g) + the traversal model + throughput (now cheap with Threads:8).
+  `recommended_N` pending the N=5000 point. (Self-play `p0_wr`/`wr_vs_deploy` are recomputed from the exported H5
+  records via `metrics_from_h5`, NOT from the tournament HTML — e.g. `p0_wr 0.656` = 21 P0 wins / 32 games.)
+
+- **Other fixes committed:** `calibrate_n.py` clears stale shards before each N (main `039c88e`); `tools/`
+  gitignore → default-deny + explicit-allow so real tooling tracks (main `4b3b031`); `calibrate_n` length
+  baseline → MB `fleet_v4_v2` (main `cf0d8b1`).
+
+- **Immediate next (PAUSED for user):** report the N re-sweep result → (on user go) verify Threads:8 self-play →
+  set games-count + N + threads together → redo self-play → eval, all on the corrected **5var + LiveOpeningBook2**
+  substrate. Open decisions: self-play **games count** for a real iteration (currently `RL_Step2_Smoke` rounds=64
+  = 128g, the O4 size — bump substantially); whether to weight quality (higher N) vs the smallest-passing rule.
