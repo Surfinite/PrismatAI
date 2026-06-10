@@ -31,6 +31,7 @@ class AIParameters
     std::map<std::string, PlayerPtr>        _playerMap[2];
     std::map<std::string, MoveIteratorPtr>  _moveIteratorMap[2];
     std::map<std::string, OpeningBook>      _openingBookMap[2];
+    std::map<std::string, size_t>           _openingBookRawEntryCounts;     // entry count as DEFINED in the JSON, before current-library validity filtering
     std::map<std::string, CardFilter>       _cardFilters;
     std::map<std::string, BuyLimits>        _buyLimits;
     std::map<std::string, GameState>        _stateMap;

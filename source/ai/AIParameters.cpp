@@ -7,8 +7,9 @@
 using namespace Prismata;
 
 // Create a per-player NeuralNet instance from config.
-// If WeightsFile is specified, loads that; otherwise returns nullptr.
-static NeuralNetPtr createPlayerNeuralNet(const rapidjson::Value & playerValue)
+// If WeightsFile is specified, loads it (hard abort on load failure); otherwise returns nullptr
+// (legacy global-singleton mode -- the UCTSearch value path guards the unloaded-singleton case).
+static NeuralNetPtr createPlayerNeuralNet(const rapidjson::Value & playerValue, const std::string & playerName)
 {
     auto nn = std::make_shared<NeuralNet>();
 
@@ -34,7 +35,10 @@ static NeuralNetPtr createPlayerNeuralNet(const rapidjson::Value & playerValue)
             fprintf(stderr, "AIParameters: created per-player NeuralNet from %s\n", weightsFile.c_str());
             return nn;
         }
-        fprintf(stderr, "AIParameters: WARNING: could not load per-player weights '%s'\n", weightsFile.c_str());
+        // Hard guard (Jun-10 audit): a NeuralNet player whose WeightsFile fails to load previously got only
+        // a stderr WARNING and silently fell back to the shared singleton at search time (X5b segfault risk).
+        fprintf(stderr, "FATAL: AIParameters: could not load NeuralNet weights '%s' for player '%s' (tried 'asset/config/%s' and '%s'). Aborting.\n", weightsFile.c_str(), playerName.c_str(), weightsFile.c_str(), weightsFile.c_str());
+        abort();
     }
 
     return nullptr;
@@ -312,6 +316,7 @@ void AIParameters::parseOpeningBooks(const std::string & keyName, const rapidjso
 
         _openingBookMap[Players::Player_One][name] = book;
         _openingBookMap[Players::Player_Two][name] = book;
+        _openingBookRawEntryCounts[name] = val.Size();
     }
 }
 
@@ -424,9 +429,19 @@ PPPtr AIParameters::parsePartialPlayer(const PlayerID player, const std::string 
     {
         PRISMATA_ASSERT(playerValue["filter"].IsString(), "Filter must be a string");
         const std::string filterName = playerValue["filter"].GetString();
-        PRISMATA_ASSERT(_cardFilters.find(filterName) != _cardFilters.end(), "Filter string does not exist: %s", filterName.c_str());
-        
-        filter = _cardFilters[filterName];
+
+        // Hard guard (Jun-10 audit): the soft assert + operator[] silently default-constructed an EMPTY
+        // filter for an unknown name (an empty Ability_Filter re-enables Infusion Grid auto-fire).
+        // A DEFINED-but-empty filter stays legal: match-nothing is representable ("default":false, no
+        // cards) and is identical to the pervasive no-"filter"-member default, so only undefined names abort.
+        auto filterIt = _cardFilters.find(filterName);
+        if (filterIt == _cardFilters.end())
+        {
+            fprintf(stderr, "FATAL: AIParameters: card filter '%s' not defined (referenced by partial player '%s'). Aborting.\n", filterName.c_str(), playerVariable.c_str());
+            abort();
+        }
+
+        filter = filterIt->second;
     }
 
     PPPtr playerPtr;
@@ -610,9 +625,36 @@ PPPtr AIParameters::parsePartialPlayer(const PlayerID player, const std::string 
     { 
         playerPtr = PPPtr(new PartialPlayer_ActionBuy_Random(player));
     }
-    else if (partialPlayerClassName == "ActionBuy_OpeningBook")  
-    { 
-        playerPtr = PPPtr(new PartialPlayer_ActionBuy_OpeningBook(player, _openingBookMap[player][playerValue["openingBook"].GetString()]));
+    else if (partialPlayerClassName == "ActionBuy_OpeningBook")
+    {
+        const std::string bookName = playerValue["openingBook"].GetString();
+
+        // Hard guards (Jun-10 audit): operator[] silently default-constructed and INSERTED an EMPTY book
+        // for an unknown/typo'd name (run completes exit 0, book count even goes UP, zero diagnostics).
+        auto bookIt = _openingBookMap[player].find(bookName);
+        if (bookIt == _openingBookMap[player].end())
+        {
+            fprintf(stderr, "FATAL: AIParameters: opening book '%s' not defined (referenced by partial player '%s'). Aborting.\n", bookName.c_str(), playerVariable.c_str());
+            abort();
+        }
+        if (bookIt->second.empty())
+        {
+            // Distinguish raw-empty from filtered-empty: entries referencing card types outside the CURRENT
+            // library are dropped by design (parseOpeningBooks), which is normal on the Steam-protocol
+            // merged-deck path where the library is just the game's units. A book DEFINED with 0 entries can
+            // never match in any library and is necessarily a config bug, so only that case aborts.
+            auto rawIt = _openingBookRawEntryCounts.find(bookName);
+            const size_t rawCount = (rawIt != _openingBookRawEntryCounts.end()) ? rawIt->second : 0;
+            if (rawCount == 0)
+            {
+                fprintf(stderr, "FATAL: AIParameters: opening book '%s' is EMPTY (defined with 0 entries, referenced by partial player '%s'). Aborting.\n", bookName.c_str(), playerVariable.c_str());
+                abort();
+            }
+
+            fprintf(stderr, "AIParameters: WARNING: opening book '%s' has 0 valid entries in the current card library (%zu defined, referenced by partial player '%s') - it will never fire.\n", bookName.c_str(), rawCount, playerVariable.c_str());
+        }
+
+        playerPtr = PPPtr(new PartialPlayer_ActionBuy_OpeningBook(player, bookIt->second));
     }
     else if (partialPlayerClassName == "ActionBuy_Combination")  
     { 
@@ -864,7 +906,7 @@ PlayerPtr AIParameters::parsePlayer(const PlayerID player, const std::string & p
 
         if (params.evalMethod() == EvaluationMethods::NeuralNet)
         {
-            NeuralNetPtr nn = createPlayerNeuralNet(playerValue);
+            NeuralNetPtr nn = createPlayerNeuralNet(playerValue, playerVariable);
             if (nn)
             {
                 params.setNeuralNet(nn);

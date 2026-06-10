@@ -6,8 +6,21 @@
 #include "NeuralNet.h"
 #include "MoveSampler.h"
 #include "Random.h"
+#include <cstdlib>
 
 using namespace Prismata;
+
+// X5b hard guard (Jun-10 audit): evaluateValue() on an unloaded net writes through empty scratch
+// vectors and segfaults mid-tournament (exit 139). The priors path falls back to uniform priors;
+// the value path has no sane fallback, so abort loudly pointing at the weights-load failure.
+static void checkValueNetLoaded(const NeuralNet & nn, bool perPlayerNet)
+{
+    if (!nn.isLoaded())
+    {
+        fprintf(stderr, "FATAL: UCTSearch: NeuralNet value evaluation reached an UNLOADED net (%s). Check the player's WeightsFile / --weights load failure earlier in the log. Aborting.\n", perPlayerNet ? "per-player net present but not loaded" : "no per-player net and the global singleton is not loaded");
+        abort();
+    }
+}
 
 UCTSearch::UCTSearch(const UCTSearchParameters & params) 
     : _params(params)
@@ -362,6 +375,7 @@ double UCTSearch::traverse(UCTNode & node)
             // Convert to [0,1] win probability from maxPlayer's perspective
             NeuralNet * nnPtr = _params.getNeuralNet();
             NeuralNet & nn = nnPtr ? *nnPtr : NeuralNet::Instance();
+            checkValueNetLoaded(nn, nnPtr != nullptr);
             double nnValue = nn.evaluateValue(currentState, _params.maxPlayer());
             stateEval = (nnValue + 1.0) / 2.0;
         }
@@ -370,6 +384,7 @@ double UCTSearch::traverse(UCTNode & node)
             // Blend neural net and playout evaluations
             NeuralNet * nnPtr = _params.getNeuralNet();
             NeuralNet & nn = nnPtr ? *nnPtr : NeuralNet::Instance();
+            checkValueNetLoaded(nn, nnPtr != nullptr);
             double nnValue = nn.evaluateValue(currentState, _params.maxPlayer());
             double nnEval = (nnValue + 1.0) / 2.0;
 
