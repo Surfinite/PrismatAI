@@ -1,11 +1,11 @@
 {
  "ktink_t9_ig": {
-  "ig_click_count": 1,
+  "ig_click_count": 0,
   "expect_ig_click_count": 1,
-  "passed": true,
-  "n_clicks": 13,
+  "passed": false,
+  "n_clicks": 11,
   "aivisits_len": 8,
-  "aiargmax": 2,
-  "aichosen": 2
+  "aiargmax": 6,
+  "aichosen": 6
  }
 }

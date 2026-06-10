@@ -27,6 +27,7 @@
  *   node query_move.js --request <file> --player <name> --weights <bin> --dave-exe <path>
  *                      [--root-iterator <name>] [--move-iterator <name>]
  *                      [--time-limit <ms>] [--max-traversals <int>] [--timeout <ms>]
+ *                      [--uct-constant <float>]   (default 0.3 — the tuned cValue; see M-06)
  *
  * Prints the parsed response object as JSON to stdout. Exit 0 on success, nonzero on error.
  */
@@ -46,6 +47,11 @@ function parseArgs(argv) {
         timeLimit: 7000,
         maxTraversals: 100000,
         timeout: 60000,
+        // Default 0.3 = the project's tuned UCTConstant (cValue sweep: strength monotonic in
+        // 1/cValue; the engine default 2.0 is the known-WORST value). Every RL/eval player in
+        // config.txt runs at 0.3 — omitting it here silently reverted query_move measurements
+        // to c=2.0 because injectPlayer REPLACES the whole config player block (audit M-06).
+        uctConstant: 0.3,
     };
     for (let i = 2; i < argv.length; i++) {
         const a = argv[i];
@@ -60,6 +66,7 @@ function parseArgs(argv) {
             case '--time-limit': args.timeLimit = parseInt(next(), 10); break;
             case '--max-traversals': args.maxTraversals = parseInt(next(), 10); break;
             case '--timeout': args.timeout = parseInt(next(), 10); break;
+            case '--uct-constant': args.uctConstant = parseFloat(next()); break;
             case '-h':
             case '--help': args.help = true; break;
             default:
@@ -74,7 +81,11 @@ function usage() {
     console.error(
         'Usage: node query_move.js --request <file> --player <name> --weights <bin> --dave-exe <path>\n' +
         '                          [--root-iterator <name>] [--move-iterator <name>]\n' +
-        '                          [--time-limit <ms>] [--max-traversals <int>] [--timeout <ms>]\n'
+        '                          [--time-limit <ms>] [--max-traversals <int>] [--timeout <ms>]\n' +
+        '                          [--uct-constant <float>]  UCT exploration constant injected into the\n' +
+        '                              player block (default 0.3, the tuned cValue; engine default 2.0\n' +
+        '                              is the known-worst). Integral values are nudged by +1e-9 so they\n' +
+        '                              serialize as JSON doubles (the engine ignores integer literals).\n'
     );
 }
 
@@ -144,6 +155,25 @@ function extractCurrentInfo(raw) {
 }
 
 /**
+ * ENGINE QUIRK (dave-master AIParameters.cpp:894): the C++ parser only honors UCTConstant when
+ * the JSON value is TYPED as a double — `args["UCTConstant"].IsDouble()`. RapidJSON types a
+ * bare integer literal (`2`) as int, so it would be SILENTLY ignored (engine keeps its default
+ * c=2.0). JS `JSON.stringify(2.0)` emits `2` (int!), so an integral cValue cannot be expressed
+ * as a JSON double from here. Guard: nudge integral values by +1e-9 — behaviorally identical
+ * for UCT (c scales the exploration term; a 1e-9 delta is far below any decision threshold)
+ * but guarantees double typing on the wire. Warn so the substitution is never silent.
+ */
+function asWireDouble(v) {
+    if (Number.isInteger(v)) {
+        const nudged = v + 1e-9;
+        console.error(`query_move.js: note: --uct-constant ${v} is integral; sending ${nudged} ` +
+            `instead (the engine's IsDouble() check silently ignores JSON integer literals).`);
+        return nudged;
+    }
+    return v;
+}
+
+/**
  * Inject the Player_UCT + NeuralNet block + EmitDiagnostics into aiParameters.
  * Mirrors matchup_clean.js's DSNN auto-inject (the aiParams.Players[difficulty] = {...} block).
  */
@@ -151,6 +181,9 @@ function injectPlayer(aiParameters, opts) {
     aiParameters = aiParameters || {};
     aiParameters.Players = aiParameters.Players || {};
     // Always (re)write our player block so the eval path + weights + iterators are deterministic.
+    // NOTE: this REPLACES any same-named config player block, so every tunable the config player
+    // carries must be re-supplied here — omitting UCTConstant was audit finding M-06 (all
+    // query_move measurements silently ran at the engine-default c=2.0, the known-worst value).
     aiParameters.Players[opts.player] = {
         type: 'Player_UCT',
         TimeLimit: opts.timeLimit,
@@ -160,6 +193,9 @@ function injectPlayer(aiParameters, opts) {
         MoveIterator: opts.moveIterator,
         Eval: 'NeuralNet',
         WeightsFile: opts.weights,
+        // Default 0.3 here too, so direct module consumers of injectPlayer() can't silently
+        // fall back to the engine-default c=2.0 by omitting the field.
+        UCTConstant: asWireDouble(opts.uctConstant === undefined ? 0.3 : opts.uctConstant),
     };
     // Request the optional UCT root diagnostics from the (rebuilt) responder.
     aiParameters.EmitDiagnostics = true;
@@ -263,6 +299,11 @@ async function main() {
         process.exit(2);
     }
 
+    if (!Number.isFinite(args.uctConstant)) {
+        console.error(`query_move.js: --uct-constant must be a finite number (got '${args.uctConstant}')`);
+        process.exit(2);
+    }
+
     const aiParameters = injectPlayer(info.aiParameters || {}, {
         player: args.player,
         weights: args.weights,
@@ -270,6 +311,7 @@ async function main() {
         moveIterator: args.moveIterator,
         timeLimit: args.timeLimit,
         maxTraversals: args.maxTraversals,
+        uctConstant: args.uctConstant,
     });
 
     const requestJson = JSON.stringify({

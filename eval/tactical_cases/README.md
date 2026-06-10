@@ -75,6 +75,19 @@ which the counter would under-count as 1. Curated cases are chosen so this is un
   widened `HardIterator_5var_IGsubset_Root` argmax fires **1** (correct — one IG self-sac is
   enough defensive granularity vs the freeze). `expect.ig_click_count = 1`.
 
+  **c-dependence note (Jun 10 2026, M-06 re-baseline):** the original "fires 1" observation
+  (and the Jun-4..9 baseline) was measured at the engine-default **c=2.0** because
+  `query_move.js` did not inject `UCTConstant` (audit finding M-06). At the project-tuned
+  **c=0.3** (now the `query_move.js` default), on the same SWF-faithful config, the search
+  commits to the value net's actual preference and fires **0** IGs (argmax/chosen child 6,
+  vs child 2 at c=2.0) — i.e. the c=2.0 "pass" was exploration smoothing masking a net
+  evaluation weakness on this state; the net underrates the 1-IG defensive line. The case
+  stays `expect.ig_click_count = 1` (human ground truth); the committed
+  `eval/tactical_baseline.json` records the FAIL at c=0.3 as the standing reference (a
+  known-issue for RL to fix, not a regression — the suite only gates on previously-passing
+  cases). Verified same-budget A/B at 3 s: c=2.0 → count 1, visits `[191,191,455,211,211,303,305,253]`;
+  c=0.3 → count 0, visits `[208,208,311,190,190,406,438,299]`.
+
 > The earlier `standin_*` placeholder (built from VXGaI, one of 4 old F6 dumps that are
 > unparseable/degenerate) has been removed; `ktink_t9_ig` is the canonical case.
 
