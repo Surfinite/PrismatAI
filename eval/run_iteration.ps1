@@ -13,6 +13,7 @@
 # prints the §12 decision inputs. It does NOT auto-promote.
 #
 # This orchestrates already-built tools (it does NOT rebuild them):
+#   preflight  : eval/preflight_config.py            (stage 0 — config integrity + frozen tuple + parent re-pin)
 #   self-play  : Prismata_Testing.exe over a run:true block in dave's config.txt
 #   vectorize  : training/vectorize_v2.py
 #   train      : training/train.py --rl-mode (Task 6)
@@ -135,37 +136,30 @@ function Get-ValAcc {
     [double]::Parse($Matches[1], [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
-# --- Frozen-tuple ASSERT (no silent rewrite) ----------------------------------
-# The campaign tuple is FROZEN by owner decision (eval/campaign_frozen.json):
-# N=frozen_N, whole-game tau-sampling (TemperatureK covers the game), eps=0.
-# This script no longer auto-reads n_calibration.json's recommended_N nor rewrites
-# config.txt's MaxTraversals — it ASSERTS that dave config.txt's RL_SelfPlay block
-# matches the frozen tuple and throws on any drift. Reconcile deliberately (edit
-# campaign_frozen.json AND config.txt together); the script must never silently
-# mutate the campaign identity.
+# -----------------------------------------------------------------------------
+# 0) Structural preflight — single source of truth: eval/preflight_config.py.
+#    Subsumes the former inline frozen-tuple assert and adds: config JSON/BOM
+#    integrity, zero run:true Benchmarks blocks, RL iterator shape (the
+#    crippled-iterator guard), opening-book sizes, the full declared reference
+#    graph (incl. WeightsFile existence), EpsilonLate key-absent convention,
+#    RL_Eval parent re-pin (F-07), and parent_pt / data-H5 existences.
+#    The tuple stays FROZEN by owner decision: nothing here rewrites config.txt;
+#    reconcile drift deliberately (edit campaign_frozen.json AND config.txt
+#    together) — the script must never silently mutate the campaign identity.
+# -----------------------------------------------------------------------------
+Write-Host "`n[0/8] structural preflight (eval/preflight_config.py)"
 $frozenPath = "$eval/campaign_frozen.json"
-if (-not (Test-Path $frozenPath)) {
-    throw "campaign_frozen.json not found at $frozenPath — the campaign tuple must be frozen before running an iteration."
+python "$eval/preflight_config.py" --config $config --frozen $frozenPath
+if ($LASTEXITCODE -ne 0) {
+    throw "structural preflight FAILED (eval/preflight_config.py exit $LASTEXITCODE) — fix every FAIL line above before running an iteration."
 }
-$frozen  = Get-Content -Raw $frozenPath | ConvertFrom-Json
-$cfgJson = Get-Content -Raw $config | ConvertFrom-Json
-$sp = $cfgJson.Players.'RL_SelfPlay'
-if (-not $sp) { throw "RL_SelfPlay player not found in $config" }
-foreach ($check in @(
-        @{ name = 'MaxTraversals';  cfg = [int]$sp.MaxTraversals;     want = [int]$frozen.frozen_N },
-        @{ name = 'TemperatureK';   cfg = [int]$sp.TemperatureK;      want = [int]$frozen.TemperatureK },
-        @{ name = 'TemperatureTau'; cfg = [double]$sp.TemperatureTau; want = [double]$frozen.TemperatureTau },
-        @{ name = 'EpsilonUniform'; cfg = [double]$sp.EpsilonUniform; want = [double]$frozen.EpsilonUniform })) {
-    if ($check.cfg -ne $check.want) {
-        throw ("RL_SelfPlay.$($check.name) is $($check.cfg) in config.txt but campaign_frozen.json freezes it at " +
-               "$($check.want) — config drifted from campaign_frozen.json — reconcile deliberately.")
-    }
-}
+
+# -N is informational; the tuple itself was verified by the preflight above.
+$frozen = Get-Content -Raw $frozenPath | ConvertFrom-Json
 if ($N -gt 0 -and $N -ne [int]$frozen.frozen_N) {
     throw "-N $N conflicts with frozen_N $($frozen.frozen_N) in campaign_frozen.json — the tuple is frozen; reconcile deliberately instead of overriding."
 }
 $N = [int]$frozen.frozen_N
-Write-Host "frozen tuple OK (campaign_frozen.json == config.txt RL_SelfPlay): N=$N K=$($frozen.TemperatureK) tau=$($frozen.TemperatureTau) eps=$($frozen.EpsilonUniform)"
 
 Write-Host "=== RL iteration $K  (N=$N, W=$Window) ==="
 
