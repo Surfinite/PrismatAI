@@ -87,6 +87,11 @@ which the counter would under-count as 1. Curated cases are chosen so this is un
   known-issue for RL to fix, not a regression — the suite only gates on previously-passing
   cases). Verified same-budget A/B at 3 s: c=2.0 → count 1, visits `[191,191,455,211,211,303,305,253]`;
   c=0.3 → count 0, visits `[208,208,311,190,190,406,438,299]`.
+  **Budget-dependence caveat:** the FAIL above is at the suite's 3 s budget (~2,250 traversals).
+  At **N=256 fixed traversals** (the self-play-scale budget), c=0.3 picks child 2 → count **1**
+  (visits `[16,16,76,36,36,22,37,17]`) — i.e. this case would PASS at N=256. The "net underrates
+  the 1-IG line" reading is therefore budget-specific: deeper search at c=0.3 talks itself OUT of
+  the correct click. Expect contradictory-looking results across budgets on this state.
 
 > The earlier `standin_*` placeholder (built from VXGaI, one of 4 old F6 dumps that are
 > unparseable/degenerate) has been removed; `ktink_t9_ig` is the canonical case.

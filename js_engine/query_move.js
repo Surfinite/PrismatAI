@@ -164,9 +164,14 @@ function extractCurrentInfo(raw) {
  * but guarantees double typing on the wire. Warn so the substitution is never silent.
  */
 function asWireDouble(v) {
+    if (!Number.isFinite(v)) {
+        // JSON.stringify(NaN/Infinity) emits null, which the engine's IsDouble() silently
+        // ignores -> default c=2.0. Throw so module consumers can't hit that regression.
+        throw new Error(`UCTConstant must be a finite number (got ${v})`);
+    }
     if (Number.isInteger(v)) {
         const nudged = v + 1e-9;
-        console.error(`query_move.js: note: --uct-constant ${v} is integral; sending ${nudged} ` +
+        console.error(`query_move.js: note: UCTConstant ${v} is integral; sending ${nudged} ` +
             `instead (the engine's IsDouble() check silently ignores JSON integer literals).`);
         return nudged;
     }
