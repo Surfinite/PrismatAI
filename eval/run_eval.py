@@ -332,10 +332,10 @@ def _refresh_verdict(manifest):
             "rule": VERDICT_RULE}
     if forced:   # information only (informs the human IG judgment; does NOT gate)
         info["d_rl_forced"] = forced["win_rate"] - 0.5
-        info["d_rl_ci"] = forced["ci"]
+        info["forced_wr_ci"] = forced["ci"]       # Wilson CI on the forced WIN RATE (not the delta)
     if general:
         info["d_reg_general"] = general["win_rate"] - 0.5
-        info["d_reg_ci"] = general["ci"]          # audit fix: d_reg was a bare point estimate
+        info["general_wr_ci"] = general["ci"]     # Wilson CI on the general WIN RATE (not the delta)
         info["general_ci_upper"] = general["ci"][1]
     manifest["verdict_inputs"] = info
     manifest["pools"] = {
@@ -382,8 +382,8 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
     _refresh_verdict(manifest)
     write_manifest(manifest, manifest_path)
 
-    # --- iter0 + narrow anchors: one C++ tournament block per pool ---
-    for anchor in ("iter0", "narrow"):
+    # --- C++ tournament anchors (one block per pool), driven by the ANCHOR_BLOCKS registry ---
+    for anchor in ANCHOR_BLOCKS:
         per_pool = {}
         for pool in args.pools:
             block = ANCHOR_BLOCKS[anchor].get(pool)
@@ -473,7 +473,7 @@ def main():
     print(f"manifest -> {path}")
     vi = manifest.get("verdict_inputs", {})
     print(f"verdict={manifest.get('verdict')}  d_reg={vi.get('d_reg_general')} "
-          f"(ci {vi.get('d_reg_ci')})  d_rl={vi.get('d_rl_forced')} (info only)  "
+          f"(general wr ci {vi.get('general_wr_ci')})  d_rl={vi.get('d_rl_forced')} (info only)  "
           "-- REVIEW means the promotion DECISION is a human call.")
 
 

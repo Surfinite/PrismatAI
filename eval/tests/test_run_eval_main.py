@@ -105,11 +105,14 @@ def test_reject_when_general_ci_upper_below_half(tmp_path):
     assert m["verdict"] == "REJECT"
     vi = m["verdict_inputs"]
     assert vi["general_ci_upper"] < 0.5
-    # d_reg now carries a CI (audit: it was a bare point estimate).
+    # d_reg now carries a win-rate CI (audit: it was a bare point estimate). Keys are named
+    # *_wr_ci because they bound the WIN RATE, not the -0.5-shifted delta.
     assert vi["d_reg_general"] == pytest.approx(50 / 128 - 0.5)
-    assert vi["d_reg_ci"][0] < 50 / 128 < vi["d_reg_ci"][1]
+    assert vi["general_wr_ci"][0] < 50 / 128 < vi["general_wr_ci"][1]
     # d_rl stays recorded as information only.
-    assert "d_rl_forced" in vi and "d_rl_ci" in vi
+    assert "d_rl_forced" in vi and "forced_wr_ci" in vi
+    # The misleadingly-named delta-CI keys must not return (they held win-rate CIs).
+    assert "d_rl_ci" not in vi and "d_reg_ci" not in vi
     assert m["decision"] == "(human call)"
 
 
