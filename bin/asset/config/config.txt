@@ -6,11 +6,10 @@
 
     "DefaultOpeningBook" :
     [
-        { "self" : [["Drone", 8], ["Engineer", 2]], "enemy" : [], "buyable" : ["Vivid Drone"], "buy" : ["Drone", "Drone", "Engineer"] },
-        { "self" : [["Drone", 7], ["Engineer", 2]], "enemy" : [], "buyable" : ["Vivid Drone"], "buy" : ["Drone", "Engineer", "Engineer"] },
-        { "self" : [["Drone", 8], ["Engineer", 4]], "enemy" : [], "buyable" : ["Vivid Drone"], "buy" : ["Drone", "Vivid Drone"] },
         { "self" : [["Drone", 6], ["Engineer", 2]], "enemy" : [], "buy" : ["Drone", "Drone"] },
-        { "self" : [["Drone", 7], ["Engineer", 2]], "enemy" : [], "buy" : ["Drone", "Drone"] }
+        { "self" : [["Drone", 7], ["Engineer", 2]], "enemy" : [], "buy" : ["Drone", "Drone"] },
+        { "self" : [["Drone", 8], ["Doomed Drone", 1], ["Engineer", 3]], "enemy" : [], "buyable" : ["Doomed Drone"], "buy" : ["Drone", "Drone", "Drone"] },
+        { "self" : [["Drone", 10], ["Engineer", 3]], "enemy" : [], "buyable" : [], "buy" : ["Drone", "Drone", "Drone"] }
     ],
     
     "BlueTurnTwoOpeningBook" :
@@ -80,7 +79,7 @@
 
 "Buy Limits" :
 {
-    "DefaultLimits" : [ ["Synthesizer", 1], ["Cauterizer", 2]],
+    "DefaultLimits" : [ ["Synthesizer", 1], ["Mobile Animus", 1], ["Cauterizer", 2]],
     "EconLimits" : [ ["Engineer", 2] ],
     "EconLimits15" : [ ["Drone", 15], ["Engineer", 2] ],
     "RedRushLimits" : [ ["Drone", 12], ["Engineer", 1], ["Conduit", 0], ["Blastforge", 0], ["Animus", 2]],
@@ -171,16 +170,17 @@
     "BuyTech_Elyot" :           { "type":"ActionBuy_TechHeuristic", "heuristic":"ElyotFormula"},
     
     "BuyDocile" :               { "type":"ActionBuy_Combination", "combination": ["BuyEcon", "BuyTech_Elyot", "BuyGK_WillScore_Docile", "BuySafeguardDocile"] },
-    "BuyEcon" :                 { "type":"ActionBuy_Sequence", "buySequence": [["Vivid Drone", 0], ["Drone", 0], ["Engineer", 0]], "buyLimits": "EconLimits"},  
-    "BuyOneDrone" :             { "type":"ActionBuy_Sequence", "buySequence": [["Drone", 1]], "buyLimits": "EconLimits"}, 
-    "BuyEconLimited" :          { "type":"ActionBuy_Sequence", "buySequence": [["Vivid Drone", 0], ["Drone", 0], ["Engineer", 0]], "buyLimits": "EconLimits15"},  
+    "BuyEcon" :                 { "type":"ActionBuy_Sequence", "buySequence": [["Drone", 3], ["Engineer", 0]], "buyLimits": "EconLimits"},
+    "BuyEconFast" :             { "type":"ActionBuy_Sequence", "buySequence": [["Vivid Drone", 0], ["Doomed Drone", 0], ["Galvani Drone", 0], ["Engineer", 0]], "buyLimits": "EconLimits"},
+    "BuyOneDrone" :             { "type":"ActionBuy_Sequence", "buySequence": [["Vivid Drone", 1], ["Doomed Drone", 1], ["Galvani Drone", 1], ["Drone", 1]], "buyLimits": "EconLimits"},
+    "BuyEconLimited" :          { "type":"ActionBuy_Sequence", "buySequence": [["Drone", 0], ["Engineer", 0]], "buyLimits": "EconLimits15"},
                                         
     "BuyComboGreedyAttack" :    { "type":"ActionBuy_Combination", "combination": ["BuyGK_AttackValue", "BuyGK_WillScore", "BuyEconLimited", "BuyTech_Elyot", "BuySafeguard"] },
     "BuyComboGreedyWill" :      { "type":"ActionBuy_Combination", "combination": ["BuyGK_WillScore", "BuyGK_AttackValue", "BuyEconLimited", "BuyTech_Elyot", "BuySafeguard"] },    
     "BuyComboGreedyDefense" :   { "type":"ActionBuy_Combination", "combination": ["BuyGK_BlockValue",  "BuyGK_AttackValue", "BuyEconLimited", "BuyTech_Elyot", "BuySafeguard"] },
     "BuyEconTech" :             { "type":"ActionBuy_Combination", "combination": ["BuyEcon", "BuyTech_Elyot", "BuySafeguard"] },
     "BuyEconEngTech" :          { "type":"ActionBuy_Combination", "combination": ["BuyEcon", "BuyEngineer", "BuyTech_Elyot", "BuySafeguard"] },
-    "BuyTechEcon" :             { "type":"ActionBuy_Combination", "combination": ["BuyOneDrone", "BuyTech_Elyot", "BuyEcon", "BuySafeguard"] },
+    "BuyTechEcon" :             { "type":"ActionBuy_Combination", "combination": ["BuyOneDrone", "BuyTech_Elyot", "BuyEconFast", "BuySafeguard"] },
     "BuySafeguard" :            { "type":"ActionBuy_Combination", "combination": ["AbilityAvoidEconomyWaste", "BuyGK_AttackValue", "BuyEcon", "BuyTech_Elyot"] },
     "BuySafeguardDocile" :      { "type":"ActionBuy_Combination", "combination": ["AbilityAvoidEconomyWaste", "BuyEcon", "BuyTech_Elyot", "BuyGK_WillScore_Docile"] },
     
@@ -260,6 +260,7 @@
     "LiveHardestAIUCT" :    { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"Playout", "PlayoutPlayer":"Playout"},
     "RL_SelfPlay" :         { "type":"Player_UCT", "TimeLimit":0, "MaxChildren":40, "MaxTraversals":256, "RootMoveIterator":"HardIterator_5var_IGsubset_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_v221.bin", "UCTConstant":0.3, "SelfPlaySampling":true, "TemperatureTau":1.0, "TemperatureK":6, "EpsilonUniform":0.25 },
     "RL_Eval" :             { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_IGsubset_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_v221.bin", "UCTConstant":0.3 },
+    "RL_Narrow" :           { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_v221.bin", "UCTConstant":0.3 },
     "RL_Eval_iter0" :       { "type":"Player_UCT", "TimeLimit":7000, "MaxChildren":40, "MaxTraversals":100000, "RootMoveIterator":"HardIterator_5var_IGsubset_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_v221.bin", "UCTConstant":0.3 },
 
     "RL_SelfPlay_N100" :    { "type":"Player_UCT", "TimeLimit":0, "MaxChildren":40, "MaxTraversals":100, "RootMoveIterator":"HardIterator_5var_IGsubset_Root", "MoveIterator":"HardIterator_5var", "Eval":"NeuralNet", "WeightsFile":"neural_weights_mixed_v221.bin", "UCTConstant":0.3, "SelfPlaySampling":true, "TemperatureTau":1.0, "TemperatureK":6, "EpsilonUniform":0.25 },
@@ -311,8 +312,8 @@
 
     {"run":false, "type":"Tournament", "name":"RL_Eval_iter0_forced",  "rounds":64, "Seed":2026, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_Eval","group":1},{"name":"RL_Eval_iter0","group":2}]},
     {"run":false, "type":"Tournament", "name":"RL_Eval_iter0_general", "rounds":64, "Seed":2026, "Threads":8, "RandomCards":8, "players":[{"name":"RL_Eval","group":1},{"name":"RL_Eval_iter0","group":2}]},
-    {"run":false, "type":"Tournament", "name":"RL_Eval_narrow_forced",  "rounds":64, "Seed":2026, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_Eval","group":1},{"name":"DSNN_Mixed35_5var","group":2}]},
-    {"run":false, "type":"Tournament", "name":"RL_Eval_narrow_general", "rounds":64, "Seed":2026, "Threads":8, "RandomCards":8, "players":[{"name":"RL_Eval","group":1},{"name":"DSNN_Mixed35_5var","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RL_Eval_narrow_forced",  "rounds":64, "Seed":2026, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_Eval","group":1},{"name":"RL_Narrow","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RL_Eval_narrow_general", "rounds":64, "Seed":2026, "Threads":8, "RandomCards":8, "players":[{"name":"RL_Eval","group":1},{"name":"RL_Narrow","group":2}]},
 
     {"run":false, "type":"Tournament", "name":"RL_Cal_N100",  "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":1, "RandomCards":8, "ForcedCards":["Hotel"], "exportTrainingV2":"asset/training/rl_cal_N100",  "players":[{"name":"RL_SelfPlay_N100","group":1},{"name":"RL_SelfPlay_N100","group":2}]},
     {"run":false, "type":"Tournament", "name":"RL_Cal_N256",  "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":1, "RandomCards":8, "ForcedCards":["Hotel"], "exportTrainingV2":"asset/training/rl_cal_N256",  "players":[{"name":"RL_SelfPlay_N256","group":1},{"name":"RL_SelfPlay_N256","group":2}]},
@@ -321,12 +322,12 @@
     {"run":false, "type":"Tournament", "name":"RL_Cal_N2000", "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":1, "RandomCards":8, "ForcedCards":["Hotel"], "exportTrainingV2":"asset/training/rl_cal_N2000", "players":[{"name":"RL_SelfPlay_N2000","group":1},{"name":"RL_SelfPlay_N2000","group":2}]},
     {"run":false, "type":"Tournament", "name":"RL_Cal_N5000", "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":1, "RandomCards":8, "ForcedCards":["Hotel"], "exportTrainingV2":"asset/training/rl_cal_N5000", "players":[{"name":"RL_SelfPlay_N5000","group":1},{"name":"RL_SelfPlay_N5000","group":2}]},
 
-    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N100",  "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N100","group":1},{"name":"DSNN_Mixed35_5var","group":2}]},
-    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N256",  "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N256","group":1},{"name":"DSNN_Mixed35_5var","group":2}]},
-    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N512",  "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N512","group":1},{"name":"DSNN_Mixed35_5var","group":2}]},
-    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N1000", "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N1000","group":1},{"name":"DSNN_Mixed35_5var","group":2}]},
-    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N2000", "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N2000","group":1},{"name":"DSNN_Mixed35_5var","group":2}]},
-    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N5000", "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N5000","group":1},{"name":"DSNN_Mixed35_5var","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N100",  "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N100","group":1},{"name":"RL_Narrow","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N256",  "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N256","group":1},{"name":"RL_Narrow","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N512",  "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N512","group":1},{"name":"RL_Narrow","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N1000", "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N1000","group":1},{"name":"RL_Narrow","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N2000", "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N2000","group":1},{"name":"RL_Narrow","group":2}]},
+    {"run":false, "type":"Tournament", "name":"RL_Cal_vs_deploy_N5000", "rounds":16, "Seed":4242, "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "ForcedCards":["Hotel"], "players":[{"name":"RL_SelfPlay_N5000","group":1},{"name":"RL_Narrow","group":2}]},
 
     {"run":false, "type":"Tournament", "name":"AB_5var_vs_Mixed35_7s", "rounds":64,  "UpdateIntervalSec":30, "Threads":8, "RandomCards":8, "saveReplays":"asset/replays/ab_5var_vs_mixed35", "players":[{"name":"DSNN_Mixed35_5var","group":1},{"name":"DSNN_Mixed35","group":2}]},
     {"run": false, "type": "Tournament", "name": "PV_cValue_c03_vs_HardestAI", "rounds": 32, "UpdateIntervalSec": 10, "Threads": 8, "RandomCards": 8, "players": [{"name": "DSNN_Mixed35_c03", "group": 1}, {"name": "HardestAI", "group": 2}]},
