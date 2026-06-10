@@ -16,6 +16,7 @@
 #   vectorize  : training/vectorize_v2.py
 #   train      : training/train.py --rl-mode (Task 6)
 #   export     : training/export_weights_v2.py
+#   tripwire   : eval/eval_deepsets_h5.py            (held-out val-acc, candidate vs parent; abort < parent-3pp)
 #   parity GATE: tools/parity/dump_value_batch.py   (abort on worst |Δ| >= 1e-3)
 #   tactical   : eval/tactical_suite.py             (O7 leading indicator)
 #   eval (3 anchors) : eval/run_eval.py
@@ -25,7 +26,8 @@
 param(
     [int]$K = 1,        # RL iteration index
     [int]$N = 0,        # self-play MaxTraversals; 0 => auto-read recommended_N from eval/n_calibration.json (pass -N for a smoke)
-    [int]$Window = 5    # replay-buffer window W
+    [int]$Window = 5,   # replay-buffer window W
+    [string]$ParentPt = ''  # parent checkpoint (.pt) to warm-start from; empty => auto-resolve (K=1 -> deployed v221, else previous iter's SWA)
 )
 $ErrorActionPreference = 'Stop'
 
@@ -54,8 +56,21 @@ $origExe     = "$bin/PrismataAI.exe.ORIG"               # STEAMAI baseline (run_
 $parityStates = "$bin/asset/training/parity_states"     # native GameState sidecar (sp_*.json) from self-play
 $schema      = "$train/schema_v2.json"
 $propTable   = "$train/property_table.json"
-$humanH5     = "$train/data/human_1800_v2.h5"
+$humanH5     = "$train/data/human_1800_v2.h5"           # rehearsal data (--human-file) ONLY — never the val set
+$humanValH5  = "$train/data/human_val_1700_v2.h5"        # HELD-OUT human val set (M-03: validate on this, not the rehearsal file)
 $manifest    = "$eval/manifests/eval_iter_$K.json"
+
+# --- Resolve the parent checkpoint (E1: every iteration warm-starts from its parent) ---
+# iter 1's parent = the deployed supervised v221 net (verified: its export is byte-identical
+# to neural_weights_mixed_v221.bin); iter K>1 = the previous iteration's SWA model.
+# -ParentPt overrides both. Fail fast — train.py --rl-mode now hard-fails without --init-weights.
+if (-not $ParentPt) {
+    if ($K -eq 1) { $ParentPt = "$train/models/deepsets_v221/swa_model.pt" }
+    else          { $ParentPt = "$train/models/rl_iter_$($K - 1)/swa_model.pt" }
+}
+if (-not (Test-Path $ParentPt)) {
+    throw "parent checkpoint not found: $ParentPt — the RL fine-tune must warm-start from its parent net (E1). Pass -ParentPt explicitly or produce the missing parent first."
+}
 
 New-Item -ItemType Directory -Force -Path $workDir | Out-Null
 
@@ -104,6 +119,19 @@ print("cfg %s %s -> %s" % (op, name, value))
 '@
     python -c $py $config $Op $Name $Value
     if ($LASTEXITCODE -ne 0) { throw "Edit-Config $Op $Name failed" }
+}
+
+# --- Held-out val-acc of a .pt checkpoint (stage 4.5 tripwire) ---------------
+# Runs eval/eval_deepsets_h5.py and parses its "  val_acc  = NN.N%" stdout line.
+function Get-ValAcc {
+    param([string]$Pt)
+    $env:PYTHONIOENCODING = 'utf-8'
+    $out = python "$eval/eval_deepsets_h5.py" --model $Pt --val-file $humanValH5 | Out-String
+    if ($LASTEXITCODE -ne 0) { Write-Host $out; throw "eval_deepsets_h5.py exited $LASTEXITCODE for $Pt" }
+    if ($out -notmatch 'val_acc\s*=\s*(\d+(?:\.\d+)?)\s*%') {
+        Write-Host $out; throw "could not parse 'val_acc = NN.N%' from eval_deepsets_h5.py output for $Pt"
+    }
+    [double]::Parse($Matches[1], [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
 # --- Resolve self-play N (refuse the un-calibrated placeholder) --------------
@@ -157,6 +185,9 @@ if ($LASTEXITCODE -ne 0) { throw "vectorize_v2.py exited $LASTEXITCODE" }
 
 # -----------------------------------------------------------------------------
 # 3) Low-LR few-epoch SWA fine-tune over the sliding window + human rehearsal.
+#    WARM-STARTS from the parent checkpoint via --init-weights (E1 fix — train.py
+#    --rl-mode hard-fails without it; iter 1's parent = the deployed v221 net) and
+#    validates on the HELD-OUT human val set (M-03 fix — never the rehearsal file).
 #    --rl-mode wires the replay buffer (window W), human rehearsal, colour
 #    balance, and SWA (Task 6). Pass prior iterations' H5 too if present so the
 #    sliding window has its W shards.
@@ -170,11 +201,12 @@ for ($i = [math]::Max(1, $K - $Window + 1); $i -le $K; $i++) {
 # train.py declares --train-file/--val-file as required=True with NO --rl-mode bypass
 # (the deepsets loader builds val_ds from --val-file before the rl-mode block, and
 # run_metadata dereferences args.train_file/args.val_file unconditionally), so they
-# MUST be passed even in --rl-mode: --val-file = the human rehearsal H5 (the val set),
+# MUST be passed even in --rl-mode: --val-file = the HELD-OUT human val H5 (M-03 —
+# validating on the rehearsal file leaked training data into the val signal),
 # --train-file = the newest window H5 (this iteration's vectorized self-play, $spFiles[-1]).
 python "$train/train.py" --model deepsets --property-table $propTable `
-    --train-file $spFiles[-1] --val-file $humanH5 `
-    --rl-mode --selfplay-files @spFiles --human-file $humanH5 `
+    --train-file $spFiles[-1] --val-file $humanValH5 `
+    --rl-mode --init-weights $ParentPt --selfplay-files @spFiles --human-file $humanH5 `
     --replay-window $Window --rl-iteration $K `
     --epochs 6 --lr 1e-5 --swa-start-epoch 3 --device xpu `
     --output-dir $modelDir
@@ -187,6 +219,20 @@ if (-not (Test-Path $bestPt)) { throw "expected SWA model not found: $bestPt" }
 Write-Host "`n[4/8] export weights -> $candBinPath"
 python "$train/export_weights_v2.py" $bestPt $candBinPath --property-table $propTable
 if ($LASTEXITCODE -ne 0) { throw "export_weights_v2.py exited $LASTEXITCODE" }
+
+# -----------------------------------------------------------------------------
+# 4.5) Val-acc tripwire: candidate vs parent on the HELD-OUT human val set.
+#      Catches an E1-class failure (candidate trained badly / from the wrong init)
+#      cheaply, BEFORE the expensive eval stages. Abort if the candidate fell
+#      more than 3.0pp below its parent.
+# -----------------------------------------------------------------------------
+Write-Host "`n[4.5/8] val-acc tripwire (held-out $humanValH5)"
+$candAcc   = Get-ValAcc $bestPt
+$parentAcc = Get-ValAcc $ParentPt
+Write-Host "val_acc: candidate = $candAcc%  parent = $parentAcc%"
+if ($candAcc -lt ($parentAcc - 3.0)) {
+    throw "val-acc tripwire: candidate $candAcc% is more than 3.0pp below parent $parentAcc% — candidate trained badly (E1-class failure); aborting iteration."
+}
 
 # -----------------------------------------------------------------------------
 # 5) Export-parity GATE (PyTorch <-> C++ forward value). Aborts on worst |Δ| >= 1e-3.
@@ -212,14 +258,25 @@ if ($LASTEXITCODE -ne 0) { throw "tactical_suite regression — aborting iterati
 # -----------------------------------------------------------------------------
 # 7) Repoint RL_Eval.WeightsFile -> the new candidate .bin (json-safe in-place
 #    config rewrite), then run the 3-anchor eval (iter0 / narrow / steam).
+#    F-07: try/finally so RL_Eval is ALWAYS restored to the promoted parent net
+#    on any exit path after the repoint (a killed/failed run must not leave
+#    config.txt pointing at an unpromoted candidate). Stage 8 does NOT need the
+#    repoint — action_coverage.py passes --weights explicitly to query_move.js,
+#    which overrides the player's WeightsFile — so restore happens right here.
 # -----------------------------------------------------------------------------
 Write-Host "`n[7/8] repoint RL_Eval -> $candBin + 3-anchor eval"
-Edit-Config -Op weights -Name RL_Eval -Value $candBin
-python "$eval/run_eval.py" --iteration $K `
-    --weights $candBin --parent-weights $parentBin `
-    --dave-bin $bin --orig-exe $origExe `
-    --pools forced general --out "$eval/manifests"
-if ($LASTEXITCODE -ne 0) { throw "run_eval.py exited $LASTEXITCODE" }
+try {
+    Edit-Config -Op weights -Name RL_Eval -Value $candBin
+    python "$eval/run_eval.py" --iteration $K `
+        --weights $candBin --parent-weights $parentBin `
+        --dave-bin $bin --orig-exe $origExe `
+        --pools forced general --out "$eval/manifests"
+    if ($LASTEXITCODE -ne 0) { throw "run_eval.py exited $LASTEXITCODE" }
+}
+finally {
+    Edit-Config -Op weights -Name RL_Eval -Value $parentBin
+    Write-Host "RL_Eval.WeightsFile restored -> $parentBin (F-07 guard)"
+}
 
 # -----------------------------------------------------------------------------
 # 8) Action coverage (IG-click-count distribution -> manifest) + render dashboard.
