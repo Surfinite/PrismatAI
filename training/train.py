@@ -837,6 +837,32 @@ def check_data_sanity(h5_path, label_strategy, n_sample=10000):
 
 
 # ---------------------------------------------------------------------------
+# Warm start (--init-weights)
+# ---------------------------------------------------------------------------
+
+def load_weights_only(model, pt_path, device):
+    """Load ONLY model weights from a checkpoint, leaving all training state
+    (optimizer/scheduler/SWA/epoch counters) untouched.
+
+    Accepts any of our three checkpoint formats:
+      - full training checkpoints: {"model_state_dict": sd, ...}
+      - raw state_dicts: sd
+      - SWA AveragedModel state_dicts: "module."-prefixed keys + "n_averaged"
+    (Same normalization as eval/eval_deepsets_h5.py::load_deepsets.)
+    """
+    # weights_only=False: full training checkpoints embed numpy/python RNG
+    # state (not plain tensors), which the PyTorch 2.6+ safe loader rejects.
+    ck = torch.load(pt_path, map_location=device, weights_only=False)
+    sd = ck.get("model_state_dict", ck) if isinstance(ck, dict) else ck
+    # SWA checkpoints are AveragedModel state dicts: keys prefixed "module.",
+    # plus "n_averaged".
+    if any(k.startswith("module.") for k in sd):
+        sd = {k[len("module."):]: v for k, v in sd.items() if k != "n_averaged"}
+    model.load_state_dict(sd)
+    return sd
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -918,6 +944,13 @@ def main():
                         help="Stop cleanly after this many epochs THIS run (without "
                              "changing --epochs, so the LR schedule is unaffected). "
                              "Use with --resume for staged/segmented training.")
+    parser.add_argument("--init-weights", type=str, default=None,
+                        help="Warm-start: load ONLY model weights (model_state_dict) "
+                             "from a .pt before training. Optimizer/scheduler/SWA/epoch "
+                             "counters start fresh — unlike --resume, which restores "
+                             "full training state. Accepts best_model.pt-style "
+                             "checkpoints, raw state_dicts, and SWA AveragedModel "
+                             "checkpoints.")
 
     # RL fine-tuning
     parser.add_argument("--rl-mode", action="store_true",
@@ -943,6 +976,16 @@ def main():
         parser.error("--model deepsets requires --property-table <path>")
     if use_deepsets and args.property_table and not os.path.exists(args.property_table):
         parser.error(f"--property-table path does not exist: {args.property_table}")
+
+    # Warm-start / resume / RL-mode guards (fail fast — before the lock file,
+    # seed, and any data loading)
+    if args.init_weights and args.resume:
+        sys.exit("--init-weights and --resume are mutually exclusive: --resume already "
+                 "restores model weights (plus optimizer/scheduler/SWA/epoch state). "
+                 "Pass exactly one.")
+    if args.rl_mode and not args.init_weights and not args.resume:
+        sys.exit("--rl-mode requires --init-weights (warm-start from the parent net) or --resume. "
+                 "Training an RL iteration from random init was the E1 audit bug; refusing to repeat it.")
 
     # --- Seed ---
     if args.seed is None:
@@ -1147,6 +1190,12 @@ def main():
         param_count = sum(p.numel() for p in model.parameters())
         print(f"\nModel: PrismataNet — {param_count:,} parameters "
               f"(hidden={args.hidden_dim}, layers={args.num_layers})")
+
+    # --- Warm start (--init-weights): weights only; optimizer/scheduler/SWA fresh ---
+    # Must run BEFORE AveragedModel(model) below so SWA wraps the warm-started weights.
+    if args.init_weights:
+        load_weights_only(model, args.init_weights, device)
+        print(f"[init] warm-start: loaded model_state_dict from {args.init_weights}")
 
     # --- Optimizer (exclude bias and LayerNorm from weight decay) ---
     decay_params = []

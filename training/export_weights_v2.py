@@ -434,7 +434,10 @@ def main():
     print(f"\nWriting DSN2 binary to {args.output_path}")
     export_model(model, args.output_path, verbose=True)
 
-    verify_export(args.output_path, model)
+    if not verify_export(args.output_path, model):
+        print(f"\nERROR: round-trip verification FAILED — {args.output_path} does not "
+              f"match the PyTorch model. Do NOT deploy this binary.")
+        sys.exit(1)
 
     print("\nDone!")
 
