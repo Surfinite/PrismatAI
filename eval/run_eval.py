@@ -1,14 +1,37 @@
-"""Per-iteration RL eval. Sequential testing (gating only), Wilson CIs, manifest.
+"""Per-iteration RL eval. Wilson CIs, REJECT/REVIEW/INCOMPLETE verdict, incremental manifest.
 
 Anchors (one path each):
-  1. iter0  : wide-untrained iter-0 weights on the IG-optional config (C++ tournament)  [regression-gate ref, A1]
-  2. narrow : DSNN_Mixed35_5var (C++ tournament)                                          [trajectory yardstick]
-  3. steam  : STEAMAI / PrismataAI.exe.ORIG (matchup_clean.js, --player-switch)           [trajectory yardstick, DEFERRED live]
+  1. iter0  : candidate vs the PARENT promoted net (the RL_Eval_iter0 player is repointed to the
+              current parent, v221) on the IG-optional config (C++ tournament). Its GENERAL
+              (unforced-sets) pool is the ONLY automated verdict input; its forced pool informs
+              the human IG judgment but does not gate.
+  2. narrow : DSNN_Mixed35_5var (C++ tournament)                                  [non-gating yardstick]
+  3. steam  : STEAMAI / PrismataAI.exe.ORIG (matchup_clean.js, --player-switch)   [non-gating yardstick, DEFERRED live]
 All eval players run at the DEPLOYMENT budget (TimeLimit:7000/MaxTraversals:100000), NOT the self-play N (A1).
 
-A4 NOTE: for the paired colour-swap pools, the card-set-level clustered_ci() is the statistically
-correct interval and should be used once per-set scores are parsed; the iid wilson_ci is the
-conservative fallback.
+VERDICT (2026-06-10, replaces the old GO gate): the old rule (d_rl >= +5pp AND forced
+ci_lower > 0.5) was statistically incoherent at 128 games — an observed +5pp needed 58.7% to
+fire, so P(GO | true +5pp) ~ 13%. "Prove improvement" is replaced by "rule out harm" + human
+judgment:
+  REJECT     iff the general-pool anchor completed AND its 95% Wilson ci_upper < 0.5
+             (the candidate is statistically proven worse than the parent);
+  REVIEW     iff it completed and ci_upper >= 0.5 (everything else is a human call);
+  INCOMPLETE iff the general anchor is missing/errored (can't certify not-worse).
+d_rl, d_reg, all WRs and CIs remain recorded as INFORMATION (d_reg now carries a CI); nothing
+auto-promotes.
+
+INCREMENTAL MANIFEST: the manifest is (re)written atomically (temp file + os.replace) after
+EVERY completed pool/anchor, carrying "complete": false and "anchors_completed": [...] until
+the final write — a killed run can no longer erase hours of tournament results (Jun-8 failure).
+
+PROVENANCE (active): before any block flips on, Players.<candidate>.WeightsFile in the dave
+config.txt must equal basename(--weights) (hard abort otherwise). Each C++ anchor's stderr is
+captured and must contain the engine's "AIParameters: created per-player NeuralNet from
+<...candidate.bin>" load line; the result is stamped "engine_confirmed_load" per anchor and a
+completed-but-unconfirmed anchor hard-fails (after being recorded for the post-mortem).
+
+STATS NOTE: CIs are iid Wilson only (eval/wilson.py). Per-set / colour-swap-paired analysis
+would require per-card-set scores the tournament HTML does not emit.
 
 PARSE-FORMAT NOTE (validated Step 5, 2026-06-03): the C++ tournament's STDOUT only emits a
 seat-symmetric *score matrix* (player x player score, plus TotalScore) and a "Games completed"
@@ -19,9 +42,7 @@ statsTable rows. A stdout score-matrix fallback is retained for diagnostics.
 """
 import argparse, hashlib, json, os, subprocess, sys, time, re, glob
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from wilson import win_rate, wilson_ci, decisive, decisive_gate, clustered_ci
-
-SEQ = [128, 256, 512]
+from wilson import win_rate, wilson_ci
 
 
 def sha256(path):
@@ -39,13 +60,19 @@ def _latest_results_html(dave_bin, block_name):
     return files[-1] if files else None
 
 
-def run_cpp_tournament(dave_bin, block_name):
+def run_cpp_tournament(dave_bin, block_name, stderr_out=None):
     """Run Prismata_Testing.exe (executes every run:true Benchmarks block) and return the
     per-player {wins,draws,games} for `block_name`, read from that block's HTML statsTable.
-    The caller is responsible for having flipped exactly the desired block(s) to run:true."""
+    The caller is responsible for having flipped exactly the desired block(s) to run:true.
+
+    stderr_out: optional list — receives the subprocess's full stderr text (the engine prints
+    its per-player NeuralNet load confirmations there; see engine_confirmed_load). The HTML/
+    stdout parse path is unchanged."""
     before_run = time.time()
     p = subprocess.run([os.path.join(dave_bin, "Prismata_Testing.exe")],
                        cwd=dave_bin, capture_output=True, text=True, timeout=36000)
+    if stderr_out is not None:
+        stderr_out.append(p.stderr or "")
     if p.returncode != 0:
         raise RuntimeError(f"Prismata_Testing.exe exited {p.returncode}\nstderr: {p.stderr[-2000:]}")
     html_path = _latest_results_html(dave_bin, block_name)
@@ -138,23 +165,54 @@ def parse_matchup_seatindep(text, candidate_label, games):
     return (p, n)
 
 
-def sequential_gate(run_fn):
-    """Escalate 128->256->512 for the GATING comparison; stop when decisive_gate.
-    Final look uses full alpha. Returns (wins,draws,n,outcome).
+# ---------------------------------------------------------------------------
+# Provenance + manifest persistence
+# ---------------------------------------------------------------------------
 
-    A8: ONLY the candidate-vs-parent promotion gate uses this escalation. The STEAMAI / narrow
-    yardsticks use a fixed N + a CI (clustered_ci preferred, wilson_ci fallback)."""
-    wins = draws = n = 0
-    for i, target in enumerate(SEQ):
-        add = target - n
-        w, d, _ = run_fn(add)
-        wins += w
-        draws += d
-        n = target
-        final = (i == len(SEQ) - 1)
-        if decisive_gate(wins, draws, n, final_look=final):
-            return wins, draws, n, "decisive"
-    return wins, draws, n, "inconclusive"
+# AIParameters.cpp prints this to STDERR when it constructs a per-player NeuralNet:
+#   "AIParameters: created per-player NeuralNet from asset/config/<weights file>"
+ENGINE_LOAD_MARKER = "created per-player NeuralNet from"
+
+
+def engine_confirmed_load(stderr_text, weights_basename):
+    """True iff the engine's stderr confirms it actually constructed a per-player NeuralNet
+    from the candidate weights file (load marker AND the candidate basename on the SAME line —
+    the basename elsewhere in stderr noise is not a confirmation)."""
+    for line in (stderr_text or "").splitlines():
+        if ENGINE_LOAD_MARKER in line and weights_basename in line:
+            return True
+    return False
+
+
+def verify_config_weights(dave_bin, candidate_player, weights_basename):
+    """Pre-flight provenance: assert Players.<candidate_player>.WeightsFile in the dave
+    config.txt equals the candidate --weights basename BEFORE any tournament flips on.
+    Hard abort with both values otherwise — the tournament would silently eval the wrong net
+    (the candidate_net_sha256 stamp alone verifies nothing)."""
+    path = _config_path(dave_bin)
+    with open(path, encoding="utf-8-sig") as f:
+        cfg = json.load(f)
+    player = cfg.get("Players", {}).get(candidate_player)
+    if player is None:
+        raise RuntimeError(f"provenance: player '{candidate_player}' not found in {path}")
+    wf = player.get("WeightsFile")
+    if wf != weights_basename:
+        raise RuntimeError(
+            f"provenance: config Players.{candidate_player}.WeightsFile={wf!r} != candidate "
+            f"--weights basename {weights_basename!r} ({path}) — refusing to run: the "
+            "tournament would evaluate the wrong net. Repoint the config (run_iteration.ps1 "
+            "stage 7) or pass the matching --weights.")
+
+
+def write_manifest(manifest, path):
+    """Atomic-ish manifest write (temp file + os.replace) so a kill mid-write can't leave torn
+    JSON. No-op when path is None (pure unit-test use of build_manifest)."""
+    if not path:
+        return
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(manifest, f, indent=2)
+    os.replace(tmp, path)
 
 
 # ---------------------------------------------------------------------------
@@ -164,13 +222,20 @@ def sequential_gate(run_fn):
 # Frozen per eval/rl_campaign.md §1. group1 of every anchor block is the candidate (RL_Eval),
 # repointed to the candidate .bin by run_iteration.ps1 stage 7.
 CANDIDATE_PLAYER = "RL_Eval"
-E_EFFECT = 0.05   # pre-registered effect size (+5 pp) -- the smallest IG-driven gain worth AWS spend.
-Y_REG    = 0.03   # regression tolerance on the GENERAL pool (no material regression vs iter-0).
-HEADLINE_POOL = "forced"   # the IG-widened axis (d_rl); the dashboard renders one cell per anchor.
+# E/Y are recorded METADATA only (historical pre-registered effect size / regression tolerance);
+# since 2026-06-10 nothing gates on them — see the module docstring's VERDICT section.
+E_EFFECT = 0.05   # (info) +5 pp -- the smallest IG-driven gain judged worth AWS spend.
+Y_REG    = 0.03   # (info) regression tolerance once used by the retired d_reg gate.
+HEADLINE_POOL = "forced"   # the IG-widened axis (d_rl info); the dashboard renders one cell per anchor.
+VERDICT_RULE = ("REJECT iff iter0/general (candidate vs parent, unforced sets) completed AND "
+                "Wilson95 ci_upper < 0.5; REVIEW iff completed and ci_upper >= 0.5; INCOMPLETE "
+                "iff that anchor is missing/errored. All deltas are information only — "
+                "promotion is a HUMAN call.")
 
 # Anchor C++ tournament blocks (must exist run:false in config.txt; group1=RL_Eval candidate):
-#   iter0  -> vs RL_Eval_iter0 (wide-untrained)  : GATES (A1) -- d_rl=forced, d_reg=general.
-#   narrow -> vs DSNN_Mixed35_5var               : trajectory yardstick only.
+#   iter0  -> vs RL_Eval_iter0 (repointed to the PARENT promoted net, v221):
+#             general pool = the verdict input; forced pool = d_rl information.
+#   narrow -> vs DSNN_Mixed35_5var : non-gating trajectory yardstick.
 ANCHOR_BLOCKS = {
     "iter0":  {"forced": "RL_Eval_iter0_forced",  "general": "RL_Eval_iter0_general"},
     "narrow": {"forced": "RL_Eval_narrow_forced", "general": "RL_Eval_narrow_general"},
@@ -205,34 +270,97 @@ def set_block_run(dave_bin, block_name, run):
         json.load(f)  # strict-JSON sanity
 
 
-def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER):
+def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER, weights_basename=None):
     """Flip ONE anchor block run:true, run Prismata_Testing.exe, parse the candidate's W/L/D from its
     HTML statsTable, flip back (in a finally). Returns a FLAT anchor dict
     {block,candidate,wins,draws,games,win_rate,ci:[lo,hi]} the dashboard can render directly, or an
-    {block,error,...} dict if the candidate row / W/L/D could not be parsed (degraded stdout fallback)."""
+    {block,error,...} dict if the candidate row / W/L/D could not be parsed (degraded stdout fallback).
+
+    When weights_basename is given, the engine's stderr is checked for the per-player NeuralNet
+    load confirmation and the result is stamped "engine_confirmed_load" (active provenance;
+    build_manifest hard-fails a completed-but-unconfirmed anchor)."""
     set_block_run(dave_bin, block_name, True)
+    stderr_sink = []
     try:
-        results = run_cpp_tournament(dave_bin, block_name)
+        results = run_cpp_tournament(dave_bin, block_name, stderr_out=stderr_sink)
     finally:
         set_block_run(dave_bin, block_name, False)
+    confirmed = (engine_confirmed_load("".join(stderr_sink), weights_basename)
+                 if weights_basename else None)
     cand = results.get(candidate_player)
     if not cand or cand.get("wins") is None:
-        return {"block": block_name,
-                "error": f"no W/L/D for candidate '{candidate_player}' (degraded score-matrix fallback?)",
-                "raw_players": sorted(results)}
+        out = {"block": block_name,
+               "error": f"no W/L/D for candidate '{candidate_player}' (degraded score-matrix fallback?)",
+               "raw_players": sorted(results)}
+        if confirmed is not None:
+            out["engine_confirmed_load"] = confirmed
+        return out
     wins, draws, games = cand["wins"], cand["draws"], cand["games"]
     p = win_rate(wins, draws, games)
     lo, hi = wilson_ci(p, games)
-    return {"block": block_name, "candidate": candidate_player,
-            "wins": wins, "draws": draws, "games": games, "win_rate": p, "ci": [lo, hi]}
+    out = {"block": block_name, "candidate": candidate_player,
+           "wins": wins, "draws": draws, "games": games, "win_rate": p, "ci": [lo, hi]}
+    if confirmed is not None:
+        out["engine_confirmed_load"] = confirmed
+    return out
 
 
-def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=None):
-    """Assemble the eval manifest dict. Factored out of main() (no I/O, injectable runners) so the
-    orchestration + decision logic is unit-testable without the C++ engine. run_anchor(dave_bin,
-    block, player)->anchor-dict; steam_fn(orig_exe,label,games,pool_args,think_ms)->(p,n)."""
+def compute_verdict(general_cell):
+    """REJECT / REVIEW / INCOMPLETE non-inferiority verdict (2026-06-10; replaces the old GO
+    boolean). general_cell = the iter0/general anchor dict (candidate vs parent, unforced sets):
+      REJECT     iff it completed AND its 95% Wilson ci_upper < 0.5 (proven worse than parent);
+      REVIEW     iff it completed and ci_upper >= 0.5 (human call on the recorded numbers);
+      INCOMPLETE iff it is missing/errored (no automated verdict possible)."""
+    if not (isinstance(general_cell, dict) and "win_rate" in general_cell and general_cell.get("ci")):
+        return "INCOMPLETE"
+    return "REJECT" if general_cell["ci"][1] < 0.5 else "REVIEW"
+
+
+def _refresh_verdict(manifest):
+    """Recompute verdict + information-only deltas from whatever anchors are recorded so far.
+    Called before every incremental write so even a partial (killed-run) manifest carries a
+    self-consistent verdict."""
+    iter0_pools = manifest["anchors"].get("iter0", {}).get("pools", {})
+
+    def _cell(pool):
+        c = iter0_pools.get(pool)
+        return c if isinstance(c, dict) and "win_rate" in c else None
+
+    forced, general = _cell("forced"), _cell("general")
+    manifest["verdict"] = compute_verdict(general)
+    info = {"E": E_EFFECT, "Y": Y_REG,   # recorded metadata only — nothing gates on them
+            "rule": VERDICT_RULE}
+    if forced:   # information only (informs the human IG judgment; does NOT gate)
+        info["d_rl_forced"] = forced["win_rate"] - 0.5
+        info["d_rl_ci"] = forced["ci"]
+    if general:
+        info["d_reg_general"] = general["win_rate"] - 0.5
+        info["d_reg_ci"] = general["ci"]          # audit fix: d_reg was a bare point estimate
+        info["general_ci_upper"] = general["ci"][1]
+    manifest["verdict_inputs"] = info
+    manifest["pools"] = {
+        "forced":  {"role": "d_rl info (IG-widened axis vs parent; non-gating)",
+                    **(forced or {"status": "unavailable"})},
+        "general": {"role": "verdict pool (REJECT iff ci_upper<0.5) + d_reg info",
+                    **(general or {"status": "unavailable"})},
+    }
+    manifest["decision"] = "(human call)"   # the driver computes inputs, never promotes.
+
+
+def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=None,
+                   manifest_path=None):
+    """Assemble the eval manifest dict, writing it to manifest_path INCREMENTALLY (atomic temp +
+    os.replace) after every completed pool/anchor — a crash/kill leaves a readable partial
+    manifest ("complete": false, "anchors_completed": [...]) instead of nothing. Injectable
+    runners keep the orchestration + verdict logic unit-testable without the C++ engine:
+    run_anchor(dave_bin, block, player, weights_basename) -> anchor-dict;
+    steam_fn(orig_exe, label, games, pool_args, think_ms) -> (p, n)."""
     if steam_fn is None:
         steam_fn = run_steam
+    weights_basename = os.path.basename(args.weights)
+    # Active provenance pre-flight: the config must already point the candidate player at the
+    # candidate net BEFORE any tournament flips on.
+    verify_config_weights(args.dave_bin, args.candidate_player, weights_basename)
     wpath = os.path.join(args.dave_bin, "asset/config", args.weights)
     manifest = {
         "iteration": args.iteration,
@@ -241,13 +369,18 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
         "parent_weights": args.parent_weights,
         "candidate_player": args.candidate_player,
         "eval_budget": "TimeLimit:7000/MaxTraversals:100000 (deployment-representative, A1)",
-        "effect_size_E": E_EFFECT, "regression_tol_Y": Y_REG,
+        "effect_size_E": E_EFFECT, "regression_tol_Y": Y_REG,   # recorded metadata; non-gating
+        "complete": False,
+        "anchors_completed": [],
         "anchors": {}, "pools": {},
-        "notes": ("iter0 anchor GATES (A1: d_rl=forced pool, d_reg=general pool); narrow + steam are "
-                  "trajectory yardsticks only. CIs are iid Wilson (A4 clustered_ci pending per-card-set "
-                  "score parsing). The candidate-vs-parent promotion gate (sequential_gate, A3) is a "
-                  "SEPARATE mechanism with no config block here. The decision is a HUMAN call."),
+        "notes": ("Verdict = rule-out-harm on iter0/general (candidate vs PARENT promoted net, "
+                  "unforced sets): " + VERDICT_RULE + " narrow + steam are non-gating trajectory "
+                  "yardsticks. CIs are iid Wilson (the tournament HTML emits no per-card-set "
+                  "scores, so no paired/sequential statistics exist). Manifest is written "
+                  "incrementally; 'complete': false means the run died mid-eval."),
     }
+    _refresh_verdict(manifest)
+    write_manifest(manifest, manifest_path)
 
     # --- iter0 + narrow anchors: one C++ tournament block per pool ---
     for anchor in ("iter0", "narrow"):
@@ -257,13 +390,29 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
             if not block:
                 continue
             print(f"[{anchor}/{pool}] running block {block} ...", file=sys.stderr)
-            per_pool[pool] = run_anchor(args.dave_bin, block, args.candidate_player)
-        # Headline cell = the decision-relevant pool (forced = IG-widened axis); full breakdown under 'pools'.
-        head = per_pool.get(HEADLINE_POOL) or next(iter(per_pool.values()), {})
-        manifest["anchors"][anchor] = {**{k: v for k, v in head.items() if k != "pools"}, "pools": per_pool}
+            cell = run_anchor(args.dave_bin, block, args.candidate_player, weights_basename)
+            per_pool[pool] = cell
+            # Headline cell = forced (the IG-widened d_rl axis); full breakdown under 'pools'.
+            head = per_pool.get(HEADLINE_POOL) or next(iter(per_pool.values()), {})
+            manifest["anchors"][anchor] = {**{k: v for k, v in head.items() if k != "pools"},
+                                           "pools": per_pool}
+            _refresh_verdict(manifest)
+            write_manifest(manifest, manifest_path)   # incremental: persist after EVERY pool
+            # Provenance hard-fail: a COMPLETED anchor whose engine stderr never confirmed the
+            # candidate-net load is recorded (above) but must not be trusted.
+            if "win_rate" in cell and cell.get("engine_confirmed_load") is False:
+                raise RuntimeError(
+                    f"provenance: block {block} completed but engine stderr never confirmed "
+                    f"loading '{weights_basename}' for {args.candidate_player} "
+                    f"(engine_confirmed_load=false; result recorded in the manifest but NOT "
+                    "trusted — the engine may have evaluated the wrong net)")
+        manifest["anchors_completed"].append(anchor)
+        write_manifest(manifest, manifest_path)
 
     # --- steam anchor: matchup_clean.js fixed-N (A8), A7 seat-independent, GENERAL pool only ---
-    # (forced-pool STEAMAI is unwired: matchup_clean.js ForcedCards support is unverified.)
+    # Non-gating yardstick. (forced-pool STEAMAI is unwired: matchup_clean.js ForcedCards
+    # support is unverified.) Earlier anchors are already on disk, so a steam crash can no
+    # longer erase them.
     if steam_available:
         print(f"[steam] matchup_clean.js vs STEAMAI ({args.steam_games} games) ...", file=sys.stderr)
         p, n = steam_fn(args.orig_exe, args.candidate_label, args.steam_games, [], 7000)
@@ -274,45 +423,23 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
         else:
             lo, hi = wilson_ci(p, n)
             manifest["anchors"]["steam"] = {"win_rate": p, "games": n, "ci": [lo, hi],
-                                            "pool": "general", "note": "A7 seat-independent, A8 fixed-N"}
+                                            "pool": "general",
+                                            "note": "A7 seat-independent, A8 fixed-N, non-gating"}
+        manifest["anchors_completed"].append("steam")
     else:
         manifest["anchors"]["steam"] = {
             "status": "DEFERRED -- PrismataAI.exe.ORIG absent (A8 STEAMAI trajectory yardstick)"}
 
-    # --- §3 decision inputs: d_rl from iter0/forced, d_reg from iter0/general (A1) ---
-    iter0_pools = manifest["anchors"].get("iter0", {}).get("pools", {})
-
-    def _cell(pool):
-        c = iter0_pools.get(pool)
-        return c if isinstance(c, dict) and "win_rate" in c else None
-
-    forced, general = _cell("forced"), _cell("general")
-    go = {"E": E_EFFECT, "Y": Y_REG,
-          "rule": "GO iff CI_lower(d_rl) > 0 AND d_rl >= E AND d_reg(general) >= -Y"}
-    if forced:
-        go["d_rl_forced"] = forced["win_rate"] - 0.5
-        go["d_rl_ci"] = forced["ci"]
-        go["ci_lower_gt_half"] = forced["ci"][0] > 0.5
-        go["d_rl_ge_E"] = (forced["win_rate"] - 0.5) >= E_EFFECT
-    if general:
-        go["d_reg_general"] = general["win_rate"] - 0.5
-        go["d_reg_ge_negY"] = (general["win_rate"] - 0.5) >= -Y_REG
-    go["computable"] = all(k in go for k in ("ci_lower_gt_half", "d_rl_ge_E", "d_reg_ge_negY"))
-    go["GO_suggested"] = bool(go["computable"] and go.get("ci_lower_gt_half")
-                              and go.get("d_rl_ge_E") and go.get("d_reg_ge_negY"))
-
-    manifest["pools"] = {
-        "forced":  {"role": "d_rl (IG-widened axis vs iter0)",  **(forced or {"status": "unavailable"})},
-        "general": {"role": "d_reg (regression guard vs iter0)", **(general or {"status": "unavailable"})},
-    }
-    manifest["go_signal"] = go
-    manifest["decision"] = "(human call)"   # faithful to the spec: the driver computes inputs, never promotes.
+    _refresh_verdict(manifest)
+    manifest["complete"] = True
+    write_manifest(manifest, manifest_path)
     return manifest
 
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Per-iteration RL eval: 3 anchors (iter0/narrow/steam), Wilson CIs, GO inputs, manifest.")
+        description="Per-iteration RL eval: 3 anchors (iter0/narrow/steam), Wilson CIs, "
+                    "REJECT/REVIEW/INCOMPLETE verdict, incremental manifest.")
     ap.add_argument("--iteration", type=int, required=True)
     ap.add_argument("--weights", required=True, help="candidate .bin filename (in dave bin/asset/config)")
     ap.add_argument("--parent-weights", default=None,
@@ -332,23 +459,22 @@ def main():
     os.makedirs(args.out, exist_ok=True)
 
     # Contamination guards (spec §4 item 6): FORCE_DSNN / use_dsnn.txt would silently swap the net under
-    # eval -- always fatal. A missing .ORIG only DEFERS the steam yardstick; it does NOT block the gating
-    # iter0/narrow anchors (which need no .ORIG), so it is a soft skip, not an assert.
+    # eval -- always fatal. A missing .ORIG only DEFERS the steam yardstick; it does NOT block the C++
+    # iter0 (verdict) / narrow anchors (which need no .ORIG), so it is a soft skip, not an assert.
     assert not os.environ.get("PRISMATA_FORCE_DSNN"), "PRISMATA_FORCE_DSNN set - eval contamination"
     assert not os.path.exists(os.path.join(args.dave_bin, "use_dsnn.txt")), "use_dsnn.txt present - eval contamination"
     steam_available = os.path.exists(args.orig_exe)
     if not steam_available:
         print(f"WARNING: STEAMAI baseline absent ({args.orig_exe}) -- steam anchor DEFERRED", file=sys.stderr)
 
-    manifest = build_manifest(args, steam_available)
-
     path = os.path.join(args.out, f"eval_iter_{args.iteration}.json")
-    with open(path, "w") as f:
-        json.dump(manifest, f, indent=2)
+    manifest = build_manifest(args, steam_available, manifest_path=path)
+
     print(f"manifest -> {path}")
-    go = manifest["go_signal"]
-    print(f"GO_suggested={go.get('GO_suggested')} (computable={go.get('computable')})  "
-          f"d_rl={go.get('d_rl_forced')}  d_reg={go.get('d_reg_general')}  -- DECISION is a human call.")
+    vi = manifest.get("verdict_inputs", {})
+    print(f"verdict={manifest.get('verdict')}  d_reg={vi.get('d_reg_general')} "
+          f"(ci {vi.get('d_reg_ci')})  d_rl={vi.get('d_rl_forced')} (info only)  "
+          "-- REVIEW means the promotion DECISION is a human call.")
 
 
 if __name__ == "__main__":
