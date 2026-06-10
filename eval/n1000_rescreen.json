@@ -1,0 +1,64 @@
+{
+  "rescreen": "RL_Cal_N1000 (32 games) at the FROZEN campaign tuple",
+  "date": "2026-06-11",
+  "tuple": {
+    "N": 1000,
+    "TemperatureK": 999,
+    "TemperatureTau": 0.7,
+    "EpsilonUniform": 0.0,
+    "UCTConstant": 0.3,
+    "Threads": 8,
+    "weights": "neural_weights_mixed_v221.bin"
+  },
+  "note": "re-screen because the original N-calibration screen ran under opening-only sampling (TemperatureK=6, eps=0.25); the frozen tuple switches to whole-game tau-sampling (K=999, tau=0.7, eps=0)",
+  "baseline": {
+    "source": "eval/n_calibration.json human_baseline (MB full-wipeout corpus)",
+    "mean_game_length": 30.481378461538462,
+    "std_game_length": 7.2418716880373974,
+    "len_sigma": 2.0,
+    "band": [
+      15.997635085463667,
+      44.96512183761325
+    ]
+  },
+  "metrics": {
+    "n_games": 32,
+    "n_records": 1126,
+    "mean_game_length": 35.1875,
+    "p0_wr": 0.375
+  },
+  "ig_click_sanity": {
+    "total_records": 1126,
+    "records_with_ig_click_gt0": 51,
+    "max_ig_click_count": 4,
+    "records_missing_field": 0
+  },
+  "gates": {
+    "n_games": {
+      "value": 32,
+      "expect": 32,
+      "pass": true
+    },
+    "game_length": {
+      "value": 35.1875,
+      "band": [
+        15.997635085463667,
+        44.96512183761325
+      ],
+      "pass": true
+    },
+    "p0_wr": {
+      "value": 0.375,
+      "band": [
+        0.35,
+        0.65
+      ],
+      "pass": true
+    },
+    "ig_click_present": {
+      "value": 51,
+      "pass": true
+    }
+  },
+  "all_pass": true
+}

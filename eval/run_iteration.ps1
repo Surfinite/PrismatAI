@@ -2,7 +2,8 @@
 # RL Self-Play — one-iteration driver (Task 14)
 #
 # DEFERRED — do not run until the "Run prerequisites" in eval/rl_campaign.md are
-# satisfied (recommended_N + ε from calibrate_n.py; eval/calib_states/ +
+# satisfied (FROZEN tuple in eval/campaign_frozen.json must match dave config.txt's
+# RL_SelfPlay — asserted below, never rewritten; eval/calib_states/ +
 # eval/ig_battery/ populated). iter-0 anchor = v221 on RL_Eval_iter0 (per the
 # 2026-06-07 decision — NOT a random wide-untrained net); PrismataAI.exe.ORIG is
 # installed in dave bin/.
@@ -25,7 +26,7 @@
 # =============================================================================
 param(
     [int]$K = 1,        # RL iteration index
-    [int]$N = 0,        # self-play MaxTraversals; 0 => auto-read recommended_N from eval/n_calibration.json (pass -N for a smoke)
+    [int]$N = 0,        # informational only; the tuple is FROZEN in eval/campaign_frozen.json — a nonzero -N that differs from frozen_N throws
     [int]$Window = 5,   # replay-buffer window W
     [string]$ParentPt = ''  # parent checkpoint (.pt) to warm-start from; empty => auto-resolve (K=1 -> deployed v221, else previous iter's SWA)
 )
@@ -134,17 +135,37 @@ function Get-ValAcc {
     [double]::Parse($Matches[1], [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
-# --- Resolve self-play N (refuse the un-calibrated placeholder) --------------
-if ($N -le 0) {
-    $ncal = "$eval/n_calibration.json"
-    if (-not (Test-Path $ncal)) {
-        throw "N not calibrated: run eval/calibrate_n.py (writes eval/n_calibration.json), then re-run; or pass -N <int> explicitly for a smoke."
-    }
-    $recN = (Get-Content -Raw $ncal | ConvertFrom-Json).recommended_N
-    if (-not $recN) { throw "n_calibration.json has no recommended_N (no N passed the non-degeneracy check) — pass -N explicitly or re-sweep." }
-    $N = [int]$recN
-    Write-Host "N resolved from $ncal : recommended_N = $N"
+# --- Frozen-tuple ASSERT (no silent rewrite) ----------------------------------
+# The campaign tuple is FROZEN by owner decision (eval/campaign_frozen.json):
+# N=frozen_N, whole-game tau-sampling (TemperatureK covers the game), eps=0.
+# This script no longer auto-reads n_calibration.json's recommended_N nor rewrites
+# config.txt's MaxTraversals — it ASSERTS that dave config.txt's RL_SelfPlay block
+# matches the frozen tuple and throws on any drift. Reconcile deliberately (edit
+# campaign_frozen.json AND config.txt together); the script must never silently
+# mutate the campaign identity.
+$frozenPath = "$eval/campaign_frozen.json"
+if (-not (Test-Path $frozenPath)) {
+    throw "campaign_frozen.json not found at $frozenPath — the campaign tuple must be frozen before running an iteration."
 }
+$frozen  = Get-Content -Raw $frozenPath | ConvertFrom-Json
+$cfgJson = Get-Content -Raw $config | ConvertFrom-Json
+$sp = $cfgJson.Players.'RL_SelfPlay'
+if (-not $sp) { throw "RL_SelfPlay player not found in $config" }
+foreach ($check in @(
+        @{ name = 'MaxTraversals';  cfg = [int]$sp.MaxTraversals;     want = [int]$frozen.frozen_N },
+        @{ name = 'TemperatureK';   cfg = [int]$sp.TemperatureK;      want = [int]$frozen.TemperatureK },
+        @{ name = 'TemperatureTau'; cfg = [double]$sp.TemperatureTau; want = [double]$frozen.TemperatureTau },
+        @{ name = 'EpsilonUniform'; cfg = [double]$sp.EpsilonUniform; want = [double]$frozen.EpsilonUniform })) {
+    if ($check.cfg -ne $check.want) {
+        throw ("RL_SelfPlay.$($check.name) is $($check.cfg) in config.txt but campaign_frozen.json freezes it at " +
+               "$($check.want) — config drifted from campaign_frozen.json — reconcile deliberately.")
+    }
+}
+if ($N -gt 0 -and $N -ne [int]$frozen.frozen_N) {
+    throw "-N $N conflicts with frozen_N $($frozen.frozen_N) in campaign_frozen.json — the tuple is frozen; reconcile deliberately instead of overriding."
+}
+$N = [int]$frozen.frozen_N
+Write-Host "frozen tuple OK (campaign_frozen.json == config.txt RL_SelfPlay): N=$N K=$($frozen.TemperatureK) tau=$($frozen.TemperatureTau) eps=$($frozen.EpsilonUniform)"
 
 Write-Host "=== RL iteration $K  (N=$N, W=$Window) ==="
 
@@ -152,7 +173,8 @@ Write-Host "=== RL iteration $K  (N=$N, W=$Window) ==="
 # 1) Self-play: run the RL_Step2 block (RL_SelfPlay vs RL_SelfPlay, ForcedCards
 #    Hotel/IG-optional, fixed N, exportTrainingV2 on) -> selfplay_*.jsonl shards.
 #    The block is RL_Step2_Smoke; for a real run flip its rounds up + run:true.
-#    Set RL_SelfPlay's MaxTraversals to $N first (the calibrated N).
+#    RL_SelfPlay's MaxTraversals is NOT rewritten here — the frozen-tuple assert
+#    above already verified config.txt matches campaign_frozen.json.
 # -----------------------------------------------------------------------------
 Write-Host "`n[1/8] self-play -> $selfplayDir"
 # Clear stale shards + parity sidecar from any prior iteration: the C++ export game
@@ -160,7 +182,6 @@ Write-Host "`n[1/8] self-play -> $selfplayDir"
 # selfplay_*.jsonl that Stage 2's glob would wrongly concatenate into this iter's data.
 if (Test-Path $selfplayDir)  { Remove-Item "$selfplayDir/selfplay_*.jsonl" -ErrorAction SilentlyContinue }
 if (Test-Path $parityStates) { Remove-Item "$parityStates/sp_*.json"        -ErrorAction SilentlyContinue }
-Edit-Config -Op traversals -Name RL_SelfPlay -Value $N
 Edit-Config -Op run -Name RL_Step2_Smoke -Value true
 Push-Location $bin   # the exe resolves asset/config/* (cardLibrary.jso, config.txt) CWD-relative
 try {
@@ -291,4 +312,5 @@ python "$eval/render_dashboard.py"
 Write-Host "`n=== iteration $K complete ==="
 Write-Host "Manifest : $manifest"
 Write-Host "DECISION  : HUMAN call on the manifest + dashboard (eval/rl_campaign.md §3 decision rule)."
-Write-Host "          GO iff  CI_lower(d_rl) > 0  AND  d_rl >= E(+5pp)  AND  d_reg(general) >= -Y(0.03)."
+Write-Host "          verdict REJECT = proven worse on the general pool (Wilson95 ci_upper < 0.5);"
+Write-Host "          verdict REVIEW = human decision. See eval/run_eval.py VERDICT_RULE for exact semantics."
