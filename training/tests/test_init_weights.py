@@ -149,6 +149,22 @@ def test_init_weights_and_resume_mutually_exclusive():
     assert "Traceback" not in combined
 
 
+def test_init_weights_nonexistent_path_fails_fast():
+    # A typo'd --init-weights path must die at CLI validation (parser.error),
+    # not minutes later at torch.load with a raw traceback.
+    r = run_train(["--rl-mode",
+                   "--train-file", "C:/nonexistent/train_v2.h5",
+                   "--val-file", "C:/nonexistent/val_v2.h5",
+                   "--init-weights", "C:/nonexistent/parent_weights.pt"])
+    assert r.returncode != 0
+    combined = r.stdout + r.stderr
+    assert "--init-weights path does not exist" in combined
+    # Guard fired before seed print / lock file / data loading
+    assert "Random seed:" not in r.stdout
+    assert "Loading data" not in r.stdout
+    assert "Traceback" not in combined
+
+
 def test_help_lists_init_weights():
     r = run_train(["--help"])
     assert r.returncode == 0

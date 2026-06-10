@@ -986,6 +986,8 @@ def main():
     if args.rl_mode and not args.init_weights and not args.resume:
         sys.exit("--rl-mode requires --init-weights (warm-start from the parent net) or --resume. "
                  "Training an RL iteration from random init was the E1 audit bug; refusing to repeat it.")
+    if args.init_weights and not os.path.exists(args.init_weights):
+        parser.error(f"--init-weights path does not exist: {args.init_weights}")
 
     # --- Seed ---
     if args.seed is None:
@@ -1259,6 +1261,7 @@ def main():
         "data": {
             "train_file": os.path.abspath(args.train_file),
             "val_file": os.path.abspath(args.val_file),
+            "init_weights": os.path.abspath(args.init_weights) if args.init_weights else None,
             "train_examples": train_n,
             "val_examples": val_n,
             "state_dim": state_dim,
