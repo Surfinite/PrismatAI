@@ -3,6 +3,7 @@
 
 #include <fstream>     // std::ifstream (A12: parseConfigDefsForMerge file read)
 #include <algorithm>   // std::find (A12: dedup name vectors on the no-reset merge path)
+#include <set>         // warn-once tracking (filtered-to-empty opening books)
 
 using namespace Prismata;
 
@@ -651,7 +652,13 @@ PPPtr AIParameters::parsePartialPlayer(const PlayerID player, const std::string 
                 abort();
             }
 
-            fprintf(stderr, "AIParameters: WARNING: opening book '%s' has 0 valid entries in the current card library (%zu defined, referenced by partial player '%s') - it will never fire.\n", bookName.c_str(), rawCount, playerVariable.c_str());
+            // Warn ONCE per book name per process - this branch is hit on every partial-player parse
+            // (~31KB of repeated stderr per Steam request otherwise).
+            static std::set<std::string> warnedFilteredEmptyBooks;
+            if (warnedFilteredEmptyBooks.insert(bookName).second)
+            {
+                fprintf(stderr, "AIParameters: WARNING: opening book '%s' has 0 valid entries in the current card library (%zu defined, referenced by partial player '%s') - it will never fire.\n", bookName.c_str(), rawCount, playerVariable.c_str());
+            }
         }
 
         playerPtr = PPPtr(new PartialPlayer_ActionBuy_OpeningBook(player, bookIt->second));
@@ -1289,8 +1296,12 @@ const rapidjson::Value & AIParameters::findCardFilter(const std::string & filter
         }
     }
 
-    PRISMATA_ASSERT(false, "CardFilter not found: %s", filterName.c_str());
-    return rootValue;
+    // Hard guard (Jun-10 review): the soft assert + 'return rootValue' handed the caller a value that
+    // constructs a match-nothing filter, so the run continued silently on a typo'd name. This path serves
+    // the AbilitySubset iterator's 'subsetFilter' (the RL Infusion-Grid mechanism) and the filter 'include'
+    // chain - an unknown filter name is always a config bug.
+    fprintf(stderr, "FATAL: AIParameters: card filter '%s' not found (findCardFilter). Aborting.\n", filterName.c_str());
+    abort();
 }
 
 GameState AIParameters::GetStateFromVariable(const std::string & stateVariable, const rapidjson::Value & root)
