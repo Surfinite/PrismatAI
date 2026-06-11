@@ -133,9 +133,14 @@ def make_frozen():
 
 @pytest.fixture
 def env(tmp_path):
-    """Write fixture config + frozen + every referenced file; return paths + dicts."""
-    cfg_dir = tmp_path / "cfg"
-    cfg_dir.mkdir()
+    """Write fixture config + frozen + every referenced file; return paths + dicts.
+
+    The config lives at <bin>/asset/config/config.txt, mirroring the real dave
+    layout -- the use_dsnn_sentinel check (M-09) derives the engine bin dir from
+    the config path, so the fixture must reproduce the nesting."""
+    bin_dir = tmp_path / "bin"
+    cfg_dir = bin_dir / "asset" / "config"
+    cfg_dir.mkdir(parents=True)
     repo = tmp_path / "repo"
     (repo / "training" / "models" / "deepsets_v221").mkdir(parents=True)
     (repo / "training" / "data").mkdir(parents=True)
@@ -147,6 +152,7 @@ def env(tmp_path):
         "config_path": cfg_dir / "config.txt",
         "frozen_path": tmp_path / "campaign_frozen.json",
         "repo": repo,
+        "bin_dir": bin_dir,
         "cfg": make_config(),
         "frozen": make_frozen(),
     }
@@ -526,6 +532,30 @@ def test_missing_val_h5_fails_existences(env, capsys):
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "existences")
+
+
+# ---------------------------------------------------------------------------
+# Check 9: use_dsnn sentinel (M-09 contamination guard)
+# ---------------------------------------------------------------------------
+
+def test_use_dsnn_sentinel_fails(env, capsys):
+    """Touching <bin>/use_dsnn.txt must fail ONLY the sentinel check -- the
+    FORCE_DSNN drop-in silently swaps the net on every protocol-path engine
+    call (query_move / tactical suite / coverage = stages 6/8)."""
+    (env["bin_dir"] / "use_dsnn.txt").write_text("", encoding="utf-8")
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "use_dsnn_sentinel")
+    assert "use_dsnn.txt" in out
+    assert "FORCE_DSNN" in out
+
+
+def test_use_dsnn_sentinel_only_checks_bin_dir(env, capsys):
+    """A use_dsnn.txt elsewhere (e.g. the config dir) must NOT trip the check --
+    the engine only probes next to the exe."""
+    (env["config_path"].parent / "use_dsnn.txt").write_text("", encoding="utf-8")
+    rc, out = run_main(env, capsys)
+    assert rc == 0, out
 
 
 # ---------------------------------------------------------------------------

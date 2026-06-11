@@ -185,12 +185,12 @@ class TestSupplyEncoding:
 
 class TestGlobalFeatures:
     def test_global_shape(self):
-        """Global feature vector is 14 floats."""
+        """Global feature vector is 15 floats (v2.2: + under_attack)."""
         caps = {"gold": 20, "blue": 5, "red": 5, "green": 15,
                 "energy": 10, "attack": 25, "turn_number": 50}
         record = make_record([])
         gvec = v2.vectorize_globals(record, caps)
-        assert gvec.shape == (14,), f"Expected (14,), got {gvec.shape}"
+        assert gvec.shape == (15,), f"Expected (15,), got {gvec.shape}"
         assert gvec.dtype == np.float32
 
     def test_global_order(self):
@@ -450,7 +450,7 @@ class TestHDF5Output:
                 "num_units": 116,
                 "max_instances": 200,
                 "num_supply_features": 3,
-                "num_global_features": 14,
+                "num_global_features": 15,
                 "num_instance_features": 10,
                 "normalization_caps": {
                     "gold": 20, "blue": 5, "red": 5, "green": 15,
@@ -481,7 +481,7 @@ class TestHDF5Output:
             "num_units": 116,
             "max_instances": 200,
             "num_supply_features": 3,
-            "num_global_features": 14,
+            "num_global_features": 15,
             "num_instance_features": 10,
             "normalization_caps": {
                 "gold": 20, "blue": 5, "red": 5, "green": 15,
@@ -504,7 +504,7 @@ class TestHDF5Output:
                 assert hf["instance_unit_ids"].shape == (N, MAX_I)
                 assert hf["instance_counts"].shape == (N,)
                 assert hf["supply"].shape == (N, NUM_U, 3)
-                assert hf["globals"].shape == (N, 14)
+                assert hf["globals"].shape == (N, 15)  # v2.2: + under_attack
                 assert hf["label_A"].shape == (N,)
                 assert hf["label_B_weight"].shape == (N,)
                 assert hf["label_C"].shape == (N,)
@@ -523,7 +523,7 @@ class TestHDF5Output:
             "num_units": 116,
             "max_instances": 200,
             "num_supply_features": 3,
-            "num_global_features": 14,
+            "num_global_features": 15,
             "num_instance_features": 10,
             "normalization_caps": {
                 "gold": 20, "blue": 5, "red": 5, "green": 15,
@@ -554,7 +554,7 @@ class TestHDF5Output:
             "num_units": 116,
             "max_instances": 200,
             "num_supply_features": 3,
-            "num_global_features": 14,
+            "num_global_features": 15,
             "num_instance_features": 10,
             "normalization_caps": {
                 "gold": 20, "blue": 5, "red": 5, "green": 15,
@@ -572,3 +572,173 @@ class TestHDF5Output:
                 labels = hf["label_A"][:]
                 assert labels[0] == pytest.approx(1.0)
                 assert labels[1] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Test 9: M-11 strict zero-drop mode (drops at vectorize are NEVER normal)
+# ---------------------------------------------------------------------------
+
+SCHEMA_M11 = {
+    "schema_version": "v2",
+    "num_units": 116,
+    "max_instances": 200,
+    "num_supply_features": 3,
+    "num_global_features": 15,
+    "num_instance_features": 10,
+    "normalization_caps": {
+        "gold": 20, "blue": 5, "red": 5, "green": 15,
+        "energy": 10, "attack": 25, "turn_number": 50
+    }
+}
+
+
+class TestStrictModeM11:
+    """Strict default = ANY drop fails the run (exit 1, no output H5);
+    --allow-drops = same counting + report, exit 0, output kept.
+    Missing-label records are ALWAYS dropped (never defaulted to outcome 0)."""
+
+    def _write_lines(self, lines, path):
+        with open(path, "w", encoding="utf-8") as f:
+            for line in lines:
+                f.write(line + "\n")
+
+    def _mixed_lines(self):
+        """good / missing-label / unknown-unit / wrong-schema / unparseable."""
+        good = make_record([make_instance("Drone", 0)], outcome_p0=1)
+        missing_label = make_record([make_instance("Drone", 0)])
+        del missing_label["outcome_p0"]
+        unknown_unit = make_record(
+            [make_instance("Drone", 0), make_instance("FAKE_UNIT_M11", 1)],
+            outcome_p0=0)
+        wrong_schema = make_record([make_instance("Drone", 0)], schema_version="v1")
+        return [json.dumps(good), json.dumps(missing_label),
+                json.dumps(unknown_unit), json.dumps(wrong_schema),
+                "{not json"]
+
+    def test_strict_exits_1_no_output_left(self, tmp_path):
+        unit_index = load_unit_index()
+        in_path = str(tmp_path / "mixed.jsonl")
+        out_path = str(tmp_path / "mixed.h5")
+        self._write_lines(self._mixed_lines(), in_path)
+
+        with pytest.raises(SystemExit) as exc_info:
+            v2.process_file(in_path, unit_index, out_path, schema=SCHEMA_M11)
+        assert exc_info.value.code == 1
+        assert not os.path.exists(out_path), "strict failure must not leave an output H5"
+        assert not os.path.exists(out_path + ".tmp"), "strict failure must clean the temp file"
+
+    def test_strict_fatal_message_and_counters(self, tmp_path, capsys):
+        unit_index = load_unit_index()
+        in_path = str(tmp_path / "mixed.jsonl")
+        out_path = str(tmp_path / "mixed.h5")
+        self._write_lines(self._mixed_lines(), in_path)
+
+        with pytest.raises(SystemExit):
+            v2.process_file(in_path, unit_index, out_path, schema=SCHEMA_M11)
+        out = capsys.readouterr().out
+        assert "FATAL" in out
+        assert "parse_errors:           1" in out
+        assert "wrong_schema_version:   1" in out
+        assert "missing_label_records:  1" in out
+        assert "'FAKE_UNIT_M11': 1" in out
+
+    def test_allow_drops_exits_0_with_counters_and_output(self, tmp_path):
+        unit_index = load_unit_index()
+        in_path = str(tmp_path / "mixed.jsonl")
+        out_path = str(tmp_path / "mixed.h5")
+        self._write_lines(self._mixed_lines(), in_path)
+
+        stats = v2.process_file(in_path, unit_index, out_path, schema=SCHEMA_M11,
+                                allow_drops=True)
+        assert stats["parse_errors"] == 1
+        assert stats["wrong_schema_version"] == 1
+        assert stats["missing_label_records"] == 1
+        assert stats["unknown_instance_units"] == {"FAKE_UNIT_M11": 1}
+        assert stats["unknown_supply_units"] == {}
+        assert stats["truncated_records"] == 0
+
+        # good + unknown-unit records kept (the latter kept-but-degraded:
+        # the unknown instance is dropped from the tokens) — missing-label,
+        # wrong-schema and unparseable records are gone.
+        assert not os.path.exists(out_path + ".tmp")
+        with h5py.File(out_path, "r") as hf:
+            assert hf.attrs["num_records"] == 2
+            labels = hf["label_A"][:]
+            assert labels[0] == pytest.approx(1.0)   # good
+            assert labels[1] == pytest.approx(0.0)   # unknown-unit record
+            counts = hf["instance_counts"][:]
+            assert counts[1] == 1, "unknown instance must be dropped from the kept record"
+
+    def test_unknown_supply_unit_counted_and_strict_fails(self, tmp_path):
+        unit_index = load_unit_index()
+        rec = make_record([make_instance("Drone", 0)],
+                          supply={"Drone": [20, 20, 1], "FAKE_SUPPLY_M11": [5, 5, 1]},
+                          outcome_p0=1)
+        in_path = str(tmp_path / "sup.jsonl")
+        out_path = str(tmp_path / "sup.h5")
+        self._write_lines([json.dumps(rec)], in_path)
+
+        with pytest.raises(SystemExit):
+            v2.process_file(in_path, unit_index, out_path, schema=SCHEMA_M11)
+        assert not os.path.exists(out_path)
+
+        stats = v2.process_file(in_path, unit_index, out_path, schema=SCHEMA_M11,
+                                allow_drops=True)
+        assert stats["unknown_supply_units"] == {"FAKE_SUPPLY_M11": 1}
+        with h5py.File(out_path, "r") as hf:
+            assert hf.attrs["num_records"] == 1  # record kept-but-degraded
+
+    def test_truncated_board_detected(self, tmp_path):
+        """A board with more KNOWN instances than max_instances is a drop
+        (the old 'WARNING: TRUNCATED' branch was dead — slot was capped, so
+        max_count_seen could never exceed the cap)."""
+        unit_index = load_unit_index()
+        schema = dict(SCHEMA_M11, max_instances=2)
+        rec = make_record([make_instance("Drone", 0) for _ in range(3)], outcome_p0=1)
+        in_path = str(tmp_path / "trunc.jsonl")
+        out_path = str(tmp_path / "trunc.h5")
+        self._write_lines([json.dumps(rec)], in_path)
+
+        with pytest.raises(SystemExit):
+            v2.process_file(in_path, unit_index, out_path, schema=schema)
+        assert not os.path.exists(out_path)
+
+        stats = v2.process_file(in_path, unit_index, out_path, schema=schema,
+                                allow_drops=True)
+        assert stats["truncated_records"] == 1
+        assert stats["truncated_instances"] == 1
+        with h5py.File(out_path, "r") as hf:
+            assert hf.attrs["num_records"] == 1
+            assert hf["instance_counts"][0] == 2
+            assert hf.attrs["max_instances_seen"] == 3  # TRUE board size
+
+    def test_clean_input_strict_passes(self, tmp_path):
+        unit_index = load_unit_index()
+        recs = [make_record([make_instance("Drone", 0)], outcome_p0=1),
+                make_record([make_instance("Engineer", 1)], outcome_p0=0)]
+        in_path = str(tmp_path / "clean.jsonl")
+        out_path = str(tmp_path / "clean.h5")
+        self._write_lines([json.dumps(r) for r in recs], in_path)
+
+        stats = v2.process_file(in_path, unit_index, out_path, schema=SCHEMA_M11)
+        assert sum([stats["parse_errors"], stats["wrong_schema_version"],
+                    stats["missing_label_records"], stats["truncated_records"],
+                    sum(stats["unknown_instance_units"].values()),
+                    sum(stats["unknown_supply_units"].values())]) == 0
+        assert os.path.exists(out_path)
+        assert not os.path.exists(out_path + ".tmp")
+        with h5py.File(out_path, "r") as hf:
+            assert hf.attrs["num_records"] == 2
+
+    def test_draw_label_still_mapped_not_dropped(self, tmp_path):
+        """outcome_p0=2 (draw) is a PRESENT label — mapped to 0.5, not a drop."""
+        unit_index = load_unit_index()
+        rec = make_record([make_instance("Drone", 0)], outcome_p0=2)
+        in_path = str(tmp_path / "draw.jsonl")
+        out_path = str(tmp_path / "draw.h5")
+        self._write_lines([json.dumps(rec)], in_path)
+
+        stats = v2.process_file(in_path, unit_index, out_path, schema=SCHEMA_M11)
+        assert stats["missing_label_records"] == 0
+        with h5py.File(out_path, "r") as hf:
+            assert hf["label_A"][0] == pytest.approx(0.5)

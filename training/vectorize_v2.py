@@ -16,11 +16,23 @@ Output: HDF5 file with:
 
 Schema: training/schema_v2.json
 
+STRICT BY DEFAULT (M-11, owner decision): drops at vectorize are NEVER normal —
+legitimate dropping happens at EXTRACTION (the js_engine extractor validates and
+drops there). Any dropped record (unparseable / wrong schema_version / missing
+outcome_p0 label), any unknown-unit instance/supply drop, or any board truncated
+past max_instances is counted, reported, and FAILS the run (exit 1, no output H5
+left behind — the file is written to <output>.tmp and only renamed on success).
+Pass --allow-drops for a forensic run: same counting + report, exit 0, output
+kept (unknown-unit/truncated records are KEPT-but-degraded, matching the old
+silent behavior; missing-label records are ALWAYS dropped, never defaulted to 0).
+
 Usage:
     python training/vectorize_v2.py --input training/data/raw_states.jsonl \\
                                     --output training/data/dataset_v2.h5
     python training/vectorize_v2.py --input data.jsonl --output data.h5 \\
                                     --schema training/schema_v2.json
+    python training/vectorize_v2.py --input dirty.jsonl --output dirty.h5 \\
+                                    --allow-drops   # forensic: report, exit 0
 """
 
 import argparse
@@ -30,7 +42,6 @@ import math
 import os
 import sys
 import time
-from collections import defaultdict
 
 import h5py
 import numpy as np
@@ -63,7 +74,7 @@ GLOBAL_FEATURE_NAMES = [
     "turn_number", "active_player", "under_attack",
 ]
 
-NUM_GLOBAL_FEATURES = len(GLOBAL_FEATURE_NAMES)  # 14
+NUM_GLOBAL_FEATURES = len(GLOBAL_FEATURE_NAMES)  # 15 (v2.2: + under_attack)
 
 # Reference game length for Strategy B temporal weighting
 REFERENCE_LENGTH = 40
@@ -81,7 +92,8 @@ def clamp_divide(value, cap):
     return min(float(value), float(cap)) / float(cap)
 
 
-def vectorize_instances(instances, unit_index, max_instances=DEFAULT_MAX_INSTANCES):
+def vectorize_instances(instances, unit_index, max_instances=DEFAULT_MAX_INSTANCES,
+                        stats=None):
     """Convert a list of instance dicts to padded arrays.
 
     P0 units are placed first, then P1 units (within each player, order
@@ -92,6 +104,13 @@ def vectorize_instances(instances, unit_index, max_instances=DEFAULT_MAX_INSTANC
         instances: list of instance dicts from V2 JSONL record
         unit_index: dict mapping unit display name -> int index (0-115)
         max_instances: padded slot count
+        stats: optional dict for drop accounting (M-11). When provided:
+            stats["unknown_units"][name] += 1 per instance whose unit name is
+            not in unit_index (the instance is dropped from the tokens);
+            stats["truncated"] += 1 per KNOWN instance beyond max_instances
+            (the board overflowed the padded slot count — silently losing
+            units corrupts the features). Callers that omit stats get the
+            original drop behavior, just unrecorded.
 
     Returns:
         inst_feats: float32 ndarray shape (max_instances, NUM_INSTANCE_FEATURES)
@@ -108,12 +127,18 @@ def vectorize_instances(instances, unit_index, max_instances=DEFAULT_MAX_INSTANC
 
     slot = 0
     for inst in ordered:
-        if slot >= max_instances:
-            break
-
         name = inst.get("name", "")
         if name not in unit_index:
-            continue  # silently drop unknown units
+            if stats is not None:
+                uu = stats.setdefault("unknown_units", {})
+                uu[name] = uu.get(name, 0) + 1
+            continue  # unknown unit dropped (counted above when stats given)
+
+        if slot >= max_instances:
+            # Known unit beyond the padded slot cap: the board is TRUNCATED.
+            if stats is not None:
+                stats["truncated"] = stats.get("truncated", 0) + 1
+            continue
 
         unit_id = unit_index[name]
 
@@ -142,16 +167,18 @@ def vectorize_instances(instances, unit_index, max_instances=DEFAULT_MAX_INSTANC
     return inst_feats, inst_ids, slot
 
 
-def vectorize_supply(supply, unit_index, num_units=116):
+def vectorize_supply(supply, unit_index, num_units=116, stats=None):
     """Convert supply dict to (num_units, 3) float32 array.
 
     Each row is [p0_supply, p1_supply, in_card_set] for the corresponding unit.
-    Unknown units in the supply dict are silently ignored.
+    Unknown units in the supply dict are dropped (counted when stats is given).
 
     Args:
         supply: dict mapping unit display name -> [p0_sup, p1_sup, in_set]
         unit_index: dict mapping unit display name -> int index
         num_units: total number of unit types (default 116)
+        stats: optional dict for drop accounting (M-11):
+            stats["unknown_units"][name] += 1 per dropped supply row.
 
     Returns:
         float32 ndarray shape (num_units, 3)
@@ -160,7 +187,10 @@ def vectorize_supply(supply, unit_index, num_units=116):
 
     for name, vals in supply.items():
         if name not in unit_index:
-            continue  # silently drop unknown units
+            if stats is not None:
+                uu = stats.setdefault("unknown_units", {})
+                uu[name] = uu.get(name, 0) + 1
+            continue  # unknown unit dropped (counted above when stats given)
 
         idx = unit_index[name]
         if idx >= num_units:
@@ -367,8 +397,19 @@ def count_lines(filepath):
 # Main processing
 # ---------------------------------------------------------------------------
 
-def process_file(input_path, unit_index, output_path, schema, chunk_size=5000):
+def process_file(input_path, unit_index, output_path, schema, chunk_size=5000,
+                 allow_drops=False):
     """Stream-process V2 JSONL input into HDF5 output in chunks.
+
+    STRICT BY DEFAULT (M-11): every drop is counted and reported; any drop at
+    all fails the run with exit 1 (drops are legitimate at EXTRACTION, never
+    here — the RL stage-2 path and the human pipeline both expect zero). The
+    H5 is written to <output>.tmp and renamed into place only on success, so a
+    failed run never leaves a half-usable H5. With allow_drops=True the same
+    report is printed but the run exits 0 and the output is kept (forensic
+    use); unknown-unit / truncated records are then KEPT-but-degraded (the old
+    silent behavior, now counted). Missing-label records are ALWAYS dropped —
+    never defaulted to outcome 0.
 
     Args:
         input_path:  path to input JSONL file
@@ -376,6 +417,10 @@ def process_file(input_path, unit_index, output_path, schema, chunk_size=5000):
         output_path: path to output HDF5 file
         schema:      schema dict (loaded from schema_v2.json or inline)
         chunk_size:  records per processing chunk
+        allow_drops: report drops but exit 0 (default False = strict)
+
+    Returns:
+        drop_stats dict (only on a surviving run; strict failures sys.exit(1))
     """
     num_units = schema["num_units"]
     max_instances = schema.get("max_instances", DEFAULT_MAX_INSTANCES)
@@ -395,8 +440,22 @@ def process_file(input_path, unit_index, output_path, schema, chunk_size=5000):
     out_dir = os.path.dirname(os.path.abspath(output_path))
     os.makedirs(out_dir, exist_ok=True)
 
-    print(f"\n  Creating HDF5 file: {output_path}")
-    with h5py.File(output_path, "w") as hf:
+    # M-11 drop accounting — every silent-drop site feeds a counter here.
+    drop_stats = {
+        "parse_errors": 0,            # unparseable JSON line -> record dropped
+        "wrong_schema_version": 0,    # schema_version != "v2" -> record dropped
+        "missing_label_records": 0,   # no/null outcome_p0 -> record DROPPED (never 0.0)
+        "unknown_instance_units": {},  # name -> dropped instance count (record kept)
+        "unknown_supply_units": {},    # name -> dropped supply row count (record kept)
+        "truncated_records": 0,       # records whose known instances exceed max_instances
+        "truncated_instances": 0,     # known instances lost to the slot cap
+    }
+
+    # Write to a temp path; rename into place only on success (no partial H5).
+    tmp_path = output_path + ".tmp"
+
+    print(f"\n  Creating HDF5 file: {output_path} (via {os.path.basename(tmp_path)})")
+    with h5py.File(tmp_path, "w") as hf:
         N = total_lines
         cs = min(chunk_size, N)
 
@@ -471,7 +530,6 @@ def process_file(input_path, unit_index, output_path, schema, chunk_size=5000):
         print("  Vectorizing records...")
         t_start = time.time()
         record_idx = 0
-        skipped = 0
         max_count_seen = 0
 
         with open(input_path, "r", encoding="utf-8") as f:
@@ -506,32 +564,54 @@ def process_file(input_path, unit_index, output_path, schema, chunk_size=5000):
                     try:
                         rec = json.loads(line)
                     except json.JSONDecodeError:
-                        skipped += 1
+                        drop_stats["parse_errors"] += 1
                         continue
 
                     # Check schema version
                     if rec.get("schema_version") != "v2":
-                        skipped += 1
+                        drop_stats["wrong_schema_version"] += 1
                         continue
 
-                    # Vectorize instances
-                    instances = rec.get("instances", [])
-                    inst_feats, inst_ids, count = vectorize_instances(
-                        instances, unit_index, max_instances=max_instances
-                    )
-                    max_count_seen = max(max_count_seen, count)
+                    # Label gate FIRST (cheap): a record without outcome_p0 is
+                    # DROPPED and counted — defaulting to 0.0 would silently
+                    # stamp "P1 won" on an unlabeled state (M-11).
+                    outcome_p0 = rec.get("outcome_p0")
+                    if outcome_p0 is None:
+                        drop_stats["missing_label_records"] += 1
+                        continue
+                    # draws (outcome_p0=2) mapped to 0.5
+                    if outcome_p0 == 2:
+                        outcome_p0 = 0.5
 
-                    # Vectorize supply
+                    # Vectorize instances (with drop accounting)
+                    instances = rec.get("instances", [])
+                    rec_stats = {}
+                    inst_feats, inst_ids, count = vectorize_instances(
+                        instances, unit_index, max_instances=max_instances,
+                        stats=rec_stats
+                    )
+                    for uname, n in rec_stats.get("unknown_units", {}).items():
+                        drop_stats["unknown_instance_units"][uname] = \
+                            drop_stats["unknown_instance_units"].get(uname, 0) + n
+                    rec_truncated = rec_stats.get("truncated", 0)
+                    if rec_truncated:
+                        drop_stats["truncated_records"] += 1
+                        drop_stats["truncated_instances"] += rec_truncated
+                    # true board size (incl. truncated overflow) so the
+                    # TRUNCATED branch below can actually fire
+                    max_count_seen = max(max_count_seen, count + rec_truncated)
+
+                    # Vectorize supply (with drop accounting)
                     supply = rec.get("supply", {})
-                    sup_arr = vectorize_supply(supply, unit_index, num_units=num_units)
+                    sup_stats = {}
+                    sup_arr = vectorize_supply(supply, unit_index, num_units=num_units,
+                                               stats=sup_stats)
+                    for uname, n in sup_stats.get("unknown_units", {}).items():
+                        drop_stats["unknown_supply_units"][uname] = \
+                            drop_stats["unknown_supply_units"].get(uname, 0) + n
 
                     # Vectorize globals
                     gvec = vectorize_globals(rec, caps)
-
-                    # Labels — draws (outcome_p0=2) mapped to 0.5
-                    outcome_p0 = rec.get("outcome_p0", 0)
-                    if outcome_p0 == 2:
-                        outcome_p0 = 0.5
                     ply = rec.get("ply_index", 0)
                     total_p = rec.get("total_plies", 0)
                     r0 = rec.get("rating_p0", 1500)
@@ -589,53 +669,94 @@ def process_file(input_path, unit_index, output_path, schema, chunk_size=5000):
                 if eof:
                     break
 
-        # Resize if actual < estimated (e.g. skipped lines or non-v2 records)
+        # Resize if actual < estimated (dropped lines / records) — on the OPEN
+        # handle, not a re-open of the same file (the old re-open-in-"a" worked
+        # but relied on same-process double-open of a live HDF5 handle).
         actual_records = record_idx
         if actual_records < N:
-            print(f"  NOTE: {N - actual_records} records skipped ({skipped} parse errors "
-                  f"/ schema mismatches). Resizing to {actual_records}.")
-            with h5py.File(output_path, "a") as hf:
-                for ds_name in [
-                    "instance_features", "instance_unit_ids", "instance_counts",
-                    "supply", "globals",
-                    "label_A", "label_B_weight", "label_C", "label_D",
-                    "replay_codes", "ply_index", "total_plies",
-                    "rating_p0", "rating_p1", "game_date",
-                ]:
-                    if ds_name in hf:
-                        hf[ds_name].resize(actual_records, axis=0)
+            print(f"  NOTE: {N - actual_records} of {N} lines did not produce records "
+                  f"(see drop report). Resizing to {actual_records}.")
+            for ds_name in [
+                "instance_features", "instance_unit_ids", "instance_counts",
+                "supply", "globals",
+                "label_A", "label_B_weight", "label_C", "label_D",
+                "replay_codes", "ply_index", "total_plies",
+                "rating_p0", "rating_p1", "game_date",
+            ]:
+                if ds_name in hf:
+                    hf[ds_name].resize(actual_records, axis=0)
 
         # Write HDF5 attributes
-        with h5py.File(output_path, "a") as hf:
-            hf.attrs["schema_version"] = schema["schema_version"]
-            hf.attrs["schema_hash"] = schema_hash
-            hf.attrs["num_records"] = actual_records
-            hf.attrs["num_units"] = num_units
-            hf.attrs["max_instances"] = max_instances
-            hf.attrs["num_instance_features"] = NUM_INSTANCE_FEATURES
-            hf.attrs["num_global_features"] = NUM_GLOBAL_FEATURES
-            if max_count_seen > 0:
-                hf.attrs["max_instances_seen"] = max_count_seen
-
-        elapsed = time.time() - t_start
-        print(f"\n  Done. {actual_records} records written in {elapsed:.1f}s")
+        hf.attrs["schema_version"] = schema["schema_version"]
+        hf.attrs["schema_hash"] = schema_hash
+        hf.attrs["num_records"] = actual_records
+        hf.attrs["num_units"] = num_units
+        hf.attrs["max_instances"] = max_instances
+        hf.attrs["num_instance_features"] = NUM_INSTANCE_FEATURES
+        hf.attrs["num_global_features"] = NUM_GLOBAL_FEATURES
         if max_count_seen > 0:
-            print(f"  Max instances seen in any record: {max_count_seen} "
-                  f"({'OK' if max_count_seen <= max_instances else 'WARNING: TRUNCATED'})")
-        if skipped:
-            print(f"  Skipped: {skipped} records (parse errors / non-v2 schema)")
-        print(f"  Output: {output_path}")
-        file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-        print(f"  File size: {file_size_mb:.1f} MB")
+            hf.attrs["max_instances_seen"] = max_count_seen
 
-        # Summary
-        print(f"\n  --- Summary ---")
-        print(f"  Records: {actual_records}")
-        print(f"  Instance slots: {max_instances} (padded)")
-        print(f"  Supply shape: ({num_units}, 3)")
-        print(f"  Global features: {NUM_GLOBAL_FEATURES}")
-        print(f"  Schema version: {schema['schema_version']}")
-        print(f"  Schema hash: {schema_hash[:16]}...")
+    elapsed = time.time() - t_start
+
+    # ----- M-11 end-of-run drop report (ALWAYS printed, zeros included) -----
+    unknown_inst_total = sum(drop_stats["unknown_instance_units"].values())
+    unknown_sup_total = sum(drop_stats["unknown_supply_units"].values())
+    total_problems = (drop_stats["parse_errors"]
+                      + drop_stats["wrong_schema_version"]
+                      + drop_stats["missing_label_records"]
+                      + unknown_inst_total + unknown_sup_total
+                      + drop_stats["truncated_records"])
+    print(f"\n  --- Drop report ---")
+    print(f"  parse_errors:           {drop_stats['parse_errors']}  (unparseable JSON line -> record dropped)")
+    print(f"  wrong_schema_version:   {drop_stats['wrong_schema_version']}  (schema_version != 'v2' -> record dropped)")
+    print(f"  missing_label_records:  {drop_stats['missing_label_records']}  (no outcome_p0 -> record DROPPED, never defaulted to 0)")
+    print(f"  unknown_instance_units: {unknown_inst_total}  (instances dropped; their records kept-but-degraded)")
+    for uname, n in sorted(drop_stats["unknown_instance_units"].items()):
+        print(f"      {uname!r}: {n}")
+    print(f"  unknown_supply_units:   {unknown_sup_total}  (supply rows dropped; their records kept-but-degraded)")
+    for uname, n in sorted(drop_stats["unknown_supply_units"].items()):
+        print(f"      {uname!r}: {n}")
+    print(f"  truncated_records:      {drop_stats['truncated_records']}  "
+          f"(boards over max_instances={max_instances}; "
+          f"{drop_stats['truncated_instances']} known instances lost)")
+
+    if total_problems and not allow_drops:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        print(f"\nFATAL: {total_problems} drop(s) detected (drop report above). Drops at "
+              f"vectorize are NEVER normal -- legitimate dropping happens at EXTRACTION "
+              f"(the js_engine extractor validates there), and both the RL stage-2 path "
+              f"and the human pipeline expect ZERO here. No output written "
+              f"({output_path} untouched, temp file removed). Fix the input, or re-run "
+              f"with --allow-drops for a forensic exit-0 run.")
+        sys.exit(1)
+
+    os.replace(tmp_path, output_path)
+
+    print(f"\n  Done. {actual_records} records written in {elapsed:.1f}s")
+    if max_count_seen > 0:
+        print(f"  Max instances seen in any record: {max_count_seen} "
+              f"({'OK' if max_count_seen <= max_instances else 'WARNING: TRUNCATED'})")
+    print(f"  Output: {output_path}")
+    file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+    print(f"  File size: {file_size_mb:.1f} MB")
+
+    # Summary
+    print(f"\n  --- Summary ---")
+    print(f"  Records: {actual_records}")
+    print(f"  Instance slots: {max_instances} (padded)")
+    print(f"  Supply shape: ({num_units}, 3)")
+    print(f"  Global features: {NUM_GLOBAL_FEATURES}")
+    print(f"  Schema version: {schema['schema_version']}")
+    print(f"  Schema hash: {schema_hash[:16]}...")
+    if total_problems:
+        print(f"  WARNING: {total_problems} drop(s) tolerated under --allow-drops "
+              f"(forensic run) -- this H5 is NOT training-clean.")
+
+    return drop_stats
 
 
 def main():
@@ -648,6 +769,12 @@ def main():
                         help="Path to schema JSON (default: training/schema_v2.json)")
     parser.add_argument("--chunk-size", type=int, default=5000,
                         help="Records per processing chunk (default: 5000)")
+    parser.add_argument("--allow-drops", action="store_true",
+                        help="Forensic mode: count+report drops but exit 0 and keep "
+                             "the output. DEFAULT IS STRICT — any drop (parse error, "
+                             "wrong schema_version, missing outcome_p0, unknown unit, "
+                             "board truncation) fails the run with no output H5 "
+                             "(drops are legitimate at extraction, never here).")
     args = parser.parse_args()
 
     # Resolve schema path
@@ -682,7 +809,7 @@ def main():
     # Process
     print(f"\nProcessing {args.input}...")
     process_file(args.input, unit_index, args.output, schema,
-                 chunk_size=args.chunk_size)
+                 chunk_size=args.chunk_size, allow_drops=args.allow_drops)
 
     print("\nDone.")
 

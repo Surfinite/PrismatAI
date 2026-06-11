@@ -32,6 +32,14 @@ Checks
                      RL_Eval_iter0 (the VERDICT OPPONENT), RL_SelfPlay (the
                      data generator), RL_Narrow (the iterator-only anchor)
   8. existences      frozen parent_pt + the train/val H5s exist on disk
+  9. use_dsnn_sentinel  no use_dsnn.txt FORCE_DSNN drop-in sentinel next to
+                     the engine exes (M-09): the sentinel silently swaps the
+                     net + think params on every protocol-path engine call
+                     (query_move / tactical suite / coverage), contaminating
+                     stages 6/8; bin dir derived from --config (config lives
+                     at <bin>/asset/config/config.txt, sentinel at
+                     <bin>/use_dsnn.txt). The masterbot2016 baseline needs no
+                     check -- the 2016 exe predates the sentinel mechanism.
 
 Exit 0 = all pass; exit 1 = any failure, each printed as one
 "FAIL: <check>: <detail>" line ("OK: <check>" lines unless --quiet).
@@ -462,6 +470,31 @@ def check_existences(frozen, repo_root):
 
 
 # ---------------------------------------------------------------------------
+# Check 9: use_dsnn.txt drop-in sentinel (M-09 contamination guard)
+# ---------------------------------------------------------------------------
+
+def check_use_dsnn_sentinel(config_path):
+    """Check 9: the FORCE_DSNN Steam drop-in sentinel must NOT exist in the
+    engine bin dir. config.txt lives at <bin>/asset/config/config.txt; the
+    sentinel the protocol path probes for sits NEXT TO the exe at
+    <bin>/use_dsnn.txt -- derive bin from the config path (two dirnames above
+    the config dir). The masterbot2016 dir needs no equivalent check: the 2016
+    exe predates the sentinel mechanism."""
+    config_dir = os.path.dirname(os.path.abspath(config_path))
+    bin_dir = os.path.dirname(os.path.dirname(config_dir))
+    sentinel = os.path.join(bin_dir, "use_dsnn.txt")
+    if os.path.isfile(sentinel):
+        return ["FORCE_DSNN drop-in sentinel exists: %s -- while present it silently "
+                "swaps the loaded net (+ think_time/max_traversals) on EVERY "
+                "protocol-path engine call (query_move.js, tactical suite, coverage; "
+                "stages 6/8 run through it), so campaign measurements would be taken "
+                "with the WRONG net. It is the Steam drop-in mechanism (dave 72c240a), "
+                "not a campaign config -- delete/move it before running an iteration."
+                % sentinel]
+    return []
+
+
+# ---------------------------------------------------------------------------
 # Aggregation
 # ---------------------------------------------------------------------------
 
@@ -470,6 +503,8 @@ def run_checks(config_path, frozen_path, repo_root):
     results = []
     cfg, cfg_failures = load_config(config_path)
     results.append(("json_bom", cfg_failures))
+    # M-09: independent of config CONTENT -- guards the engine bin dir itself.
+    results.append(("use_dsnn_sentinel", check_use_dsnn_sentinel(config_path)))
     frozen, frozen_failures = load_frozen(frozen_path)
     if frozen_failures:
         results.append(("frozen_json", frozen_failures))

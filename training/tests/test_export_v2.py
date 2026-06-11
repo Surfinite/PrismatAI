@@ -52,10 +52,17 @@ EXPECTED_TENSOR_NAMES = [
     "property_table",
 ]
 
-# Expected tensor shapes for default model config
+# Expected tensor shapes for default model config (schema v2.2.x:
+# 37 static properties -> token 32+37+10 = 79; 15 globals -> value head
+# input 128+128+32+15 = 303)
+NUM_PROPERTIES = 37
+NUM_GLOBAL = 15
+TOKEN_DIM = 32 + NUM_PROPERTIES + 10          # 79
+VALUE_IN = 128 + 128 + 32 + NUM_GLOBAL        # 303
+
 EXPECTED_SHAPES = {
     "unit_embedding.weight":      (116, 32),
-    "instance_encoder.0.weight":  (128, 55),
+    "instance_encoder.0.weight":  (128, TOKEN_DIM),
     "instance_encoder.0.bias":    (128,),
     "instance_encoder.2.weight":  (128, 128),
     "instance_encoder.2.bias":    (128,),
@@ -63,13 +70,13 @@ EXPECTED_SHAPES = {
     "supply_encoder.0.bias":      (32,),
     "supply_encoder.2.weight":    (32, 32),
     "supply_encoder.2.bias":      (32,),
-    "value_head.0.weight":        (256, 302),
+    "value_head.0.weight":        (256, VALUE_IN),
     "value_head.0.bias":          (256,),
     "value_head.3.weight":        (256, 256),
     "value_head.3.bias":          (256,),
     "value_head.6.weight":        (1, 256),
     "value_head.6.bias":          (1,),
-    "property_table":             (116, 13),
+    "property_table":             (116, NUM_PROPERTIES),
 }
 
 
@@ -132,15 +139,15 @@ def numpy_forward(tensors, instance_features, instance_unit_ids, instance_count,
         instance_unit_ids:  (MAX_INST,) int
         instance_count:     int — number of real (non-padded) instances
         supply:             (116, 3) float32
-        globals_vec:        (14,) float32
+        globals_vec:        (15,) float32
 
     Returns:
         value_logit: scalar float32
     """
     embed_w     = tensors["unit_embedding.weight"]        # (116, 32)
-    prop_table  = tensors["property_table"]               # (116, 13)
+    prop_table  = tensors["property_table"]               # (116, 37)
 
-    ie_w1 = tensors["instance_encoder.0.weight"]          # (128, 55)
+    ie_w1 = tensors["instance_encoder.0.weight"]          # (128, 79)
     ie_b1 = tensors["instance_encoder.0.bias"]            # (128,)
     ie_w2 = tensors["instance_encoder.2.weight"]          # (128, 128)
     ie_b2 = tensors["instance_encoder.2.bias"]            # (128,)
@@ -150,7 +157,7 @@ def numpy_forward(tensors, instance_features, instance_unit_ids, instance_count,
     se_w2 = tensors["supply_encoder.2.weight"]            # (32, 32)
     se_b2 = tensors["supply_encoder.2.bias"]              # (32,)
 
-    vh_w1 = tensors["value_head.0.weight"]                # (256, 302)
+    vh_w1 = tensors["value_head.0.weight"]                # (256, 303)
     vh_b1 = tensors["value_head.0.bias"]                  # (256,)
     vh_w2 = tensors["value_head.3.weight"]                # (256, 256)
     vh_b2 = tensors["value_head.3.bias"]                  # (256,)
@@ -162,8 +169,8 @@ def numpy_forward(tensors, instance_features, instance_unit_ids, instance_count,
 
     # Token construction: [embedding | static_properties | instance_state]
     embeddings = embed_w[instance_unit_ids]               # (MAX_INST, 32)
-    properties = prop_table[instance_unit_ids]            # (MAX_INST, 13)
-    tokens = np.concatenate([embeddings, properties, instance_features], axis=-1)  # (MAX_INST, 55)
+    properties = prop_table[instance_unit_ids]            # (MAX_INST, 37)
+    tokens = np.concatenate([embeddings, properties, instance_features], axis=-1)  # (MAX_INST, 79)
 
     # Instance encoder: two Linear+ReLU layers
     h1 = np.maximum(0.0, tokens @ ie_w1.T + ie_b1)       # (MAX_INST, 128)
@@ -186,7 +193,7 @@ def numpy_forward(tensors, instance_features, instance_unit_ids, instance_count,
     supply_pool = supply_enc.sum(axis=0)                  # (32,)
 
     # Value head: 3-layer MLP (ReLU between, no activation on final)
-    combined = np.concatenate([p0_pool, p1_pool, supply_pool, globals_vec])  # (302,)
+    combined = np.concatenate([p0_pool, p1_pool, supply_pool, globals_vec])  # (303,)
     vh1 = np.maximum(0.0, combined @ vh_w1.T + vh_b1)    # (256,)
     vh2 = np.maximum(0.0, vh1 @ vh_w2.T + vh_b2)         # (256,)
     value_logit = (vh2 @ vh_w3.T + vh_b3)[0]             # scalar
@@ -206,7 +213,7 @@ def pytorch_forward_single(model, instance_features, instance_unit_ids, instance
         ids_t   = torch.from_numpy(instance_unit_ids).unsqueeze(0)  # (1, MAX_INST)
         counts_t = torch.tensor([instance_count], dtype=torch.long)
         supply_t = torch.from_numpy(supply).unsqueeze(0)            # (1, 116, 3)
-        globs_t  = torch.from_numpy(globals_vec).unsqueeze(0)       # (1, 14)
+        globs_t  = torch.from_numpy(globals_vec).unsqueeze(0)       # (1, 15)
 
         out = model(feats_t, ids_t, counts_t, supply_t, globs_t)    # (1, 1)
         return out[0, 0].item()
@@ -223,7 +230,7 @@ def make_test_inputs(max_instances=200, num_units=116):
 
     instance_unit_ids = rng.randint(0, num_units, size=max_instances).astype(np.int64)
     supply = rng.rand(num_units, 3).astype(np.float32)
-    globals_vec = rng.rand(14).astype(np.float32)
+    globals_vec = rng.rand(NUM_GLOBAL).astype(np.float32)
 
     return instance_features, instance_unit_ids, instance_count, supply, globals_vec
 
@@ -277,7 +284,7 @@ class TestFileCreation:
 
         assert hdr["num_units"]      == 116,  f"num_units: {hdr['num_units']}"
         assert hdr["d_embed"]        == 32,   f"d_embed: {hdr['d_embed']}"
-        assert hdr["num_properties"] == 13,   f"num_properties: {hdr['num_properties']}"
+        assert hdr["num_properties"] == NUM_PROPERTIES, f"num_properties: {hdr['num_properties']}"
         assert hdr["encoder_hidden"] == 128,  f"encoder_hidden: {hdr['encoder_hidden']}"
         assert hdr["supply_hidden"]  == 32,   f"supply_hidden: {hdr['supply_hidden']}"
         assert hdr["value_hidden"]   == 256,  f"value_hidden: {hdr['value_hidden']}"
@@ -313,7 +320,7 @@ class TestRoundTrip:
         instance_unit_ids = np.zeros(max_instances, dtype=np.int64)
         instance_count = 0
         supply = np.zeros((116, 3), dtype=np.float32)
-        globals_vec = np.zeros(14, dtype=np.float32)
+        globals_vec = np.zeros(NUM_GLOBAL, dtype=np.float32)
 
         np_val = numpy_forward(tensors, instance_features, instance_unit_ids,
                                instance_count, supply, globals_vec)
@@ -364,7 +371,7 @@ class TestRoundTrip:
             supply[i, 0] = rng.randint(0, 8)   # p0 supply
             supply[i, 1] = rng.randint(0, 8)   # p1 supply
             supply[i, 2] = 1.0                  # in card set
-        globals_vec = rng.rand(14).astype(np.float32)
+        globals_vec = rng.rand(NUM_GLOBAL).astype(np.float32)
 
         np_val = numpy_forward(tensors, instance_features, instance_unit_ids,
                                instance_count, supply, globals_vec)
@@ -448,13 +455,13 @@ class TestTensorInventory:
         assert w.shape == (116, 32), f"unit_embedding shape: {w.shape}"
 
     def test_instance_encoder_layer1_shapes(self, tmp_path):
-        """instance_encoder linear1: weight (128, 55), bias (128,)."""
+        """instance_encoder linear1: weight (128, 79 = 32 embed + 37 props + 10 state), bias (128,)."""
         model = make_random_model()
         out_path = str(tmp_path / "weights.bin")
         exv2.export_model(model, out_path)
 
         hdr, tensors = load_all_tensors(out_path)
-        assert tensors["instance_encoder.0.weight"].shape == (128, 55)
+        assert tensors["instance_encoder.0.weight"].shape == (128, TOKEN_DIM)
         assert tensors["instance_encoder.0.bias"].shape   == (128,)
 
     def test_instance_encoder_layer2_shapes(self, tmp_path):
@@ -480,13 +487,13 @@ class TestTensorInventory:
         assert tensors["supply_encoder.2.bias"].shape   == (32,)
 
     def test_value_head_shapes(self, tmp_path):
-        """value_head layers: layer0 (256,302)/(256,), layer3 (256,256)/(256,), layer6 (1,256)/(1,)."""
+        """value_head layers: layer0 (256,303 = 288+15 globals)/(256,), layer3 (256,256)/(256,), layer6 (1,256)/(1,)."""
         model = make_random_model()
         out_path = str(tmp_path / "weights.bin")
         exv2.export_model(model, out_path)
 
         hdr, tensors = load_all_tensors(out_path)
-        assert tensors["value_head.0.weight"].shape == (256, 302)
+        assert tensors["value_head.0.weight"].shape == (256, VALUE_IN)
         assert tensors["value_head.0.bias"].shape   == (256,)
         assert tensors["value_head.3.weight"].shape == (256, 256)
         assert tensors["value_head.3.bias"].shape   == (256,)
@@ -494,13 +501,13 @@ class TestTensorInventory:
         assert tensors["value_head.6.bias"].shape   == (1,)
 
     def test_property_table_shape(self, tmp_path):
-        """property_table buffer is (116, 13)."""
+        """property_table buffer is (116, 37) — production-vector schema v2.2.x."""
         model = make_random_model()
         out_path = str(tmp_path / "weights.bin")
         exv2.export_model(model, out_path)
 
         hdr, tensors = load_all_tensors(out_path)
-        assert tensors["property_table"].shape == (116, 13), \
+        assert tensors["property_table"].shape == (116, NUM_PROPERTIES), \
             f"property_table shape: {tensors['property_table'].shape}"
 
     def test_property_table_values_match_model(self, tmp_path):

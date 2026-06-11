@@ -85,6 +85,17 @@ preflight asserts the post-port shape (`iterator_shape`, `book_sizes`). `c=0.3` 
 cValue sweep's *monotonicity* (strength was monotonic in 1/c — a buy-tree change is unlikely to invert
 a monotonic trend); a re-sweep is a cheap future experiment if iter-1 behaves oddly.
 
+### 1d. Seed semantics at Threads>1 (E9)
+
+At `Threads>1` a block's `Seed` fixes the **card-set SEQUENCE** but **NOT game outcomes**: only the
+main thread is seeded, and at multi-thread it does only the card-set draws while worker threads play
+the games and seed independently (collision-free per-seat/slot since dave `6e93480`; the engine warns
+at launch). Consequences: **same-Seed blocks in the same thread mode share card sets** — that is why
+the whole cal N-family (shared `Seed:4242`, all `Threads:8` since 2026-06-11) gets **matched sets**
+across N. `Threads:1` blocks do **not** share sets across blocks even at the same Seed: the game RNG
+interleaves with the set draws, so each block's per-set sequence diverges after game 1. Outcome-level
+reproducibility exists only at `Threads:1`.
+
 ---
 
 ## 2. External-review addenda (A1, A2, A6, A9) — folded in
@@ -336,7 +347,9 @@ We can only record what the smokes already produced (do **not** run a new campai
 sizing the ~£400 AWS spend, the **iter-0 run** must measure each row.
 
 What we know from smokes already run:
-- The **N=100 self-play smoke** (`RL_SelfPlay_N100`, `RL_Cal_N100`) produced **~4 games quickly** (Threads:1).
+- The **N=100 self-play smoke** (`RL_SelfPlay_N100`, `RL_Cal_N100`) produced **~4 games quickly** (then
+  Threads:1; the whole cal family is **Threads:8** since 2026-06-11 — matched sets + ~5-8× wall-clock,
+  see `eval/calibrate_n.py` THREADING and §1d).
 - The **N=1000 32-game re-screen** at the frozen tuple completed at **Threads:8** (`eval/n1000_rescreen.json`).
 - Self-play is **CPU-bound**. The dave engine is **x64**, so the old x86 4-thread OOM cap does not apply;
   Threads:8 export was audit-verified clean.

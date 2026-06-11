@@ -1,8 +1,16 @@
-"""N-calibration: smallest MaxTraversals passing the non-degeneracy check (spec §3/§9; A5).
+"""N-calibration: non-degeneracy SCREEN over MaxTraversals (spec §3/§9; A5).
 
-Pick the self-play search budget N (= MaxTraversals) by CALIBRATION, not by feel.
-Sweep N in {100,256,512,1000,2000,5000} with the FROZEN production net and pick the
-SMALLEST N that passes a non-degeneracy check:
+ROLE (updated 2026-06-11 — N-10 truth-up): the campaign N is **FROZEN BY
+JUDGMENT** at 1000 in `eval/campaign_frozen.json` (rl_campaign.md §1). This
+driver does NOT pick the campaign N. Its output (`eval/n_calibration.json`,
+incl. `recommended_N`) is a non-degeneracy SCREEN — evidence that a budget is
+not degenerate — NOT a ranking, and NOT an instruction to retune. Do NOT
+hand-edit RL_SelfPlay's MaxTraversals from its output: the stage-0 preflight
+(`eval/preflight_config.py`) asserts the frozen tuple, and any change to N is
+a NEW campaign (re-anchor + re-baseline, rl_campaign.md §1).
+
+Sweep N in {100,256,512,1000,2000,5000} with the FROZEN production net; the
+per-N non-degeneracy check:
   * game-length within 2 sigma of the human-1800 baseline,
   * P0 win-rate in [0.35, 0.65],
   * root visit-entropy above a floor (A5: the *effective* post-eps entropy, not raw),
@@ -55,8 +63,8 @@ To run it:
      path -- it is a required arg). The ENTROPY_FLOOR below is a starting value; tune it
      from the human baseline's effective entropy.
   3. The driver flips each RL_Cal_N{N} / RL_Cal_vs_deploy_N{N} config block to run:true,
-     runs Prismata_Testing.exe, then flips it back. All blocks ship run:false. The self-play
-     blocks are Threads:1 (per-record V2 export is single-thread-safe); vs-deploy are Threads:8.
+     runs Prismata_Testing.exe, then flips it back. All blocks ship run:false. The WHOLE
+     cal family runs Threads:8 (since 2026-06-11 — see THREADING below).
   4. Invoke (example):
        python eval/calibrate_n.py \
            --human-h5 training/data/human_1800_v2.h5 \
@@ -65,8 +73,29 @@ To run it:
            --weights neural_weights_mixed_v221.bin
   5. Output: eval/n_calibration.json (per-N metrics incl. the eps curve +
      root_children/root_truncated co-instrumentation + degenerate_reason, and
-     recommended_N). Then update RL_SelfPlay's MaxTraversals to recommended_N by hand.
+     recommended_N — a SCREEN verdict only; the campaign N stays frozen at
+     campaign_frozen.json and MaxTraversals is never hand-edited from here).
   This driver does NOT set recommended_N for you on a partial run -- that is the user's call.
+
+THREADING (2026-06-11: the whole cal family is Threads:8)
+---------------------------------------------------------
+  * Every RL_Cal_N* AND RL_Cal_vs_deploy_N* block now runs "Threads": 8. The old
+    Threads:1 rationale for the self-play blocks ("per-record V2 export is
+    single-thread-safe") was FALSE comfort: the Jun-10 audit X3-validated the V2
+    export CLEAN at Threads:8, and worker-RNG collisions are gone since the
+    per-seat/slot attribution engine commit (dave 6e93480).
+  * MATCHED SETS (the comparability WIN): at Threads>1 the MAIN thread does only
+    the card-set draws (workers play the games), so same-Seed blocks — the whole
+    cal family shares Seed:4242 — draw the SAME card-set sequence across the
+    N-family. Cross-N comparability IMPROVES vs Threads:1, where the game RNG
+    interleaves with the set draws and each N's blocks see different sets.
+    Runs are also ~5-8x faster in wall-clock.
+  * COSTS: (1) game OUTCOMES are not cross-run reproducible — the Seed governs
+    the main thread only; worker threads seed independently (the engine prints a
+    warning at Threads>1). (2) Results are NOT comparable with the
+    pre-2026-06-11 Threads:1 sweeps' per-set sequences (those interleaved the
+    draws differently) — treat older n_calibration.json entries as a different
+    measurement series.
 """
 import argparse
 import glob

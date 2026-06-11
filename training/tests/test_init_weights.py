@@ -172,7 +172,45 @@ def test_help_lists_init_weights():
 
 
 # ---------------------------------------------------------------------------
-# 3. M-10: export_weights_v2.main() must exit 1 when verify_export fails
+# 3. P-1: RL window lineage stamps (rl_lineage_metadata -> run_metadata["data"])
+# ---------------------------------------------------------------------------
+
+def test_rl_lineage_metadata_keys_and_hashes(tmp_path):
+    """The provenance dict must carry path/bytes/sha256 per resolved self-play
+    file plus the human rehearsal H5 (P-1: window lineage in run_metadata)."""
+    import hashlib
+    from train import rl_lineage_metadata
+
+    sp1 = tmp_path / "selfplay_iter1_v2.h5"
+    sp1.write_bytes(b"shard-one")
+    sp2 = tmp_path / "selfplay_iter2_v2.h5"
+    sp2.write_bytes(b"shard-two-bytes")
+    human = tmp_path / "human_1800_v2.h5"
+    human.write_bytes(b"rehearsal")
+
+    md = rl_lineage_metadata([str(sp1), str(sp2)], str(human))
+    assert set(md) == {"rl_selfplay_files", "rl_human_file"}
+
+    names = [os.path.basename(e["path"]) for e in md["rl_selfplay_files"]]
+    assert names == ["selfplay_iter1_v2.h5", "selfplay_iter2_v2.h5"]  # order preserved
+    for entry, raw in zip(md["rl_selfplay_files"],
+                          [b"shard-one", b"shard-two-bytes"]):
+        assert entry["bytes"] == len(raw)
+        assert entry["sha256"] == hashlib.sha256(raw).hexdigest()
+
+    assert os.path.basename(md["rl_human_file"]["path"]) == "human_1800_v2.h5"
+    assert md["rl_human_file"]["sha256"] == hashlib.sha256(b"rehearsal").hexdigest()
+
+
+def test_rl_lineage_metadata_without_human_file(tmp_path):
+    from train import rl_lineage_metadata
+    md = rl_lineage_metadata([], None)
+    assert md["rl_selfplay_files"] == []
+    assert md["rl_human_file"] is None
+
+
+# ---------------------------------------------------------------------------
+# 4. M-10: export_weights_v2.main() must exit 1 when verify_export fails
 # ---------------------------------------------------------------------------
 
 def test_export_verify_failure_exits_nonzero(tmp_path, monkeypatch):

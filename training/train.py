@@ -813,6 +813,34 @@ def get_schema_hash(filename="schema_v1.json"):
     return "no_schema"
 
 
+def file_sha256(path, chunk_bytes=1 << 20):
+    """Streaming sha256 of a file (constant memory, ~GB/s on local SSD)."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(chunk_bytes), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def rl_lineage_metadata(selfplay_files, human_file):
+    """P-1 window-lineage stamps for run_metadata (RL mode).
+
+    Records, for the resolved --selfplay-files window (post select_replay_window,
+    newest last) and the --human-file rehearsal H5: absolute path, byte size, and
+    a full streaming sha256. Choice (2026-06-11): sha256 for EVERYTHING — the
+    window H5s are tens-to-hundreds of MB and human_1800_v2.h5 is ~0.5 GB, so the
+    hash costs ~seconds per run; if a future human H5 exceeds ~2 GB, switch its
+    entry to {bytes, mtime} instead of hashing.
+    """
+    def entry(path):
+        ap = os.path.abspath(path)
+        return {"path": ap, "bytes": os.path.getsize(ap), "sha256": file_sha256(ap)}
+    return {
+        "rl_selfplay_files": [entry(p) for p in selfplay_files],
+        "rl_human_file": entry(human_file) if human_file else None,
+    }
+
+
 def get_schema_version():
     """Read schema version from schema_v1.json."""
     schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -1186,9 +1214,13 @@ def main():
     # weighted-sampling loader over the last-W self-play H5 files + human rehearsal, with
     # colour-balanced sampling. The val_loader (from --val-file) is left untouched. The
     # non-rl path is completely unaffected when --rl-mode is absent.
+    rl_lineage = None
     if args.rl_mode:
         from rl_data import select_replay_window, rehearsal_fraction_for_iter, build_rl_sampler
         sp_paths = select_replay_window(args.selfplay_files, args.replay_window)
+        # P-1: stamp the resolved window + rehearsal H5s (path/bytes/sha256)
+        # into run_metadata so the exact training inputs are reconstructable.
+        rl_lineage = rl_lineage_metadata(sp_paths, args.human_file)
         sp_datasets = [H5DatasetV2(p, label_strategy=args.label_strategy) for p in sp_paths]
         human_ds = (H5DatasetV2(args.human_file, label_strategy=args.label_strategy)
                     if args.human_file else None)
@@ -1313,6 +1345,8 @@ def main():
             "val_examples": val_n,
             "state_dim": state_dim,
             "num_units": num_units,
+            # P-1 window lineage (RL mode only; None keys otherwise absent)
+            **(rl_lineage or {}),
         },
         "model_params": param_count,
         "device": str(device),
