@@ -1159,9 +1159,13 @@ def main():
                 else rehearsal_fraction_for_iter(args.rl_iteration))
         train_loader, train_ds = build_rl_sampler(sp_datasets, human_ds, frac,
                                                   args.batch_size, num_workers=args.num_workers)
-        train_n = len(train_ds)
+        # M-04: an epoch is the sampler's draws (~1 pass over the self-play window + rehearsal
+        # at frac), NOT len(ConcatDataset) — that would size epochs (and the LR schedule via
+        # steps_per_epoch below) to the ~1.65M-record rehearsal corpus.
+        train_n = train_loader.sampler.num_samples
         print(f"[RL] window={len(sp_datasets)} files, human_fraction={frac:.2f}, "
-              f"combined={len(train_ds):,} samples")
+              f"combined={len(train_ds):,} samples, "
+              f"epoch_draws={train_n:,} (~1 pass over self-play + rehearsal at frac)")
 
     # RL replaces train_ds with an in-memory ConcatDataset; recompute the streaming flag
     # so the per-epoch set_epoch() call (streaming-only) is skipped for the RL loader.

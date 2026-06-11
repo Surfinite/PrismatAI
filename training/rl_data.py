@@ -1,5 +1,7 @@
 """RL data assembly: sliding replay buffer (last W self-play H5) + human-only rehearsal at a
 named fraction + colour balancing. Operates on schema_v2 H5DatasetV2 datasets from train.py."""
+import math
+
 import numpy as np
 import torch
 from torch.utils.data import ConcatDataset, WeightedRandomSampler, DataLoader
@@ -32,13 +34,25 @@ def build_rl_sampler(selfplay_datasets, human_dataset, human_fraction, batch_siz
     """Combine the last-W self-play datasets + human rehearsal into one weighted-sampling loader.
        - Expected human share per draw == human_fraction.
        - Within each source, colours (active_player) are balanced.
-    Returns (loader, combined_dataset)."""
+       - Epoch length (num_samples) = ceil(sp_total / (1 - human_fraction)): one epoch is
+         ~one expected pass over the self-play window, with rehearsal mixed in at exactly
+         human_fraction of the draws — NOT one pass over the (rehearsal-dominated)
+         ConcatDataset (M-04: that oversampled a small self-play window ~1000x).
+    Returns (loader, combined_dataset). Draws per epoch = loader.sampler.num_samples."""
+    sp_total = sum(len(d) for d in selfplay_datasets)
+    if sp_total == 0:
+        raise ValueError("build_rl_sampler: zero self-play records — an RL iteration with no "
+                         "self-play data is a pipeline failure (check --selfplay-files / "
+                         "--replay-window).")
+    if not (0.0 <= human_fraction < 1.0):
+        raise ValueError(f"build_rl_sampler: human_fraction={human_fraction} out of range — "
+                         f"must be in [0, 1) (1.0 would mean an all-rehearsal, infinite epoch).")
+
     parts = list(selfplay_datasets) + ([human_dataset] if human_dataset is not None else [])
     combined = ConcatDataset(parts)
 
     weights = np.empty(len(combined), dtype=np.float64)
     offset = 0
-    sp_total = sum(len(d) for d in selfplay_datasets) or 1
     hu_total = len(human_dataset) if human_dataset is not None else 0
     for d in selfplay_datasets:
         n = len(d)
@@ -52,8 +66,16 @@ def build_rl_sampler(selfplay_datasets, human_dataset, human_fraction, batch_siz
         weights[offset:offset + n] = cb * (human_fraction / hu_total)
         offset += n
 
+    # Epoch = one expected pass over the self-play window. With human share f per draw,
+    # ceil(sp_total / (1 - f)) draws yield ~sp_total self-play draws + the rehearsal on top.
+    # No rehearsal source -> all draws are self-play -> exactly sp_total draws.
+    if human_dataset is not None and hu_total > 0:
+        num_samples = math.ceil(sp_total / (1.0 - human_fraction))
+    else:
+        num_samples = sp_total
+
     sampler = WeightedRandomSampler(torch.as_tensor(weights, dtype=torch.double),
-                                    num_samples=len(combined), replacement=True)
+                                    num_samples=num_samples, replacement=True)
     loader = DataLoader(combined, batch_size=batch_size, sampler=sampler,
                         num_workers=num_workers, drop_last=True)
     return loader, combined
