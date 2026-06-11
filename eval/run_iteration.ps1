@@ -5,8 +5,8 @@
 # satisfied (FROZEN tuple in eval/campaign_frozen.json must match dave config.txt's
 # RL_SelfPlay — asserted below, never rewritten; eval/calib_states/ +
 # eval/ig_battery/ populated). iter-0 anchor = v221 on RL_Eval_iter0 (per the
-# 2026-06-07 decision — NOT a random wide-untrained net); PrismataAI.exe.ORIG is
-# installed in dave bin/.
+# 2026-06-07 decision — NOT a random wide-untrained net); the 2016 MasterBot
+# baseline lives at its permanent home c:/libraries/prismata_baselines/masterbot2016/.
 #
 # The gate (promote / reject / inconclusive) is a HUMAN decision on the eval
 # manifest + dashboard — this driver only PRODUCES the manifest + dashboard and
@@ -54,7 +54,7 @@ $bestPt      = "$modelDir/swa_model.pt"
 $candBin     = "neural_weights_rl_iter$K.bin"          # filename only — resolved under bin/asset/config
 $candBinPath = "$bin/asset/config/$candBin"
 $parentBin   = "neural_weights_mixed_v221.bin"          # current promoted net (gating parent / manifest label)
-$origExe     = "$bin/PrismataAI.exe.ORIG"               # STEAMAI baseline (run_eval contamination assert)
+$origExe     = 'c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe'  # genuine 2016 MasterBot at its permanent home (steam anchor baseline)
 $parityStates = "$bin/asset/training/parity_states"     # native GameState sidecar (sp_*.json) from self-play
 $schema      = "$train/schema_v2.json"
 $propTable   = "$train/property_table.json"

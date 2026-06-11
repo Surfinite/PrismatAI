@@ -7,6 +7,7 @@
   "UCTConstant": 0.3,
   "parent_bin": "neural_weights_mixed_v221.bin",
   "parent_pt": "training/models/deepsets_v221/swa_model.pt",
+  "masterbot2016_exe": "c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe",
   "selfplay_threads": 8,
   "frozen_date": "2026-06-11",
   "rationale": "owner decision post-audit: N by judgment (screen-only calibration), whole-game tau-sampling, eps removed as uncalibrated; tau=0.7 set by the pre-agreed probe rule (eval/tau_probe_n1000.json: median normalized entropy 0.984 > 0.90 AND median top-share 0.141 < 0.20 -> near-uniform -> tau=0.7)"

@@ -42,7 +42,9 @@
 
  *   node matchup_clean.js --player-white DaveAI --player-black DaveAI --steam-difficulty-white HardestAI --steam-difficulty-black DSNN_MBonly --games 512 --player-switch --think-time 1000 --parallel 4 --dave-exe c:/libraries/PrismataAI-dave-master/bin/Prismata_Standalone.exe --save-replays DaveVsDSNN_512g1s_r2 2>DaveVsDSNN_512g1s_r2.log
 
- 
+ *   # RL steam anchor: candidate (DaveAI + injected RL_Eval block, weights via --candidate-weights)
+ *   # vs the genuine 2016 MasterBot at its permanent home (--steam-exe-b; NOT the Steam install):
+ *   node matchup_clean.js --games 200 --parallel 4 --player-switch --think-time 7000 --player-white DaveAI --steam-difficulty-white RL_Eval --player-black SteamAI --steam-difficulty-black HardestAI --dave-exe c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe --steam-exe-b c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe --candidate-weights neural_weights_mixed_v221.bin
  */
 
 const fs = require('fs');
@@ -62,6 +64,9 @@ const STEAM_AI_PLAYER = 'STEAMAI';
 // DaveAI player identifier — uses Dave's current origin/master Prismata_Standalone.exe.
 // Speaks the identical stdin/stdout protocol as SteamAI; only the binary differs.
 const DAVE_AI_PLAYER = 'DAVEAI';
+// Default candidate weights for the injected RL_Eval player block (--candidate-weights
+// overrides; BARE filename — the dave engine resolves it against its asset/config dir).
+const DEFAULT_CANDIDATE_WEIGHTS = 'neural_weights_mixed_v221.bin';
 
 // ---------------------------------------------------------------------------
 // Per-action click description
@@ -839,10 +844,12 @@ async function playSteamAITurn(analyzer, activeDeck, steamAI, difficulty, steamC
         steamConfig.fullParams, steamConfig.shortParams);
     const aiParams = JSON.parse(aiParamsStr);
 
-    // Auto-inject DSNN_* player blocks. SWF aiParameters has no DSNN entries
-    // since these are our own players. We inject defaults matching the config
-    // pattern used in PrismataAI-dave-master/bin/asset/config/config.txt so that
-    // requests can use aiPlayerName=DSNN_MBonly against Dave's Standalone.
+    // Auto-inject our own player blocks (DSNN_* / RL_Eval). SWF aiParameters has no
+    // entries for these since they are our own players. We inject defaults matching the
+    // config pattern used in PrismataAI-dave-master/bin/asset/config/config.txt so that
+    // requests can use aiPlayerName=DSNN_MBonly / RL_Eval against Dave's Standalone.
+    // UCTConstant 0.3 = the tuned cValue from the pre-RL sweep (engine default 2.0 is the
+    // WORST setting); 0.3 serializes as a JSON double, which the engine parser requires.
     const DSNN_WEIGHTS = {
         DSNN_MBonly:     'neural_weights_mbonly.bin',
         DSNN_MBonly_SWA: 'neural_weights_mbonly_swa.bin',
@@ -851,19 +858,40 @@ async function playSteamAITurn(analyzer, activeDeck, steamAI, difficulty, steamC
         DSNN_Mixed_SWA:  'neural_weights_mixed_swa.bin',
         DSNN_Mixed35:    'neural_weights_mixed_35prop.bin'
     };
+    let injectedPlayer = null;
     if (difficulty.startsWith('DSNN_') && DSNN_WEIGHTS[difficulty]) {
+        injectedPlayer = {
+            type: 'Player_UCT',
+            TimeLimit: steamConfig.thinkTimeMs || 7000,
+            MaxChildren: 40,
+            MaxTraversals: 100000,
+            RootMoveIterator: 'HardIterator_Root',
+            MoveIterator: 'HardIterator',
+            Eval: 'NeuralNet',
+            WeightsFile: DSNN_WEIGHTS[difficulty],
+            UCTConstant: 0.3
+        };
+    } else if (difficulty === 'RL_Eval') {
+        // RL eval candidate: mirrors the dave config.txt RL_Eval player (5-variant root with
+        // the IG-subset AbilitySubset wrapper; iterators are config-only and resolve via the
+        // engine's own config.txt load — A12). WeightsFile is the BARE candidate .bin filename
+        // (--candidate-weights), resolved by the engine relative to its asset/config dir.
+        injectedPlayer = {
+            type: 'Player_UCT',
+            TimeLimit: steamConfig.thinkTimeMs || 7000,
+            MaxChildren: 40,
+            MaxTraversals: 100000,
+            RootMoveIterator: 'HardIterator_5var_IGsubset_Root',
+            MoveIterator: 'HardIterator_5var',
+            Eval: 'NeuralNet',
+            WeightsFile: steamConfig.candidateWeights || DEFAULT_CANDIDATE_WEIGHTS,
+            UCTConstant: 0.3
+        };
+    }
+    if (injectedPlayer) {
         aiParams.Players = aiParams.Players || {};
         if (!aiParams.Players[difficulty]) {
-            aiParams.Players[difficulty] = {
-                type: 'Player_UCT',
-                TimeLimit: steamConfig.thinkTimeMs || 7000,
-                MaxChildren: 40,
-                MaxTraversals: 100000,
-                RootMoveIterator: 'HardIterator_Root',
-                MoveIterator: 'HardIterator',
-                Eval: 'NeuralNet',
-                WeightsFile: DSNN_WEIGHTS[difficulty]
-            };
+            aiParams.Players[difficulty] = injectedPlayer;
         }
     }
 
@@ -2013,7 +2041,7 @@ const WORKER_SCRIPT_PATH = path.join(__dirname, 'matchup_worker.js');
  * @returns {Promise<{ games: Object[], tally: { white: number, black: number, draws: number, invalid: number }, avgTurns: number }>}
  */
 async function playMultipleGamesParallel(config, numGames, library, numWorkers, saveReplaysDir, verbose, options = {}) {
-    const { playerSwitch = false, fixedCards = null, resignThreshold = 0, steamDifficulty = 'HardestAI', steamDifficultyWhite = null, steamDifficultyBlack = null, steamExeA = null, steamExeB = null, daveExePath = null, exportTrainingDir = null, schemaV2 = false, weightsFile = null, allowAutoBreach = false } = options;
+    const { playerSwitch = false, fixedCards = null, resignThreshold = 0, steamDifficulty = 'HardestAI', steamDifficultyWhite = null, steamDifficultyBlack = null, steamExeA = null, steamExeB = null, daveExePath = null, exportTrainingDir = null, schemaV2 = false, weightsFile = null, candidateWeights = null, allowAutoBreach = false } = options;
 
     // Distribute game numbers across worker slots
     const slotsGames = Array.from({ length: numWorkers }, () => []);
@@ -2076,6 +2104,7 @@ async function playMultipleGamesParallel(config, numGames, library, numWorkers, 
                     steamExeA: steamExeA,
                     steamExeB: steamExeB,
                     daveExePath: daveExePath,
+                    candidateWeights: candidateWeights,
                     saveReplaysDir: saveReplaysDir,
                     verbose: verbose,
                     playerSwitch: playerSwitch,
@@ -2294,6 +2323,7 @@ async function main() {
     let exportTrainingDir = null;        // --export-training <dir>: JSONL training data output
     let schemaV2 = false;                // --schema-v2: use V2 per-instance training data format
     let weightsFile = null;              // --weights <path>: neural network weights file for C++ --suggest
+    let candidateWeights = DEFAULT_CANDIDATE_WEIGHTS;  // --candidate-weights <bin filename>: WeightsFile for the injected RL_Eval block (bare filename, resolved by the dave engine against its asset/config)
     let allowForceDsnn = false;          // --allow-force-dsnn: proceed even if a use_dsnn.txt sentinel / PRISMATA_FORCE_DSNN would override every player
     let allowAutoBreach = false;         // --allow-auto-breach: let the harness auto-complete an under-specified breach (weakest-first); default off = fail loud (fidelity)
     let debugClicks = false;             // --debug: verbose per-click logging
@@ -2368,6 +2398,7 @@ async function main() {
         }
         if (args[i] === '--schema-v2') schemaV2 = true;
         if (args[i] === '--weights' && args[i + 1]) { weightsFile = args[++i]; }
+        if (args[i] === '--candidate-weights' && args[i + 1]) { candidateWeights = args[++i]; }
         if (args[i] === '--debug') { debugClicks = true; DEBUG_CLICKS = true; }
     }
 
@@ -2576,6 +2607,7 @@ async function main() {
         initDeck: null,  // Set per-game from activeDeck
         library: library,
         thinkTimeMs: thinkTimeMs,
+        candidateWeights: candidateWeights,  // WeightsFile for the injected RL_Eval block
         honorAiResign: resignThreshold > 0  // when false (--resign 0) play to wipeout: ignore exe airesign
     } : null;
 
@@ -2706,7 +2738,7 @@ async function main() {
                     parallelWorkers,
                     saveReplaysDir,
                     false,  // verbose
-                    { playerSwitch, fixedCards, resignThreshold, steamDifficulty, steamDifficultyWhite, steamDifficultyBlack, steamExeA, steamExeB, daveExePath, exportTrainingDir, schemaV2, weightsFile, allowAutoBreach }
+                    { playerSwitch, fixedCards, resignThreshold, steamDifficulty, steamDifficultyWhite, steamDifficultyBlack, steamExeA, steamExeB, daveExePath, candidateWeights, exportTrainingDir, schemaV2, weightsFile, allowAutoBreach }
                 );
             } else {
                 // Phase 7c/7d: Sequential execution

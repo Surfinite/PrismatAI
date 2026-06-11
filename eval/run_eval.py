@@ -6,7 +6,9 @@ Anchors (one path each):
               (unforced-sets) pool is the ONLY automated verdict input; its forced pool informs
               the human IG judgment but does not gate.
   2. narrow : DSNN_Mixed35_5var (C++ tournament)                                  [non-gating yardstick]
-  3. steam  : STEAMAI / PrismataAI.exe.ORIG (matchup_clean.js, --player-switch)   [non-gating yardstick, DEFERRED live]
+  3. steam  : candidate (DaveAI + injected RL_Eval block + --candidate-weights) vs the genuine
+              2016 MasterBot at its permanent home c:/libraries/prismata_baselines/masterbot2016/
+              (matchup_clean.js, --player-switch)                                 [non-gating yardstick]
 All eval players run at the DEPLOYMENT budget (TimeLimit:7000/MaxTraversals:100000), NOT the self-play N (A1).
 
 VERDICT (2026-06-10, replaces the old GO gate): the old rule (d_rl >= +5pp AND forced
@@ -129,24 +131,53 @@ def parse_tournament_stdout(text, block_name):
     return out
 
 
-def run_steam(orig_exe, candidate_label, games, pool_args, think_ms=7000):
-    """matchup_clean.js: RL candidate (DaveAI w/ candidate weights) vs STEAMAI/.ORIG, --player-switch.
+# Steam anchor binaries (F-08 rewiring, 2026-06-11):
+#   white = the RL candidate: DaveAI (dave-master engine_v1 Steam-protocol exe) with the
+#           matchup runner's injected RL_Eval player block (5var+IGsubset iterators, c=0.3,
+#           WeightsFile from --candidate-weights);
+#   black = the genuine 2016 MasterBot at its PERMANENT HOME (owner directive) — outside both
+#           repos and the Steam dir, so the use_dsnn.txt contamination guard (which checks the
+#           exe's own directory) passes without modification. sha256
+#           0A70B198342B998650D98CF2F1CF74E9C478D50F4E9918FB49E09286B64A41FC, 721,920 bytes.
+DAVE_MATCHUP_EXE = "c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe"
+MASTERBOT2016_EXE = "c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe"
+
+
+def run_steam(orig_exe, candidate_label, games, pool_args, think_ms=7000,
+              dave_exe=DAVE_MATCHUP_EXE):
+    """matchup_clean.js: RL candidate (white: DaveAI + injected RL_Eval block; candidate
+    weights threaded via pool_args ["--candidate-weights", <bin basename>]) vs the 2016
+    MasterBot (black: SteamAI/HardestAI on orig_exe via --steam-exe-b), --player-switch.
     Returns (win_rate_p in [0,1], n). A7: parse the SEAT-INDEPENDENT per-identity win-rate.
-    A8: the STEAMAI yardstick uses a FIXED games count (no sequential escalation)."""
+    A8: the STEAMAI yardstick uses a FIXED games count (no sequential escalation).
+
+    Verified emitted candidate label (matchup_clean.js labelWith, 2026-06-11): the white
+    player normalizes to 'DAVEAI' and the difficulty keeps its exact argv case, so the
+    seat-independent line is:  [Parallel] Player A [DAVEAI[RL_Eval]]: 53.9%
+    -> candidate_label 'RL_Eval' (exact case) substring-matches it and nothing else."""
     cmd = ["node", "c:/libraries/PrismataAI/js_engine/matchup_clean.js",
            "--games", str(games), "--parallel", "4", "--player-switch", "--think-time", str(think_ms),
-           "--player", "SteamAI", "--steam-difficulty", "HardestAI",
-           "--dave-exe", orig_exe] + pool_args
+           "--player-white", "DaveAI", "--steam-difficulty-white", "RL_Eval",
+           "--player-black", "SteamAI", "--steam-difficulty-black", "HardestAI",
+           "--dave-exe", dave_exe,
+           "--steam-exe-b", orig_exe] + pool_args
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=72000)
     return parse_matchup_seatindep(p.stderr, candidate_label, games)
 
 
 def parse_matchup_seatindep(text, candidate_label, games):
     """A7: read the '--- Win Rates (seat-independent) ---' block and return (candidate win_rate
-    fraction, n). Returns (None, games) if the block is absent (e.g. no --player-switch).
+    fraction, n). Returns (None, games) if the block is absent (e.g. no --player-switch) or if
+    no line in the block carries the candidate_label (e.g. the pre-fix SteamAI-both-seats
+    mis-wiring, where both identity labels were STEAMAI[HardestAI]).
 
-    The caller MUST pass a candidate_label unique enough that it is NOT a substring of the
-    opponent's identity label (the match takes the FIRST matching line and stops).
+    Verified line format (matchup_clean.js, both [Pair] and [Parallel] paths, 2026-06-11):
+        [Parallel] Player A [DAVEAI[RL_Eval]]: 53.9%
+        [Parallel] Player B [STEAMAI[HardestAI]]: 46.1%
+    Matching is exact-case SUBSTRING against the captured label ('Player A [DAVEAI[RL_Eval]]'),
+    so candidate_label='RL_Eval' must match the injected difficulty's case exactly. The caller
+    MUST pass a candidate_label unique enough that it is NOT a substring of the opponent's
+    identity label (the match takes the FIRST matching line and stops).
 
     NOTE: deliberately ignores the '[Parallel] White:/Black:/Draws:' seat tally -- for a switched
     candidate the seat tally is NOT the candidate's win rate (A7)."""
@@ -354,7 +385,7 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
     manifest ("complete": false, "anchors_completed": [...]) instead of nothing. Injectable
     runners keep the orchestration + verdict logic unit-testable without the C++ engine:
     run_anchor(dave_bin, block, player, weights_basename) -> anchor-dict;
-    steam_fn(orig_exe, label, games, pool_args, think_ms) -> (p, n)."""
+    steam_fn(orig_exe, label, games, pool_args, think_ms, dave_exe) -> (p, n)."""
     if steam_fn is None:
         steam_fn = run_steam
     weights_basename = os.path.basename(args.weights)
@@ -414,8 +445,11 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
     # support is unverified.) Earlier anchors are already on disk, so a steam crash can no
     # longer erase them.
     if steam_available:
-        print(f"[steam] matchup_clean.js vs STEAMAI ({args.steam_games} games) ...", file=sys.stderr)
-        p, n = steam_fn(args.orig_exe, args.candidate_label, args.steam_games, [], 7000)
+        print(f"[steam] matchup_clean.js candidate(DaveAI/RL_Eval) vs 2016 MasterBot "
+              f"({args.steam_games} games) ...", file=sys.stderr)
+        p, n = steam_fn(args.orig_exe, args.candidate_label, args.steam_games,
+                        ["--candidate-weights", weights_basename], 7000,
+                        os.path.join(args.dave_bin, "PrismataAI.exe"))
         if p is None:
             manifest["anchors"]["steam"] = {
                 "error": "no seat-independent result parsed (check --player-switch / candidate label)",
@@ -428,7 +462,9 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
         manifest["anchors_completed"].append("steam")
     else:
         manifest["anchors"]["steam"] = {
-            "status": "DEFERRED -- PrismataAI.exe.ORIG absent (A8 STEAMAI trajectory yardstick)"}
+            "status": "DEFERRED -- 2016 MasterBot baseline absent "
+                      "(expected at c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe; "
+                      "A8 STEAMAI trajectory yardstick)"}
 
     _refresh_verdict(manifest)
     manifest["complete"] = True
@@ -445,8 +481,9 @@ def main():
     ap.add_argument("--parent-weights", default=None,
                     help="current promoted .bin (promotion-gate reference; that gate is a separate mechanism)")
     ap.add_argument("--dave-bin", required=True)
-    ap.add_argument("--orig-exe", required=True,
-                    help="PrismataAI.exe.ORIG (STEAMAI 2016 baseline); steam anchor is DEFERRED if absent")
+    ap.add_argument("--orig-exe", default=MASTERBOT2016_EXE,
+                    help="genuine 2016 MasterBot binary (STEAMAI baseline) at its permanent home; "
+                         "steam anchor is DEFERRED if absent")
     ap.add_argument("--steam-games", type=int, default=200, help="A8: fixed modest N for the STEAMAI yardstick")
     ap.add_argument("--candidate-player", default=CANDIDATE_PLAYER,
                     help="config player repointed to the candidate net (group1 of each anchor block)")

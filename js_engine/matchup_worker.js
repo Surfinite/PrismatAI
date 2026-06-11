@@ -562,6 +562,7 @@ async function runWorkerSlot() {
             initDeck: null,  // Set per-game
             library: library,
             thinkTimeMs: thinkTimeMs,
+            candidateWeights: workerData.candidateWeights || null,  // WeightsFile for the injected RL_Eval block
             honorAiResign: resignThreshold > 0  // when false (--resign 0) play to wipeout: ignore exe airesign
         };
         console.error(`SteamAI configured for slot ${slotIndex} (W=${steamDifficultyWhite}, B=${steamDifficultyBlack})`);

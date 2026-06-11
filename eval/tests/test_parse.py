@@ -43,51 +43,87 @@ def test_parse_tournament_html_with_draws():
 
 
 # ---- A7: parse_matchup_seatindep reads the seat-INDEPENDENT identity rate, NOT the seat tally ----
-# Line shapes per the harness spec + memory (DSNN vs SteamAI ~46.1%).
+# REAL emitted format, verified 2026-06-11 against matchup_clean.js (labelWith + the [Parallel]
+# tally printer): player names normalize to upper-case DAVEAI/STEAMAI, the per-side difficulty
+# keeps its exact argv case, identities print as 'Player A [DAVEAI[RL_Eval]]'.
 REAL_MATCHUP_STDERR = """\
-[Parallel] White: 110 (55.0%)
-[Parallel] Black: 86 (43.0%)
-[Parallel] Draws: 4 (2.0%)
-[Parallel] Games: 200
+[Parallel] ========== TALLY ==========
+[Parallel] Games:    200 (4 workers)
+[Parallel] White:    110 (55.0%)
+[Parallel] Black:    86 (43.0%)
+[Parallel] Draws:    4
+[Parallel] Invalid:  0
+[Parallel] Avg turns: 21
+[Parallel] --- Pair Results (A=initially White, B=initially Black) ---
+[Parallel] Player A [DAVEAI[RL_Eval]] sweeps (2-0): 30
+[Parallel] Player B [STEAMAI[HardestAI]] sweeps (2-0): 24
+[Parallel] Splits (1-1):  46
+[Parallel] Invalid pairs:  0
 [Parallel] --- Win Rates (seat-independent) ---
-[Parallel] DaveAI(RL_Eval): 53.9%
-[Parallel] SteamAI(HardestAI): 46.1%
-==========================================
+[Parallel] Player A [DAVEAI[RL_Eval]]: 53.9%
+[Parallel] Player B [STEAMAI[HardestAI]]: 46.1%
+[Parallel] ================================
 """
 
 
 def test_parse_matchup_seatindep_picks_candidate_identity():
-    # candidate is the DaveAI(RL_Eval) identity; must get 53.9%, NOT the 55.0% White seat tally.
-    p, n = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "DaveAI(RL_Eval)", games=200)
+    # candidate label 'RL_Eval' (run_eval CANDIDATE_PLAYER default) must substring-match the
+    # white identity 'Player A [DAVEAI[RL_Eval]]' -> 53.9%, NOT the 55.0% White seat tally.
+    p, n = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "RL_Eval", games=200)
     assert abs(p - 0.539) < 1e-9
     assert n == 200
 
 
 def test_parse_matchup_seatindep_picks_steam_identity():
-    p, n = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "SteamAI(HardestAI)", games=200)
+    p, n = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "STEAMAI[HardestAI]", games=200)
     assert abs(p - 0.461) < 1e-9
     assert n == 200
 
 
 def test_parse_matchup_seatindep_not_the_white_seat():
     # the White seat tally is 55.0% but the candidate's seat-independent rate is 53.9%.
-    p, _ = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "DaveAI(RL_Eval)", games=200)
+    p, _ = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "RL_Eval", games=200)
     assert p != 0.55
 
 
+def test_parse_matchup_seatindep_label_is_case_sensitive():
+    # exact-case contract: the injected difficulty is 'RL_Eval'; a wrong-case label must NOT match.
+    p, _ = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "rl_eval", games=200)
+    assert p is None
+
+
 def test_parse_matchup_seatindep_serial_pair_path():
-    # serial path uses [Pair] instead of [Parallel].
+    # serial (--parallel 1) path emits the same labels with the [Pair] prefix.
     txt = (
         "[Pair] --- Win Rates (seat-independent) ---\n"
-        "[Pair] DaveAI(RL_Eval): 61.0%\n"
-        "[Pair] SteamAI(HardestAI): 39.0%\n"
+        "[Pair] Player A [DAVEAI[RL_Eval]]: 61.0%\n"
+        "[Pair] Player B [STEAMAI[HardestAI]]: 39.0%\n"
+        "[Pair] ================================\n"
     )
-    p, n = parse_matchup_seatindep(txt, "DaveAI(RL_Eval)", games=128)
+    p, n = parse_matchup_seatindep(txt, "RL_Eval", games=128)
     assert abs(p - 0.61) < 1e-9 and n == 128
 
 
 def test_parse_matchup_seatindep_absent_block_returns_none():
     # no --player-switch -> no seat-independent block -> candidate rate is None.
     txt = "[Parallel] White: 70 (70.0%)\n[Parallel] Games: 100\n"
-    p, n = parse_matchup_seatindep(txt, "DaveAI(RL_Eval)", games=100)
+    p, n = parse_matchup_seatindep(txt, "RL_Eval", games=100)
     assert p is None and n == 100
+
+
+# F-08 regression: the PRE-FIX mis-wired anchor put the 2016 baseline in BOTH seats
+# (--player SteamAI => playerBlack = playerWhite), so both identities were STEAMAI[HardestAI]
+# and the candidate never played. That output must yield NO candidate parse (None), which
+# build_manifest records as an error on the steam anchor (covered in test_run_eval_main).
+OLD_MISWIRED_BOTH_SEATS_STDERR = """\
+[Parallel] --- Win Rates (seat-independent) ---
+[Parallel] Player A [STEAMAI[HardestAI]]: 51.0%
+[Parallel] Player B [STEAMAI[HardestAI]]: 49.0%
+[Parallel] ================================
+"""
+
+
+def test_parse_matchup_old_miswired_both_seats_yields_no_candidate():
+    p, n = parse_matchup_seatindep(OLD_MISWIRED_BOTH_SEATS_STDERR, "RL_Eval", games=200)
+    assert p is None
+    assert n == 200  # no Games line in the block -> falls back to the requested count
