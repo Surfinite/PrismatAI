@@ -84,8 +84,8 @@ exist to cluster on, and no sequential-testing machinery is wired anywhere**.
 
 All eval players run at the **deployment budget** `TimeLimit:7000 / MaxTraversals:100000`,
 NOT the self-play throughput N. `RL_SelfPlay` runs the frozen self-play tuple
-(`MaxTraversals:1000`, τ=0.7, K=999, ε=0 — `campaign_frozen.json`, preflight-asserted) — the
-eval budget is decoupled from the self-play budget.
+(`MaxTraversals:1000`, τ=0.7, K=12, εUniform=0, εLate=0.05 — regime v2, `campaign_frozen.json`,
+preflight-asserted) — the eval budget is decoupled from the self-play budget.
 
 ## d_reg rule (A1)
 
@@ -141,9 +141,11 @@ back in a `finally`):
 `ForcedCards` IS wired (engine support landed; the self-play block `RL_Step2_Smoke` also forces
 Hotel), and `RL_Eval_iter0` is a fully defined player pointing at `neural_weights_mixed_v221.bin`
 (the parent — per the 2026-06-07 decision, NOT a wide-untrained placeholder).
-`eval/preflight_config.py` (stage 0) asserts zero `run:true` blocks at rest, the RL iterator
-shape, opening-book sizes, the full declared reference graph (including `WeightsFile`
-existence), the frozen tuple, and the `RL_Eval` parent re-pin.
+`eval/preflight_config.py` (stage 0, 9 checks) asserts zero `run:true` blocks at rest, the RL
+iterator shape, opening-book sizes, the full declared reference graph (including `WeightsFile`
+existence), the frozen tuple (incl. regime-v2 `EpsilonLate` + the dual-block self-play mix),
+ALL FOUR parent re-pins (`RL_Eval`/`RL_Eval_iter0`/`RL_SelfPlay`/`RL_Narrow`), required-file
+existences, and the absence of the dave-bin `use_dsnn.txt` sentinel.
 
 ## Cross-path sanity (Step 7, historical)
 

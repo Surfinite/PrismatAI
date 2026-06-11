@@ -25,10 +25,11 @@ engine launch. It never rewrites `config.txt` — drift must be reconciled delib
 | `parent_repin` | ALL FOUR parent-side players' `WeightsFile` == the frozen `parent_bin`: `RL_Eval` (eval pin), `RL_Eval_iter0` (the VERDICT opponent), `RL_SelfPlay` (the data generator), `RL_Narrow` (the iterator-only anchor) | F-07 recovery + N-2 — a killed run must not leave an unpromoted candidate pinned, and a forgotten post-promotion repoint must not turn "candidate vs parent" into "candidate vs grandparent" |
 | `existences` | frozen `parent_pt`, the train/val H5s, and the 2016 MasterBot exe all exist | warm-start, M-03 val, and the steam yardstick depend on them |
 
-Two guards live OUTSIDE the preflight: no `use_dsnn.txt` / `PRISMATA_FORCE_DSNN` anywhere on an exe path
-(`run_eval.py` asserts these at eval time), and the engine itself now **hard-fails at construction** on
-unknown/empty books, unknown filters, and NN weights-load failures (dave `26075fa`/`d0ec633`), with an
-unloaded-net guard on the UCT value path (X5b).
+The dave-bin `use_dsnn.txt` sentinel is preflight check 9 (`use_dsnn_sentinel`) — present, it would
+silently swap the net on every query_move/tactical/coverage call; `run_eval.py` re-asserts it (plus
+`PRISMATA_FORCE_DSNN`) at eval time as defense-in-depth. The engine itself **hard-fails at construction**
+on unknown/empty books, unknown filters/iterators/partials/players, and NN weights-load failures
+(dave `26075fa`/`d0ec633`/`6e93480`), with an unloaded-net guard on the UCT value path (X5b).
 
 ## The stages (0–8, plus the 4.5 tripwire)
 

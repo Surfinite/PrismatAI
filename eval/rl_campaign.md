@@ -49,7 +49,7 @@ so the cap **never binds** (`root_truncated` should be ~never true).
 The engine now emits `root_children` / `root_truncated` telemetry (responder field `aitruncated`; the V2
 exporter stamps both per record). This campaign treats them as **OBSERVE-only**: we *confirm* `root_truncated`
 is ~never true (the calibration screens measured `any_root_truncated: false` across all N, max 33 root
-children); we do **not** tune `MaxChildren`. The durable fix for genuinely-wide R-allocation
+children — committed artifact `eval/n_calibration.json`); we do **not** tune `MaxChildren`. The durable fix for genuinely-wide R-allocation
 (many competing portfolio candidates) is a **candidate policy head + PUCT** (§14, O6), **not** a larger
 `MaxChildren`.
 
