@@ -5,7 +5,8 @@ Anchors (one path each):
               current parent, v221) on the IG-optional config (C++ tournament). Its GENERAL
               (unforced-sets) pool is the ONLY automated verdict input; its forced pool informs
               the human IG judgment but does not gate.
-  2. narrow : DSNN_Mixed35_5var (C++ tournament)                                  [non-gating yardstick]
+  2. narrow : candidate vs RL_Narrow (same v221 net + budget + c, NON-IG HardIterator_5var_Root —
+              isolates the iterator variable; C++ tournament)                     [non-gating yardstick]
   3. steam  : candidate (DaveAI + injected RL_Eval block + --candidate-weights) vs the genuine
               2016 MasterBot at its permanent home c:/libraries/prismata_baselines/masterbot2016/
               (matchup_clean.js, --player-switch)                                 [non-gating yardstick]
@@ -266,7 +267,7 @@ VERDICT_RULE = ("REJECT iff iter0/general (candidate vs parent, unforced sets) c
 # Anchor C++ tournament blocks (must exist run:false in config.txt; group1=RL_Eval candidate):
 #   iter0  -> vs RL_Eval_iter0 (repointed to the PARENT promoted net, v221):
 #             general pool = the verdict input; forced pool = d_rl information.
-#   narrow -> vs DSNN_Mixed35_5var : non-gating trajectory yardstick.
+#   narrow -> vs RL_Narrow (iterator-only variable; dave@09c5436) : non-gating trajectory yardstick.
 ANCHOR_BLOCKS = {
     "iter0":  {"forced": "RL_Eval_iter0_forced",  "general": "RL_Eval_iter0_general"},
     "narrow": {"forced": "RL_Eval_narrow_forced", "general": "RL_Eval_narrow_general"},
