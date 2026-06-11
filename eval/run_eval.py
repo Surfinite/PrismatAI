@@ -32,6 +32,12 @@ config.txt must equal basename(--weights) (hard abort otherwise). Each C++ ancho
 captured and must contain the engine's "AIParameters: created per-player NeuralNet from
 <...candidate.bin>" load line; the result is stamped "engine_confirmed_load" per anchor and a
 completed-but-unconfirmed anchor hard-fails (after being recorded for the post-mortem).
+N-2 (parent side): when --parent-weights is given, the SAME stderr must also confirm a load of
+the PARENT basename — the iter0 anchor's opponent (RL_Eval_iter0, the VERDICT opponent) and the
+narrow anchor's opponent (RL_Narrow) are both pinned to the frozen parent_bin (preflight
+parent_repin), so each completed C++ anchor is stamped "engine_confirmed_parent_load" and
+hard-fails without it: a forgotten post-promotion repoint would otherwise silently turn
+"candidate vs parent" into "candidate vs grandparent".
 
 STATS NOTE: CIs are iid Wilson only (eval/wilson.py). Per-set / colour-swap-paired analysis
 would require per-card-set scores the tournament HTML does not emit.
@@ -302,7 +308,8 @@ def set_block_run(dave_bin, block_name, run):
         json.load(f)  # strict-JSON sanity
 
 
-def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER, weights_basename=None):
+def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER, weights_basename=None,
+                     parent_basename=None):
     """Flip ONE anchor block run:true, run Prismata_Testing.exe, parse the candidate's W/L/D from its
     HTML statsTable, flip back (in a finally). Returns a FLAT anchor dict
     {block,candidate,wins,draws,games,win_rate,ci:[lo,hi]} the dashboard can render directly, or an
@@ -310,31 +317,38 @@ def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER, we
 
     When weights_basename is given, the engine's stderr is checked for the per-player NeuralNet
     load confirmation and the result is stamped "engine_confirmed_load" (active provenance;
-    build_manifest hard-fails a completed-but-unconfirmed anchor)."""
+    build_manifest hard-fails a completed-but-unconfirmed anchor). When parent_basename is given
+    (N-2), the SAME stderr must also confirm the PARENT net load — the anchor's opponent
+    (RL_Eval_iter0 / RL_Narrow) is parent-pinned — stamped "engine_confirmed_parent_load"."""
     set_block_run(dave_bin, block_name, True)
     stderr_sink = []
     try:
         results = run_cpp_tournament(dave_bin, block_name, stderr_out=stderr_sink)
     finally:
         set_block_run(dave_bin, block_name, False)
-    confirmed = (engine_confirmed_load("".join(stderr_sink), weights_basename)
+    stderr_text = "".join(stderr_sink)
+    confirmed = (engine_confirmed_load(stderr_text, weights_basename)
                  if weights_basename else None)
-    cand = results.get(candidate_player)
-    if not cand or cand.get("wins") is None:
-        out = {"block": block_name,
-               "error": f"no W/L/D for candidate '{candidate_player}' (degraded score-matrix fallback?)",
-               "raw_players": sorted(results)}
+    parent_confirmed = (engine_confirmed_load(stderr_text, parent_basename)
+                        if parent_basename else None)
+
+    def _stamp(out):
         if confirmed is not None:
             out["engine_confirmed_load"] = confirmed
+        if parent_confirmed is not None:
+            out["engine_confirmed_parent_load"] = parent_confirmed
         return out
+
+    cand = results.get(candidate_player)
+    if not cand or cand.get("wins") is None:
+        return _stamp({"block": block_name,
+                       "error": f"no W/L/D for candidate '{candidate_player}' (degraded score-matrix fallback?)",
+                       "raw_players": sorted(results)})
     wins, draws, games = cand["wins"], cand["draws"], cand["games"]
     p = win_rate(wins, draws, games)
     lo, hi = wilson_ci(p, games)
-    out = {"block": block_name, "candidate": candidate_player,
-           "wins": wins, "draws": draws, "games": games, "win_rate": p, "ci": [lo, hi]}
-    if confirmed is not None:
-        out["engine_confirmed_load"] = confirmed
-    return out
+    return _stamp({"block": block_name, "candidate": candidate_player,
+                   "wins": wins, "draws": draws, "games": games, "win_rate": p, "ci": [lo, hi]})
 
 
 def compute_verdict(general_cell):
@@ -385,11 +399,14 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
     os.replace) after every completed pool/anchor — a crash/kill leaves a readable partial
     manifest ("complete": false, "anchors_completed": [...]) instead of nothing. Injectable
     runners keep the orchestration + verdict logic unit-testable without the C++ engine:
-    run_anchor(dave_bin, block, player, weights_basename) -> anchor-dict;
+    run_anchor(dave_bin, block, player, weights_basename, parent_basename) -> anchor-dict;
     steam_fn(orig_exe, label, games, pool_args, think_ms, dave_exe) -> (p, n)."""
     if steam_fn is None:
         steam_fn = run_steam
     weights_basename = os.path.basename(args.weights)
+    # N-2: each C++ anchor's opponent (RL_Eval_iter0 = the verdict opponent; RL_Narrow) is
+    # parent-pinned, so the engine stderr must confirm the PARENT net load too.
+    parent_basename = os.path.basename(args.parent_weights) if args.parent_weights else None
     # Active provenance pre-flight: the config must already point the candidate player at the
     # candidate net BEFORE any tournament flips on.
     verify_config_weights(args.dave_bin, args.candidate_player, weights_basename)
@@ -422,7 +439,8 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
             if not block:
                 continue
             print(f"[{anchor}/{pool}] running block {block} ...", file=sys.stderr)
-            cell = run_anchor(args.dave_bin, block, args.candidate_player, weights_basename)
+            cell = run_anchor(args.dave_bin, block, args.candidate_player, weights_basename,
+                              parent_basename)
             per_pool[pool] = cell
             # Headline cell = forced (the IG-widened d_rl axis); full breakdown under 'pools'.
             head = per_pool.get(HEADLINE_POOL) or next(iter(per_pool.values()), {})
@@ -438,6 +456,14 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
                     f"loading '{weights_basename}' for {args.candidate_player} "
                     f"(engine_confirmed_load=false; result recorded in the manifest but NOT "
                     "trusted — the engine may have evaluated the wrong net)")
+            # N-2 parent-side hard-fail (same record-then-raise pattern): the anchor's opponent
+            # must have loaded the frozen PARENT net or the comparison itself is wrong.
+            if "win_rate" in cell and cell.get("engine_confirmed_parent_load") is False:
+                raise RuntimeError(
+                    f"provenance: block {block} completed but engine stderr never confirmed "
+                    f"loading the PARENT net '{parent_basename}' for the anchor opponent "
+                    f"(engine_confirmed_parent_load=false; result recorded in the manifest but "
+                    "NOT trusted — the verdict would compare the candidate vs the WRONG parent)")
         manifest["anchors_completed"].append(anchor)
         write_manifest(manifest, manifest_path)
 
@@ -480,7 +506,9 @@ def main():
     ap.add_argument("--iteration", type=int, required=True)
     ap.add_argument("--weights", required=True, help="candidate .bin filename (in dave bin/asset/config)")
     ap.add_argument("--parent-weights", default=None,
-                    help="current promoted .bin (promotion-gate reference; that gate is a separate mechanism)")
+                    help="current promoted .bin (frozen parent_bin). When given, each C++ anchor's "
+                         "engine stderr must ALSO confirm loading this net for the parent-pinned "
+                         "opponent (engine_confirmed_parent_load, N-2); omitted = check skipped")
     ap.add_argument("--dave-bin", required=True)
     ap.add_argument("--orig-exe", default=MASTERBOT2016_EXE,
                     help="genuine 2016 MasterBot binary (STEAMAI baseline) at its permanent home; "

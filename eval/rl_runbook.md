@@ -22,7 +22,7 @@ engine launch. It never rewrites `config.txt` — drift must be reconciled delib
 | `book_sizes` | `LiveOpeningBook2` == 50, `DefaultOpeningBook` == 4 (post SWF port) | book truncation/drift |
 | `reference_graph` | every declared reference resolves (openingBook, filter, subsetFilter, buyLimits, combination, PartialPlayers, include, iterator keys, PlayoutPlayer, WeightsFile file on disk) | dangling names; complements the engine's own construction-time hard-fails |
 | `frozen_tuple` | `RL_SelfPlay` MaxTraversals/TemperatureK/Tau/EpsilonUniform == `campaign_frozen.json`; `EpsilonLate` absent (or 0) | the three-way N skew happened once; the tuple IS the campaign identity |
-| `parent_repin` | `RL_Eval.WeightsFile` == the frozen `parent_bin` | F-07 recovery — a killed run must not leave an unpromoted candidate pinned |
+| `parent_repin` | ALL FOUR parent-side players' `WeightsFile` == the frozen `parent_bin`: `RL_Eval` (eval pin), `RL_Eval_iter0` (the VERDICT opponent), `RL_SelfPlay` (the data generator), `RL_Narrow` (the iterator-only anchor) | F-07 recovery + N-2 — a killed run must not leave an unpromoted candidate pinned, and a forgotten post-promotion repoint must not turn "candidate vs parent" into "candidate vs grandparent" |
 | `existences` | frozen `parent_pt`, the train/val H5s, and the 2016 MasterBot exe all exist | warm-start, M-03 val, and the steam yardstick depend on them |
 
 Two guards live OUTSIDE the preflight: no `use_dsnn.txt` / `PRISMATA_FORCE_DSNN` anywhere on an exe path
@@ -44,8 +44,11 @@ outcome. Clears stale shards + parity sidecar first; flips the block back in a `
 format `train.py` consumes.
 
 **3 — Train [core]** — **warm-starts from the parent checkpoint via `--init-weights`** (E1 fix:
-`train.py --rl-mode` now HARD-FAILS without it; iter-1's parent = `deepsets_v221/swa_model.pt`, whose
-export is byte-identical to the deployed v221 `.bin`; iter K>1 = the previous iteration's SWA), then
+`train.py --rl-mode` now HARD-FAILS without it; the parent = the FROZEN `parent_pt` from
+`campaign_frozen.json` — `deepsets_v221/swa_model.pt` until a promotion updates the frozen file, whose
+export is byte-identical to the deployed v221 `.bin`. N-3: running K>1 WITHOUT a promotion deliberately
+warm-starts from the SAME frozen parent again — an unpromoted candidate never enters the lineage;
+`-ParentPt` is an explicit, loudly-printed override), then
 fits 6 low-LR epochs (SWA from epoch 3) on the last-W iterations' H5s mixed with human rehearsal.
 Validates on the **HELD-OUT** `human_val_1700_v2.h5` (M-03 fix — never the rehearsal file). Epoch
 length = ~one pass over the self-play window, not the rehearsal corpus (M-04 fix; LR schedule sized to
@@ -70,7 +73,8 @@ regression vs `eval/tactical_baseline.json`. The baseline's standing ktink FAIL 
 iter0 = vs parent, forced+general; narrow = vs `RL_Narrow`; steam = DaveAI+candidate vs the 2016
 MasterBot at its permanent home), then **always restores `RL_Eval` → the parent in a `finally`**
 (F-07 fix). `run_eval.py` adds: active provenance (config must already point at the candidate;
-engine stderr must confirm the candidate-net load per anchor), an **incremental atomic manifest**
+engine stderr must confirm the candidate-net load per anchor AND — N-2 — the PARENT-net load for the
+parent-pinned opponent, `engine_confirmed_parent_load`), an **incremental atomic manifest**
 (a kill keeps finished anchors), and the **verdict** — REJECT iff general-pool Wilson ci_upper < 0.5,
 REVIEW otherwise, INCOMPLETE if the general anchor is missing. Nothing auto-promotes.
 
@@ -82,11 +86,14 @@ binning) from the self-play data and renders the human-facing results table.
 1. **Decide** from the manifest/dashboard: promote, iterate, or stop. REJECT = proven worse on the
    general pool; REVIEW = your judgment on the recorded numbers (`d_rl`/`d_reg` + CIs are information,
    not gates).
-2. **If promoting:** the candidate becomes the new parent — update `RL_SelfPlay.WeightsFile` AND
-   `RL_Eval.WeightsFile` (the data generator + eval pin), the frozen `parent_bin`/`parent_pt` in
-   `campaign_frozen.json`, and the next iteration's warm-start `.pt`; commit the new `.bin` + config +
-   `campaign_frozen.json` together so the campaign identity stays one consistent tuple (the preflight's
-   `parent_repin`/`frozen_tuple` checks will otherwise fail the next run — by design).
+2. **If promoting:** the candidate becomes the new parent — update the frozen `parent_bin`/`parent_pt`
+   in `campaign_frozen.json` (the next iteration's warm-start resolves from `parent_pt` automatically)
+   AND repoint **all four** parent-side players' `WeightsFile`: `RL_SelfPlay` (data generator),
+   `RL_Eval` (eval pin), `RL_Eval_iter0` (the VERDICT opponent — forgetting this one silently turns
+   "candidate vs parent" into "candidate vs grandparent"), `RL_Narrow` (iterator-only anchor); commit
+   the new `.bin` + config + `campaign_frozen.json` together so the campaign identity stays one
+   consistent tuple (the preflight's `parent_repin`/`frozen_tuple` checks will otherwise fail the next
+   run — by design).
 3. **If iterating:** keep the parent everywhere (stage 7 already restored `RL_Eval`); adjust data;
    quarantine the failed candidate's artifacts (`training/data/rl_iter_<K>/`, the `.bin`) — the replay
    window selects H5s **by filename**, so stale/invalid iterations would silently rejoin the training

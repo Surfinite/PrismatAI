@@ -29,7 +29,7 @@ param(
     [int]$K = 1,        # RL iteration index
     [int]$N = 0,        # informational only; the tuple is FROZEN in eval/campaign_frozen.json — a nonzero -N that differs from frozen_N throws
     [int]$Window = 5,   # replay-buffer window W
-    [string]$ParentPt = ''  # parent checkpoint (.pt) to warm-start from; empty => auto-resolve (K=1 -> deployed v221, else previous iter's SWA)
+    [string]$ParentPt = ''  # parent checkpoint (.pt) to warm-start from; empty => the FROZEN parent_pt from eval/campaign_frozen.json (promotion-gated lineage, N-3)
 )
 $ErrorActionPreference = 'Stop'
 
@@ -53,10 +53,13 @@ $modelDir    = "$train/models/rl_iter_$K"
 $bestPt      = "$modelDir/swa_model.pt"
 $candBin     = "neural_weights_rl_iter$K.bin"          # filename only — resolved under bin/asset/config
 $candBinPath = "$bin/asset/config/$candBin"
-# Current promoted net (gating parent / manifest label / stage-7 finally-restore target).
-# Read from campaign_frozen.json so a promotion (which edits the frozen file) propagates
-# here automatically — a stale literal would make the F-07 restore re-pin the OLD parent.
-$parentBin   = (Get-Content -Raw "$eval/campaign_frozen.json" | ConvertFrom-Json).parent_bin
+# Current promoted net (gating parent / manifest label / stage-7 finally-restore target)
+# AND its .pt checkpoint (the warm-start parent). Both read from campaign_frozen.json so a
+# promotion (which edits the frozen file) propagates here automatically — a stale literal
+# would make the F-07 restore re-pin the OLD parent. ($frozen proper is loaded at stage 0;
+# this early read only needs parent_bin/parent_pt for path wiring.)
+$frozenEarly = Get-Content -Raw "$eval/campaign_frozen.json" | ConvertFrom-Json
+$parentBin   = $frozenEarly.parent_bin
 if (-not $parentBin) { throw "campaign_frozen.json has no parent_bin" }
 $origExe     = 'c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe'  # genuine 2016 MasterBot at its permanent home (steam anchor baseline)
 $parityStates = "$bin/asset/training/parity_states"     # native GameState sidecar (sp_*.json) from self-play
@@ -66,16 +69,23 @@ $humanH5     = "$train/data/human_1800_v2.h5"           # rehearsal data (--huma
 $humanValH5  = "$train/data/human_val_1700_v2.h5"        # HELD-OUT human val set (M-03: validate on this, not the rehearsal file)
 $manifest    = "$eval/manifests/eval_iter_$K.json"
 
-# --- Resolve the parent checkpoint (E1: every iteration warm-starts from its parent) ---
-# iter 1's parent = the deployed supervised v221 net (verified: its export is byte-identical
-# to neural_weights_mixed_v221.bin); iter K>1 = the previous iteration's SWA model.
-# -ParentPt overrides both. Fail fast — train.py --rl-mode now hard-fails without --init-weights.
+# --- Resolve the parent checkpoint (E1 + N-3: promotion-gated lineage) ---
+# Default = the FROZEN parent_pt from campaign_frozen.json — the same provenance source as
+# $parentBin. Promotion = updating campaign_frozen.json's parent_pt/parent_bin (documented in
+# eval/rl_runbook.md "Between iterations"), so running K>1 WITHOUT a promotion warm-starts
+# from the SAME frozen parent again — correct: an unpromoted candidate must never enter the
+# lineage (N-3). The old K-based auto-resolve (iter K-1's SWA) could silently absorb a
+# REJECTED candidate. -ParentPt stays as an explicit override (printed loudly).
+# Fail fast — train.py --rl-mode hard-fails without --init-weights.
 if (-not $ParentPt) {
-    if ($K -eq 1) { $ParentPt = "$train/models/deepsets_v221/swa_model.pt" }
-    else          { $ParentPt = "$train/models/rl_iter_$($K - 1)/swa_model.pt" }
+    $ParentPt = $frozenEarly.parent_pt
+    if (-not $ParentPt) { throw "campaign_frozen.json has no parent_pt" }
+    if (-not [System.IO.Path]::IsPathRooted($ParentPt)) { $ParentPt = "$repo/$ParentPt" }
+} else {
+    Write-Host "*** -ParentPt OVERRIDE: warm-starting from $ParentPt (NOT the frozen parent_pt — lineage bypass; make sure this is deliberate) ***"
 }
 if (-not (Test-Path $ParentPt)) {
-    throw "parent checkpoint not found: $ParentPt — the RL fine-tune must warm-start from its parent net (E1). Pass -ParentPt explicitly or produce the missing parent first."
+    throw "parent checkpoint not found: $ParentPt — the RL fine-tune must warm-start from its parent net (E1). Promote (update campaign_frozen.json) or pass -ParentPt explicitly."
 }
 
 New-Item -ItemType Directory -Force -Path $workDir | Out-Null
@@ -205,8 +215,9 @@ if ($LASTEXITCODE -ne 0) { throw "vectorize_v2.py exited $LASTEXITCODE" }
 # -----------------------------------------------------------------------------
 # 3) Low-LR few-epoch SWA fine-tune over the sliding window + human rehearsal.
 #    WARM-STARTS from the parent checkpoint via --init-weights (E1 fix — train.py
-#    --rl-mode hard-fails without it; iter 1's parent = the deployed v221 net) and
-#    validates on the HELD-OUT human val set (M-03 fix — never the rehearsal file).
+#    --rl-mode hard-fails without it; the parent = the FROZEN parent_pt, v221 until
+#    a promotion updates campaign_frozen.json — N-3) and validates on the HELD-OUT
+#    human val set (M-03 fix — never the rehearsal file).
 #    --rl-mode wires the replay buffer (window W), human rehearsal, colour
 #    balance, and SWA (Task 6). Pass prior iterations' H5 too if present so the
 #    sliding window has its W shards.

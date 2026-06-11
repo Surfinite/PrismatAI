@@ -22,7 +22,10 @@ Checks
                      include, iterator keys, PlayoutPlayer, WeightsFile file)
   6. frozen_tuple    RL_SelfPlay tuple == campaign_frozen.json; EpsilonLate
                      absent (or 0) -- config convention is key-absent
-  7. parent_repin    RL_Eval.WeightsFile == frozen parent_bin (F-07 recovery)
+  7. parent_repin    ALL FOUR parent-side players' WeightsFile == frozen
+                     parent_bin (F-07 recovery + N-2): RL_Eval (eval pin),
+                     RL_Eval_iter0 (the VERDICT OPPONENT), RL_SelfPlay (the
+                     data generator), RL_Narrow (the iterator-only anchor)
   8. existences      frozen parent_pt + the train/val H5s exist on disk
 
 Exit 0 = all pass; exit 1 = any failure, each printed as one
@@ -339,22 +342,43 @@ def check_frozen_tuple(cfg, frozen):
 
 
 # ---------------------------------------------------------------------------
-# Check 7: parent re-pin (F-07)
+# Check 7: parent re-pin (F-07 + N-2: ALL FOUR parent-side players)
 # ---------------------------------------------------------------------------
 
+# Every config player that must carry the frozen parent net, with the concrete
+# consequence of a mispoint (printed in the FAIL line). N-2: candidate-side
+# provenance is engine-confirmed per anchor; the parent side is only as strong
+# as these pins.
+PARENT_PINNED_PLAYERS = (
+    ("RL_Eval", "a killed/failed iteration left the eval pin on an unpromoted "
+                "candidate (F-07); restore it before evaluating"),
+    ("RL_Eval_iter0", "this is the VERDICT OPPONENT -- the verdict would compare "
+                      "candidate vs the WRONG parent (e.g. the grandparent, after a "
+                      "forgotten post-promotion repoint)"),
+    ("RL_SelfPlay", "this is the self-play DATA GENERATOR -- the iteration would "
+                    "train on games played by the wrong net"),
+    ("RL_Narrow", "this is the iterator-only anchor -- with a different net it no "
+                  "longer isolates the iterator variable"),
+)
+
+
 def check_parent_repin(cfg, frozen):
-    ev = cfg.get("Players", {}).get("RL_Eval")
-    if not isinstance(ev, dict):
-        return ["Player 'RL_Eval' not found in config"]
     parent = frozen.get("parent_bin")
     if not parent:
         return ["campaign_frozen.json missing 'parent_bin'"]
-    got = ev.get("WeightsFile")
-    if got != parent:
-        return ["RL_Eval.WeightsFile is '%s' but frozen parent_bin is '%s' -- a killed/"
-                "failed iteration left RL_Eval pointing at an unpromoted candidate "
-                "(F-07); restore it before evaluating" % (got, parent)]
-    return []
+    players = cfg.get("Players", {})
+    failures = []
+    for name, consequence in PARENT_PINNED_PLAYERS:
+        node = players.get(name)
+        if not isinstance(node, dict):
+            failures.append("Player '%s' not found in config (must be pinned to frozen "
+                            "parent_bin '%s'; %s)" % (name, parent, consequence))
+            continue
+        got = node.get("WeightsFile")
+        if got != parent:
+            failures.append("%s.WeightsFile is '%s' but frozen parent_bin is '%s' -- %s"
+                            % (name, got, parent, consequence))
+    return failures
 
 
 # ---------------------------------------------------------------------------

@@ -69,6 +69,7 @@ def make_config():
             },
             "HardIterator_5var_IGsubset_Root": {"type": "AbilitySubset", "include": "HardIterator_5var_NoIG_Root", "subsetFilter": "IG_Only"},
             "HardIterator_5var": {"type": "PPPortfolio", "PartialPlayers": [["DefenseSolver"], ["V5_CS_NoIG"], [], []]},
+            "HardIterator_5var_Root": {"type": "PPPortfolio", "PartialPlayers": [["DefenseSolver"], ["V5_CS_NoIG"], [], []]},
         },
         "Players": {
             "Playout": {"type": "Player_PPSequence", "PartialPlayers": ["DefenseSolver", "V5_CS_NoIG", "BuyEconTech", "BreachGreedyKnapsack"]},
@@ -79,6 +80,23 @@ def make_config():
                 "SelfPlaySampling": True, "TemperatureTau": 0.7, "TemperatureK": 999, "EpsilonUniform": 0.0,
             },
             "RL_Eval": {
+                "type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000,
+                "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var",
+                "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_v221.bin", "UCTConstant": 0.3,
+            },
+            "RL_Eval_iter0": {
+                "type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000,
+                "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var",
+                "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_v221.bin", "UCTConstant": 0.3,
+            },
+            "RL_Narrow": {
+                "type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000,
+                "RootMoveIterator": "HardIterator_5var_Root", "MoveIterator": "HardIterator_5var",
+                "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_v221.bin", "UCTConstant": 0.3,
+            },
+            # NOT parent-pinned -- the neutral player reference_graph mutations target so
+            # parent_repin stays green (every RL_* player is now under parent_repin / N-2).
+            "DSNN_Mixed35": {
                 "type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000,
                 "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var",
                 "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_v221.bin", "UCTConstant": 0.3,
@@ -256,8 +274,9 @@ def test_unknown_filter_fails_reference_graph(env, capsys):
 
 
 def test_missing_weights_file_fails_reference_graph(env, capsys):
-    # mutate RL_SelfPlay (not RL_Eval) so parent_repin stays green -> isolates the check
-    env["cfg"]["Players"]["RL_SelfPlay"]["WeightsFile"] = "neural_weights_does_not_exist.bin"
+    # mutate the neutral non-RL player so parent_repin stays green -> isolates the check
+    # (all four RL_* players are now under parent_repin / N-2)
+    env["cfg"]["Players"]["DSNN_Mixed35"]["WeightsFile"] = "neural_weights_does_not_exist.bin"
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "reference_graph")
@@ -322,18 +341,65 @@ def test_n_drift_fails_frozen_tuple(env, capsys):
 
 
 # ---------------------------------------------------------------------------
-# Check 7: parent re-pin (F-07)
+# Check 7: parent re-pin (F-07 + N-2: ALL FOUR parent-side players)
 # ---------------------------------------------------------------------------
+
+def _mispoint(env, player, bin_name="neural_weights_stale_parent.bin"):
+    """Point one player at an existing-but-wrong bin (file EXISTS so reference_graph
+    stays green and the mutation isolates parent_repin)."""
+    (env["config_path"].parent / bin_name).write_bytes(b"DSN2")
+    env["cfg"]["Players"][player]["WeightsFile"] = bin_name
+
 
 def test_rl_eval_candidate_bin_fails_parent_repin(env, capsys):
     """A killed iteration that left RL_Eval on the candidate bin must be caught."""
-    cand = env["config_path"].parent / "neural_weights_rl_iter1.bin"
-    cand.write_bytes(b"DSN2")  # file EXISTS so reference_graph stays green
-    env["cfg"]["Players"]["RL_Eval"]["WeightsFile"] = "neural_weights_rl_iter1.bin"
+    _mispoint(env, "RL_Eval", "neural_weights_rl_iter1.bin")
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "parent_repin")
+    assert "RL_Eval.WeightsFile" in out
     assert "neural_weights_rl_iter1.bin" in out
+
+
+def test_rl_eval_iter0_mispointed_fails_parent_repin(env, capsys):
+    """N-2: the VERDICT OPPONENT left on a grandparent net after a forgotten
+    post-promotion repoint must be caught -- only parent_repin, naming the player."""
+    _mispoint(env, "RL_Eval_iter0")
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "parent_repin")
+    assert "RL_Eval_iter0" in out and "neural_weights_stale_parent.bin" in out
+    assert sum(1 for ln in out.splitlines() if ln.startswith("FAIL:")) == 1
+
+
+def test_rl_selfplay_mispointed_fails_parent_repin(env, capsys):
+    """N-2: the self-play DATA GENERATOR must carry the frozen parent net."""
+    _mispoint(env, "RL_SelfPlay")
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "parent_repin")
+    assert "RL_SelfPlay" in out
+    assert sum(1 for ln in out.splitlines() if ln.startswith("FAIL:")) == 1
+
+
+def test_rl_narrow_mispointed_fails_parent_repin(env, capsys):
+    """N-2: the iterator-only anchor's net must equal the parent's or it stops
+    isolating the iterator variable."""
+    _mispoint(env, "RL_Narrow")
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "parent_repin")
+    assert "RL_Narrow" in out
+    assert sum(1 for ln in out.splitlines() if ln.startswith("FAIL:")) == 1
+
+
+def test_missing_parent_pinned_player_fails_parent_repin(env, capsys):
+    """A parent-pinned player missing entirely from the config is a parent_repin failure."""
+    del env["cfg"]["Players"]["RL_Narrow"]
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "parent_repin")
+    assert "RL_Narrow" in out
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,8 @@ parent, unforced sets): REJECT iff Wilson ci_upper < 0.5 (proven worse), REVIEW 
 information only.
 
 build_manifest takes injectable runners (run_anchor / steam_fn) so all of this is verifiable
-WITHOUT the C++ engine. run_anchor signature: (dave_bin, block, player, weights_basename).
+WITHOUT the C++ engine. run_anchor signature:
+(dave_bin, block, player, weights_basename, parent_basename).
 """
 import json
 import os
@@ -60,13 +61,14 @@ def _args(tmp_path, pools=("forced", "general"), orig_present=False,
         dave_bin=str(tmp_path), orig_exe=str(orig), steam_games=200, pools=list(pools))
 
 
-def _anchor(block, wins, n=128, draws=0, confirmed=True):
+def _anchor(block, wins, n=128, draws=0, confirmed=True, parent_confirmed=True):
     """A flat anchor result dict shaped like run_anchor_block()'s success return,
     with a REAL Wilson CI derived from wins/draws/n."""
     p = run_eval.win_rate(wins, draws, n)
     lo, hi = run_eval.wilson_ci(p, n)
     return {"block": block, "candidate": "RL_Eval", "wins": wins, "draws": draws,
-            "games": n, "win_rate": p, "ci": [lo, hi], "engine_confirmed_load": confirmed}
+            "games": n, "win_rate": p, "ci": [lo, hi], "engine_confirmed_load": confirmed,
+            "engine_confirmed_parent_load": parent_confirmed}
 
 
 ALL_BLOCKS = ("RL_Eval_iter0_forced", "RL_Eval_iter0_general",
@@ -74,8 +76,9 @@ ALL_BLOCKS = ("RL_Eval_iter0_forced", "RL_Eval_iter0_general",
 
 
 def _table_runner(table, calls=None):
-    """run_anchor(dave_bin, block, player, weights_basename) -> pre-canned anchor dict."""
-    def run_anchor(dave_bin, block, player, weights_basename):
+    """run_anchor(dave_bin, block, player, weights_basename, parent_basename) -> pre-canned
+    anchor dict."""
+    def run_anchor(dave_bin, block, player, weights_basename, parent_basename):
         if calls is not None:
             calls.append(block)
         assert block in table, f"unexpected block {block}"
@@ -333,3 +336,91 @@ def test_run_anchor_block_stamps_engine_confirmed_load(tmp_path, monkeypatch):
     a = run_eval.run_anchor_block(str(tmp_path), "RL_Eval_iter0_general",
                                   "RL_Eval", weights_basename="cand.bin")
     assert a["engine_confirmed_load"] is False
+
+
+# ---------------------------------------------------------------------------
+# active provenance — PARENT-net load (N-2: the verdict anchor's opponent)
+# ---------------------------------------------------------------------------
+
+def test_runner_receives_parent_basename(tmp_path):
+    """build_manifest threads basename(--parent-weights) to the anchor runner (N-2)."""
+    seen = []
+
+    def run_anchor(dave_bin, block, player, weights_basename, parent_basename):
+        seen.append((block, weights_basename, parent_basename))
+        return _anchor(block, 64)
+
+    run_eval.build_manifest(_args(tmp_path), steam_available=False, run_anchor=run_anchor)
+    assert {b for b, _, _ in seen} == set(ALL_BLOCKS)
+    assert all(w == "cand.bin" for _, w, _ in seen)
+    assert all(p == "parent.bin" for _, _, p in seen)   # iter0 AND narrow opponents
+
+
+def test_unconfirmed_parent_load_hard_fails_and_is_recorded(tmp_path):
+    # the iter0/general (VERDICT) tournament COMPLETED but its stderr never confirmed
+    # the PARENT net — the verdict would compare candidate vs the WRONG parent.
+    bad = _anchor("RL_Eval_iter0_general", 64, parent_confirmed=False)
+    table = _full_table(bad)
+    mpath = str(tmp_path / "eval_iter_3.json")
+    with pytest.raises(RuntimeError, match="engine_confirmed_parent_load|WRONG parent"):
+        run_eval.build_manifest(_args(tmp_path), steam_available=False,
+                                run_anchor=_table_runner(table), manifest_path=mpath)
+    # ...but the untrusted result is still recorded for the post-mortem
+    with open(mpath, encoding="utf-8") as f:
+        m = json.load(f)
+    assert m["anchors"]["iter0"]["pools"]["general"]["engine_confirmed_parent_load"] is False
+    assert m["complete"] is False
+
+
+def test_unconfirmed_parent_load_on_narrow_also_hard_fails(tmp_path):
+    """RL_Narrow is parent-pinned too (non-gating, but same provenance contract)."""
+    table = _full_table(_anchor("RL_Eval_iter0_general", 64))
+    table["RL_Eval_narrow_general"] = _anchor("RL_Eval_narrow_general", 64,
+                                              parent_confirmed=False)
+    with pytest.raises(RuntimeError, match="engine_confirmed_parent_load|WRONG parent"):
+        run_eval.build_manifest(_args(tmp_path), steam_available=False,
+                                run_anchor=_table_runner(table))
+
+
+def test_confirmed_parent_load_passes(tmp_path):
+    """Both load lines present (the _anchor default) -> no provenance failure."""
+    table = _full_table(_anchor("RL_Eval_iter0_general", 64))
+    m = run_eval.build_manifest(_args(tmp_path), steam_available=False,
+                                run_anchor=_table_runner(table))
+    assert m["complete"] is True
+    assert m["anchors"]["iter0"]["pools"]["general"]["engine_confirmed_parent_load"] is True
+
+
+def test_run_anchor_block_stamps_engine_confirmed_parent_load(tmp_path, monkeypatch):
+    """End-to-end through run_anchor_block: parent stderr line -> parent stamp."""
+    _write_config(tmp_path)
+
+    def both_loads(dave_bin, block_name, stderr_out=None):
+        if stderr_out is not None:
+            stderr_out.append(
+                "AIParameters: created per-player NeuralNet from asset/config/cand.bin\n"
+                "AIParameters: created per-player NeuralNet from asset/config/parent.bin\n")
+        return {"RL_Eval": {"wins": 70, "draws": 2, "games": 128}}
+
+    monkeypatch.setattr(run_eval, "run_cpp_tournament", both_loads)
+    a = run_eval.run_anchor_block(str(tmp_path), "RL_Eval_iter0_general", "RL_Eval",
+                                  weights_basename="cand.bin", parent_basename="parent.bin")
+    assert a["engine_confirmed_load"] is True
+    assert a["engine_confirmed_parent_load"] is True
+
+    def candidate_only(dave_bin, block_name, stderr_out=None):
+        if stderr_out is not None:
+            stderr_out.append(
+                "AIParameters: created per-player NeuralNet from asset/config/cand.bin\n")
+        return {"RL_Eval": {"wins": 70, "draws": 2, "games": 128}}
+
+    monkeypatch.setattr(run_eval, "run_cpp_tournament", candidate_only)
+    a = run_eval.run_anchor_block(str(tmp_path), "RL_Eval_iter0_general", "RL_Eval",
+                                  weights_basename="cand.bin", parent_basename="parent.bin")
+    assert a["engine_confirmed_load"] is True
+    assert a["engine_confirmed_parent_load"] is False
+
+    # no parent_basename (ad-hoc use without --parent-weights) -> no parent stamp
+    a = run_eval.run_anchor_block(str(tmp_path), "RL_Eval_iter0_general", "RL_Eval",
+                                  weights_basename="cand.bin")
+    assert "engine_confirmed_parent_load" not in a
