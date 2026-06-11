@@ -775,9 +775,10 @@ function sideLabel(player, difficulty) {
 
 /**
  * Guard against silent FORCE_DSNN contamination. The dave-line Standalone exe
- * (AITools.cpp GetAIMove) overrides EVERY requested player with UCT+NeuralNet
- * (35-prop weights) when `use_dsnn.txt` sits next to the exe, or when the env
- * var PRISMATA_FORCE_DSNN is set. That would silently turn e.g. a HardestAI-vs-
+ * (AITools.cpp GetAIMove) overrides EVERY requested player with the UCT+NeuralNet
+ * drop-in (v221 weights + IG-subset iterators + c=0.3 since dave@72c240a; use_dsnn.txt
+ * doubles as its think_time/max_traversals config) when `use_dsnn.txt` sits next to
+ * the exe, or when the env var PRISMATA_FORCE_DSNN is set. That would silently turn e.g. a HardestAI-vs-
  * DSNN baseline into DSNN-vs-DSNN with zero signal on the JS side. Detect it and
  * abort unless the caller explicitly opts in with --allow-force-dsnn.
  * @param {string[]} exePaths - exe paths whose directories are checked for the sentinel
@@ -800,9 +801,9 @@ function checkForceDsnnContamination(exePaths, allowOverride) {
     }
     if (hits.length === 0) return false;
     console.error('\n*** FORCE_DSNN CONTAMINATION DETECTED ***');
-    console.error('The dave-line Standalone overrides EVERY player with UCT+NeuralNet(35-prop) when:');
+    console.error('The dave-line Standalone overrides EVERY player with the UCT+NeuralNet drop-in (v221 + IG-subset since dave@72c240a) when:');
     hits.forEach(h => console.error(`   - ${h}`));
-    console.error('Every requested player (including any baseline) would silently become the 35-prop DSNN.');
+    console.error('Every requested player (including any baseline) would silently become the drop-in DSNN.');
     if (allowOverride) {
         console.error('Proceeding anyway because --allow-force-dsnn was passed.\n');
         return false;
@@ -2438,7 +2439,8 @@ async function main() {
     if (blackIsSteamAI) playerBlack = isDaveAIPlayer(playerBlack) ? DAVE_AI_PLAYER : STEAM_AI_PLAYER;
 
     // Guard: a use_dsnn.txt sentinel next to the exe (or PRISMATA_FORCE_DSNN) makes
-    // the dave-line Standalone silently override EVERY player with the 35-prop DSNN.
+    // the dave-line Standalone silently override EVERY player with the drop-in DSNN
+    // (v221 + IG-subset since dave@72c240a).
     // Check only the exe(s) actually used by each player type (a DaveAI run must not
     // abort just because the unrelated Steam install carries a sentinel).
     {
