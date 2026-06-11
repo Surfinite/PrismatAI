@@ -5,11 +5,69 @@
 #include "Game.h"
 #include "Timer.h"
 #include "Player_UCT.h"   // dynamic_cast for optional aivisits diagnostics
+#include "DsnnConfig.h"
 
 #include <cstdlib>   // std::getenv (FORCE_DSNN env override)
 #include <fstream>   // std::ifstream (FORCE_DSNN sentinel-file check)
+#include <sstream>
+#include <algorithm>
+#include <cctype>
 
 using namespace Prismata;
+
+// --- use_dsnn.txt parsing (FORCE_DSNN drop-in config; declared in DsnnConfig.h) ---
+
+static std::string dsnnTrim(std::string s)
+{
+    auto notspace = [](unsigned char c){ return !std::isspace(c); };
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), notspace));
+    s.erase(std::find_if(s.rbegin(), s.rend(), notspace).base(), s.end());
+    return s;
+}
+
+static std::string dsnnLower(std::string s)
+{
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return (char)std::tolower(c); });
+    return s;
+}
+
+DsnnConfig Prismata::parseDsnnConfig(const std::string & contents)
+{
+    DsnnConfig cfg;
+    std::string body = contents;
+    if (body.size() >= 3 && (unsigned char)body[0] == 0xEF && (unsigned char)body[1] == 0xBB && (unsigned char)body[2] == 0xBF)
+    {
+        body = body.substr(3);
+    }
+    std::istringstream in(body);
+    std::string line;
+    while (std::getline(in, line))
+    {
+        if (!line.empty() && line.back() == '\r') { line.pop_back(); }
+        line = dsnnTrim(line);
+        if (line.empty() || line[0] == '#') { continue; }
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) { continue; }
+        const std::string key = dsnnLower(dsnnTrim(line.substr(0, eq)));
+        const std::string val = dsnnTrim(line.substr(eq + 1));
+        try
+        {
+            if      (key == "think_time")     { cfg.thinkTimeMs   = std::stoi(val); }
+            else if (key == "max_traversals") { cfg.maxTraversals = std::stol(val); }
+        }
+        catch (...) { /* bad numeric value -> leave the default for that key only */ }
+    }
+    return cfg;
+}
+
+DsnnConfig Prismata::loadDsnnConfig(const std::string & path)
+{
+    std::ifstream f(path.c_str(), std::ios::binary);
+    if (!f.good()) { return DsnnConfig(); }
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return parseDsnnConfig(ss.str());
+}
 
 std::string AITools::InitializeAI(const std::string & initString)
 {
@@ -127,15 +185,24 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
         PlayerPtr aiPlayer = AIParameters::Instance().getPlayer(initialState.getActivePlayer(), document["aiPlayerName"].GetString());
 
         // --- FORCE_DSNN override -------------------------------------------------
-        // If env PRISMATA_FORCE_DSNN is set, ignore the requested AI player and run
-        // UCT + NeuralNet using neural_weights_mixed_35prop.bin (override via env
-        // PRISMATA_DSNN_WEIGHTS). Think time = the requested player's TimeLimit, but
-        // 7000 -> 10000, so the in-game "7s Master Bot" (aiPlayerName HardestAI)
-        // thinks ~10s: a timeable tell that the DSNN is active, plus a slightly
-        // stronger opponent. The "3s" bot (HardAI, 3000) stays 3s. When the env var
-        // is unset, aiPlayer keeps the value above and behavior is byte-identical.
+        // If triggered, ignore the requested AI player and run UCT + DeepSets-NeuralNet
+        // (default weights neural_weights_mixed_v221.bin; override via env
+        // PRISMATA_DSNN_WEIGHTS) over the IG-click-COUNT subset action space -- the
+        // RL_Eval pairing: HardIterator_5var_IGsubset_Root root + HardIterator_5var
+        // tree, MaxChildren 40, cValue 0.3 (these iterator names resolve through the
+        // A12 config.txt defs merge above; without config.txt we fall back to the
+        // plain HardIterator chain).
         // Trigger: env var PRISMATA_FORCE_DSNN set, OR a sentinel file 'use_dsnn.txt'
         // sitting next to the executable (drop-in friendly -- no env var, no Steam).
+        // The sentinel file doubles as the config file (key=value lines, # comments;
+        // an EMPTY file keeps every default):
+        //   think_time     = <ms>  think time for EVERY difficulty (0 = no time cap);
+        //                          unset -> the requested player's TimeLimit, with
+        //                          7000 -> 10000 so the in-game "7s Master Bot" thinks
+        //                          ~10s -- a timeable tell that the DSNN is active.
+        //   max_traversals = <n>   UCT traversal cap (0 = uncapped); unset -> 100000.
+        // When neither trigger is present, aiPlayer keeps the value above and
+        // behavior is byte-identical.
         const char * forceEnv = std::getenv("PRISMATA_FORCE_DSNN");
         bool forceDSNN = (forceEnv != nullptr && forceEnv[0] != '\0');
         if (!forceDSNN)
@@ -152,6 +219,10 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
             const PlayerID activePlayer = initialState.getActivePlayer();
             const std::string requestedName = document["aiPlayerName"].GetString();
 
+            const std::string exeDir = NeuralNet::getExecutableDir();
+            const DsnnConfig dcfg = exeDir.empty() ? DsnnConfig()
+                                                   : loadDsnnConfig(exeDir + "/use_dsnn.txt");
+
             // Read the requested player's TimeLimit from the parsed aiParameters.
             int requestedTimeLimit = 7000;
             if (document.HasMember("aiParameters") && document["aiParameters"].IsObject())
@@ -166,31 +237,72 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
                     requestedTimeLimit = ap["Players"][requestedName.c_str()]["TimeLimit"].GetInt();
                 }
             }
-            const int dsnnTimeLimit = (requestedTimeLimit == 7000) ? 10000 : requestedTimeLimit;
+            // Clamp to >=1 so a malformed blob (TimeLimit <= 0) can neither defeat the
+            // both-caps-off guard below nor wrap negative through (size_t)setTimeLimit.
+            const int defaultTimeLimit = (requestedTimeLimit == 7000) ? 10000
+                                       : (requestedTimeLimit > 0 ? requestedTimeLimit : 10000);
+
+            int  dsnnTimeLimit  = (dcfg.thinkTimeMs   >= 0) ? dcfg.thinkTimeMs   : defaultTimeLimit;
+            long dsnnTraversals = (dcfg.maxTraversals >= 0) ? dcfg.maxTraversals : 100000L;
+            if (dsnnTimeLimit <= 0 && dsnnTraversals <= 0)
+            {
+                // Both caps off -> UCTSearch::searchShouldStop() could never fire. Restore the time cap.
+                fprintf(stderr, "FORCE_DSNN: think_time=0 AND max_traversals=0 would search forever; using think_time=%dms\n",
+                        defaultTimeLimit);
+                dsnnTimeLimit = defaultTimeLimit;
+            }
 
             const char * weightsEnv = std::getenv("PRISMATA_DSNN_WEIGHTS");
             const std::string weightsName = (weightsEnv && weightsEnv[0] != '\0')
                                           ? std::string(weightsEnv)
-                                          : std::string("neural_weights_mixed_35prop.bin");
+                                          : std::string("neural_weights_mixed_v221.bin");
 
+            // Resolve weights against the exe dir first (Steam may launch with any CWD),
+            // then the old CWD-relative fallbacks.
             NeuralNetPtr nn = std::make_shared<NeuralNet>();
-            const bool nnOk = nn->loadWeights("asset/config/" + weightsName) || nn->loadWeights(weightsName);
-
-            // HardIterator(_Root) match the tested DSNN_MBonly config and are
-            // registered by InitializeAI from the request's aiParameters blob.
-            MoveIteratorPtr rootI1 = AIParameters::Instance().getMoveIterator(Players::Player_One, "HardIterator_Root");
-            MoveIteratorPtr rootI2 = AIParameters::Instance().getMoveIterator(Players::Player_Two, "HardIterator_Root");
-            MoveIteratorPtr moveI1 = AIParameters::Instance().getMoveIterator(Players::Player_One, "HardIterator");
-            MoveIteratorPtr moveI2 = AIParameters::Instance().getMoveIterator(Players::Player_Two, "HardIterator");
-
-            if (nnOk && rootI1 && rootI2 && moveI1 && moveI2)
+            bool nnOk = !exeDir.empty() && nn->loadWeights(exeDir + "/asset/config/" + weightsName);
+            if (!nnOk)
             {
-                nn->buildCardTypeMapping();
+                nnOk = nn->loadWeights("asset/config/" + weightsName) || nn->loadWeights(weightsName);
+            }
 
+            // IG-click-COUNT subset action space (the RL_Eval pairing). These names resolve
+            // through the A12 config.txt defs merge; if that didn't happen (blob-only path),
+            // fall back to the blob's plain HardIterator chain. hasMoveIterator guards both
+            // lookups -- getMoveIterator on a missing name soft-asserts then dereferences end().
+            auto hasIterBothPlayers = [](const std::string & n) {
+                return AIParameters::Instance().hasMoveIterator(Players::Player_One, n)
+                    && AIParameters::Instance().hasMoveIterator(Players::Player_Two, n);
+            };
+            std::string rootIterName = "HardIterator_5var_IGsubset_Root";
+            std::string treeIterName = "HardIterator_5var";
+            if (!hasIterBothPlayers(rootIterName) || !hasIterBothPlayers(treeIterName))
+            {
+                fprintf(stderr, "FORCE_DSNN: IG-subset iterators not registered (config.txt missing?); using HardIterator\n");
+                rootIterName = "HardIterator_Root";
+                treeIterName = "HardIterator";
+            }
+
+            MoveIteratorPtr rootI1, rootI2, moveI1, moveI2;
+            if (hasIterBothPlayers(rootIterName) && hasIterBothPlayers(treeIterName))
+            {
+                rootI1 = AIParameters::Instance().getMoveIterator(Players::Player_One, rootIterName);
+                rootI2 = AIParameters::Instance().getMoveIterator(Players::Player_Two, rootIterName);
+                moveI1 = AIParameters::Instance().getMoveIterator(Players::Player_One, treeIterName);
+                moveI2 = AIParameters::Instance().getMoveIterator(Players::Player_Two, treeIterName);
+            }
+
+            // A weights file alone is not enough: without unit_index.json the card-type
+            // mapping comes back empty and the net silently evaluates on the 15 globals
+            // alone (every token/supply entry skipped). Treat that as a failed DSNN.
+            const int mappedTypes = nnOk ? nn->buildCardTypeMapping() : 0;
+
+            if (nnOk && mappedTypes > 0 && rootI1 && rootI2 && moveI1 && moveI2)
+            {
                 UCTSearchParameters params;
                 params.setMaxPlayer(activePlayer);
                 params.setTimeLimit((size_t)dsnnTimeLimit);
-                params.setMaxTraversals(100000);
+                params.setMaxTraversals((size_t)dsnnTraversals);
                 params.setMaxChildren(40);
                 // cValue: default 0.3 (strong). Our cValue sweep found 2.0 -- the engine default --
                 // is the WEAKEST setting (strength is monotonic in 1/c). Override via PRISMATA_DSNN_CVALUE.
@@ -206,14 +318,14 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
 
                 aiPlayer = PlayerPtr(new Player_UCT(activePlayer, params));
 
-                fprintf(stderr, "FORCE_DSNN: '%s' -> UCT+NeuralNet, weights=%s, timeLimit=%dms, cValue=%.2f\n",
-                        requestedName.c_str(), weightsName.c_str(), dsnnTimeLimit, cval);
+                fprintf(stderr, "FORCE_DSNN: '%s' -> UCT+NeuralNet, weights=%s, timeLimit=%dms, maxTraversals=%ld, cValue=%.2f, rootIterator=%s\n",
+                        requestedName.c_str(), weightsName.c_str(), dsnnTimeLimit, dsnnTraversals, cval, rootIterName.c_str());
             }
             else
             {
-                fprintf(stderr, "FORCE_DSNN: could NOT build DSNN player (nnOk=%d, iterators=%d); "
+                fprintf(stderr, "FORCE_DSNN: could NOT build DSNN player (nnOk=%d, mappedTypes=%d, iterators=%d); "
                         "falling back to requested '%s'\n",
-                        (int)nnOk, (int)(rootI1 && rootI2 && moveI1 && moveI2), requestedName.c_str());
+                        (int)nnOk, mappedTypes, (int)(rootI1 && rootI2 && moveI1 && moveI2), requestedName.c_str());
             }
         }
         // --- end FORCE_DSNN override --------------------------------------------

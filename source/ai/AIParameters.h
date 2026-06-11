@@ -90,6 +90,7 @@ public:
     PlayerPtr           getPlayer(const PlayerID player, const std::string & playerName);
     PPPtr               getPartialPlayer(const PlayerID player, const std::string & playerName);
     MoveIteratorPtr     getMoveIterator(const PlayerID player, const std::string & iteratorName);
+    bool                hasMoveIterator(const PlayerID player, const std::string & iteratorName) const;
     GameState           getState(const std::string & stateName);
 
     const std::vector<std::string> & getStateNames() const;

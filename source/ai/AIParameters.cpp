@@ -1194,6 +1194,11 @@ MoveIteratorPtr AIParameters::getMoveIterator(const PlayerID player, const std::
     return iteratorIt->second->clone();
 }
 
+bool AIParameters::hasMoveIterator(const PlayerID player, const std::string & iteratorName) const
+{
+    return _moveIteratorMap[player].find(iteratorName) != _moveIteratorMap[player].end();
+}
+
 void AIParameters::parseJSONString(const std::string & jsonString)
 {
     rapidjson::Document document;

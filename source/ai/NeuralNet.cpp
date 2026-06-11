@@ -387,9 +387,9 @@ void NeuralNet::allocateScratchBuffers()
 // Card type mapping (engine CardType ID -> unit index)
 // ---------------------------------------------------------------------------
 
-void NeuralNet::buildCardTypeMapping()
+int NeuralNet::buildCardTypeMapping()
 {
-    if (!_loaded) return;
+    if (!_loaded) return 0;
 
     const auto & allTypes = CardTypes::GetAllCardTypes();
     size_t maxID = 0;
@@ -435,6 +435,7 @@ void NeuralNet::buildCardTypeMapping()
     }
 
     printf("NeuralNet: mapped %d / %zu engine card types (%d unmapped)\n", mapped, allTypes.size(), unmapped);
+    return mapped;
 }
 
 // ---------------------------------------------------------------------------

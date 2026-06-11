@@ -2,6 +2,7 @@
 #include "PrismataAI.h"
 #include "NeuralNet.h"
 #include "MoveSampler.h"
+#include "DsnnConfig.h"
 #include "V2Record.h"
 #include "Random.h"
 #include "rapidjson/document.h"
@@ -266,6 +267,32 @@ int main(int argc, char *argv[])
         bool ok = pureFnOfSeed && reproducible;
         printf("--test-rng: pureFnOfSeed=%d reproducible=%d => %s\n",
                (int)pureFnOfSeed, (int)reproducible, ok ? "PASS" : "FAIL");
+        return ok ? 0 : 1;
+    }
+
+    // --- use_dsnn.txt parser self-test (FORCE_DSNN drop-in config; see AITools.cpp) ---
+    // Usage: PrismataAI.exe --test-dsnnconfig    (prints PASS/FAIL, returns 0/1)
+    if (argc >= 2 && std::string(argv[1]) == "--test-dsnnconfig")
+    {
+        bool ok = true;
+        auto check = [&](bool cond, const char * msg){ if (!cond) { ok = false; printf("  FAIL: %s\n", msg); } };
+
+        Prismata::DsnnConfig d = Prismata::parseDsnnConfig("");
+        check(d.thinkTimeMs < 0 && d.maxTraversals < 0, "empty file -> all defaults");
+
+        // BOM + CRLF + comment + case-insensitive keys + spaces + unknown keys ignored
+        std::string s = "\xEF\xBB\xBF# friend build\r\nThink_Time = 2500\r\nmax_traversals=0\ngarbageline\nthreads=8\n";
+        Prismata::DsnnConfig c = Prismata::parseDsnnConfig(s);
+        check(c.thinkTimeMs == 2500, "think_time=2500 (BOM/CRLF/case/space tolerated)");
+        check(c.maxTraversals == 0, "max_traversals=0 (uncapped)");
+
+        Prismata::DsnnConfig e = Prismata::parseDsnnConfig("think_time=notanumber\nmax_traversals=50\n");
+        check(e.thinkTimeMs < 0 && e.maxTraversals == 50, "bad numeric tolerated per-key");
+
+        Prismata::DsnnConfig f = Prismata::parseDsnnConfig("think_time=-3\nmax_traversals=-1\n");
+        check(f.thinkTimeMs < 0 && f.maxTraversals < 0, "negative values behave as unset");
+
+        printf("--test-dsnnconfig: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;
     }
 

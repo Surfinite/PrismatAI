@@ -95,7 +95,10 @@ public:
     NeuralNetPtr clone() const;
 
     bool loadWeights(const std::string & filename);
-    void buildCardTypeMapping();
+    // Returns the number of engine card types mapped to unit indices.
+    // 0 means unit_index.json was missing/mismatched -- the net would then
+    // evaluate on globals alone (every token/supply entry skipped).
+    int buildCardTypeMapping();
     bool isLoaded() const;
 
     // DeepSets is value-only; evaluate() kept for backward compatibility (returns empty policy)
