@@ -21,7 +21,7 @@ engine launch. It never rewrites `config.txt` — drift must be reconciled delib
 | `iterator_shape` | `HardIterator_5var_IGsubset_Root` = AbilitySubset/IG_Only wrapping the 5-variant NoIG portfolio, dims [1,5,5,1], exact variant set; `V5_CS2_NoIG` transitively reaches `LiveOpeningBook2` | the Jun-4→9 crippled-iterator incident — now machine-checked |
 | `book_sizes` | `LiveOpeningBook2` == 50, `DefaultOpeningBook` == 4 (post SWF port) | book truncation/drift |
 | `reference_graph` | every declared reference resolves (openingBook, filter, subsetFilter, buyLimits, combination, PartialPlayers, include, iterator keys, PlayoutPlayer, WeightsFile file on disk) | dangling names; complements the engine's own construction-time hard-fails |
-| `frozen_tuple` | `RL_SelfPlay` MaxTraversals/TemperatureK/Tau/EpsilonUniform == `campaign_frozen.json`; `EpsilonLate` absent (or 0) | the three-way N skew happened once; the tuple IS the campaign identity |
+| `frozen_tuple` | `RL_SelfPlay` MaxTraversals/TemperatureK/Tau/EpsilonUniform/**EpsilonLate** == `campaign_frozen.json` (regime v2 freezes EpsilonLate=0.05 — an ABSENT config key means 0.0 to the engine and FAILS; older frozen files without the key keep the absent-or-0 rule); BOTH self-play blocks match the frozen `selfplay_threads` + `selfplay_mix` (rounds, ForcedCards on the forced block ONLY, run:false at rest) | the three-way N skew happened once; the tuple IS the campaign identity |
 | `parent_repin` | ALL FOUR parent-side players' `WeightsFile` == the frozen `parent_bin`: `RL_Eval` (eval pin), `RL_Eval_iter0` (the VERDICT opponent), `RL_SelfPlay` (the data generator), `RL_Narrow` (the iterator-only anchor) | F-07 recovery + N-2 — a killed run must not leave an unpromoted candidate pinned, and a forgotten post-promotion repoint must not turn "candidate vs parent" into "candidate vs grandparent" |
 | `existences` | frozen `parent_pt`, the train/val H5s, and the 2016 MasterBot exe all exist | warm-start, M-03 val, and the steam yardstick depend on them |
 
@@ -35,12 +35,18 @@ unloaded-net guard on the UCT value path (X5b).
 **0 — Structural preflight [gate]** — `preflight_config.py` (the table above); also rejects a `-N` that
 differs from `frozen_N`.
 
-**1 — Self-play export [core]** — flips `RL_Step2_Smoke` (`rounds:64`, **`Threads:8`**, ForcedCards Hotel)
-to `run:true` and runs `Prismata_Testing.exe`: the parent-net-guided UCT (frozen N=1000, whole-game
-τ=0.7 sampling) plays itself and writes one JSONL record per position, labelled with the eventual game
-outcome. Clears stale shards + parity sidecar first; flips the block back in a `finally`.
+**1 — Self-play export [core]** — flips **TWO** blocks to `run:true` (regime-v2 data mix, one
+`Prismata_Testing.exe` launch): `RL_SelfPlay_General` (`rounds:43` → ~86 games, **no forcing** — the
+broadened general-improvement goal) and `RL_Step2_Smoke` (`rounds:21` → ~42 games, ForcedCards Hotel —
+keeps IG-decision density), i.e. **⅔ general + ⅓ forced-Hotel**, each into its own export dir
+(separate dirs REQUIRED — the export counter is per-Tournament-instance). The parent-net-guided UCT
+(frozen N=1000) plays itself under the **early-noise/late-precision regime** (τ=0.7 sampling turns
+0–11; turns ≥12 argmax with `EpsilonLate=0.05` uniform-child chance) and writes one JSONL record per
+position, labelled with the eventual game outcome. Clears stale shards (both dirs) + parity sidecar
+first; flips both blocks back in a `finally`.
 
-**2 — Vectorize [core]** — concatenates the shards and converts JSONL → H5 tensors (schema v2.2.1), the
+**2 — Vectorize [core]** — concatenates the shards from BOTH export dirs (general then forced; game
+boundaries re-detected via `ply_index==0`) and converts JSONL → H5 tensors (schema v2.2.1), the
 format `train.py` consumes.
 
 **3 — Train [core]** — **warm-starts from the parent checkpoint via `--init-weights`** (E1 fix:
@@ -103,9 +109,13 @@ binning) from the self-play data and renders the human-facing results table.
 ## The knobs that ARE the campaign identity
 
 Single source of truth: **`eval/campaign_frozen.json`** (stage 0 asserts `config.txt` matches; nothing
-rewrites either side silently). Frozen 2026-06-11: `N=1000` (self-play MaxTraversals) ·
-`TemperatureTau=0.7` / `TemperatureK=999` (whole-game τ-sampling) · `EpsilonUniform=0` /
-`EpsilonLate` absent · `UCTConstant=0.3` · `Threads:8` self-play · `W=5` (replay window) ·
-epochs/lr (6 @ 1e-5, SWA from 3) · rehearsal fraction (0.30 → 0.10, −0.07/iter) · anchor budget
-(7000 ms / 100k) · parent weights (v221). Change any of these mid-campaign and iteration results stop
-being comparable — that's a NEW campaign (`rl_campaign.md` §1).
+rewrites either side silently). Frozen 2026-06-11 (**regime v2** — early-noise/late-precision,
+superseding the same-day v1 whole-game sampling, which measured 40–46% non-argmax moves +
+significantly longer games): `N=1000` (self-play MaxTraversals) · `TemperatureTau=0.7` /
+`TemperatureK=12` (τ-sampling turns 0–11 only) · `EpsilonUniform=0` / **`EpsilonLate=0.05`** (turns
+≥12: argmax with a 5% uniform-child chance, ~1.1 mild deviations/game) · `UCTConstant=0.3` ·
+`Threads:8` self-play · self-play mix **⅔ general + ⅓ forced-Hotel** (`selfplay_mix`:
+`RL_SelfPlay_General` rounds:43 + `RL_Step2_Smoke` rounds:21) · `W=5` (replay window) · epochs/lr
+(6 @ 1e-5, SWA from 3) · rehearsal fraction (0.30 → 0.10, −0.07/iter) · anchor budget (7000 ms /
+100k) · parent weights (v221). Change any of these mid-campaign and iteration results stop being
+comparable — that's a NEW campaign (`rl_campaign.md` §1).

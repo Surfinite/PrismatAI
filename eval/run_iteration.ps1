@@ -14,7 +14,8 @@
 #
 # This orchestrates already-built tools (it does NOT rebuild them):
 #   preflight  : eval/preflight_config.py            (stage 0 — config integrity + frozen tuple + parent re-pin)
-#   self-play  : Prismata_Testing.exe over a run:true block in dave's config.txt
+#   self-play  : Prismata_Testing.exe over TWO run:true blocks in dave's config.txt
+#                (regime-v2 mix: RL_SelfPlay_General 2/3 unforced + RL_Step2_Smoke 1/3 forced-Hotel)
 #   vectorize  : training/vectorize_v2.py
 #   train      : training/train.py --rl-mode (Task 6)
 #   export     : training/export_weights_v2.py
@@ -42,8 +43,11 @@ $train   = "$repo/training"
 $eval    = "$repo/eval"
 $tools   = "$repo/tools"
 
-# Self-play export dir for the RL_Step2 block (exportTrainingV2 target in config.txt).
-$selfplayDir = "$bin/asset/training/rl_step2_v2"
+# Self-play export dirs (exportTrainingV2 targets in config.txt). Regime v2 runs TWO blocks:
+# RL_SelfPlay_General (2/3, unforced) + RL_Step2_Smoke (1/3, ForcedCards Hotel). Separate dirs
+# are REQUIRED -- the export counter is per-Tournament-instance; one dir would clobber filenames.
+$selfplayDir    = "$bin/asset/training/rl_step2_v2"    # forced-Hotel slice (RL_Step2_Smoke)
+$selfplayDirGen = "$bin/asset/training/rl_general_v2"  # general slice (RL_SelfPlay_General)
 # Where this iteration's H5 + concatenated JSONL land.
 $workDir     = "$train/data/rl_iter_$K"
 $catJsonl    = "$workDir/selfplay_iter_$K.jsonl"
@@ -178,35 +182,45 @@ $N = [int]$frozen.frozen_N
 Write-Host "=== RL iteration $K  (N=$N, W=$Window) ==="
 
 # -----------------------------------------------------------------------------
-# 1) Self-play: run the RL_Step2 block (RL_SelfPlay vs RL_SelfPlay, ForcedCards
-#    Hotel/IG-optional, fixed N, exportTrainingV2 on) -> selfplay_*.jsonl shards.
-#    The block is RL_Step2_Smoke; for a real run flip its rounds up + run:true.
-#    RL_SelfPlay's MaxTraversals is NOT rewritten here — the frozen-tuple assert
-#    above already verified config.txt matches campaign_frozen.json.
+# 1) Self-play: run BOTH self-play blocks (regime-v2 data mix, one engine launch):
+#      RL_SelfPlay_General (rounds:43 -> ~86 games, NO forcing, 2/3 slice)
+#      RL_Step2_Smoke      (rounds:21 -> ~42 games, ForcedCards Hotel, 1/3 slice)
+#    RL_SelfPlay vs RL_SelfPlay, fixed N, exportTrainingV2 on -> selfplay_*.jsonl
+#    shards in TWO export dirs. RL_SelfPlay's sampling tuple (K=12 tau=0.7
+#    EpsilonLate=0.05) is NOT rewritten here — the stage-0 preflight already
+#    verified config.txt matches campaign_frozen.json (incl. the selfplay_mix).
 # -----------------------------------------------------------------------------
-Write-Host "`n[1/8] self-play -> $selfplayDir"
-# Clear stale shards + parity sidecar from any prior iteration: the C++ export game
-# counter resets to 0 each run, so a shorter run would otherwise leave higher-numbered
+Write-Host "`n[1/8] self-play (2/3 general -> $selfplayDirGen ; 1/3 forced-Hotel -> $selfplayDir)"
+# Clear stale shards (BOTH dirs) + parity sidecar from any prior iteration: the C++ export
+# game counter resets to 0 each run, so a shorter run would otherwise leave higher-numbered
 # selfplay_*.jsonl that Stage 2's glob would wrongly concatenate into this iter's data.
-if (Test-Path $selfplayDir)  { Remove-Item "$selfplayDir/selfplay_*.jsonl" -ErrorAction SilentlyContinue }
-if (Test-Path $parityStates) { Remove-Item "$parityStates/sp_*.json"        -ErrorAction SilentlyContinue }
+if (Test-Path $selfplayDir)    { Remove-Item "$selfplayDir/selfplay_*.jsonl"    -ErrorAction SilentlyContinue }
+if (Test-Path $selfplayDirGen) { Remove-Item "$selfplayDirGen/selfplay_*.jsonl" -ErrorAction SilentlyContinue }
+if (Test-Path $parityStates)   { Remove-Item "$parityStates/sp_*.json"          -ErrorAction SilentlyContinue }
+Edit-Config -Op run -Name RL_SelfPlay_General -Value true
 Edit-Config -Op run -Name RL_Step2_Smoke -Value true
 Push-Location $bin   # the exe resolves asset/config/* (cardLibrary.jso, config.txt) CWD-relative
 try {
-    & "$bin/Prismata_Testing.exe"
+    & "$bin/Prismata_Testing.exe"   # runs every run:true Benchmarks block in one launch
     if ($LASTEXITCODE -ne 0) { throw "Prismata_Testing.exe (self-play) exited $LASTEXITCODE" }
 }
 finally {
     Pop-Location
     Edit-Config -Op run -Name RL_Step2_Smoke -Value false
+    Edit-Config -Op run -Name RL_SelfPlay_General -Value false
 }
 
 # -----------------------------------------------------------------------------
-# 2) Concat V2 shards -> one JSONL -> vectorize -> H5.
+# 2) Concat V2 shards (BOTH export dirs) -> one JSONL -> vectorize -> H5.
+#    Shard names restart at selfplay_0000 in EACH dir (per-Tournament counter),
+#    so concat dir-by-dir; game boundaries are detected downstream via ply_index==0.
 # -----------------------------------------------------------------------------
 Write-Host "`n[2/8] concat shards + vectorize -> $h5"
-$shards = Get-ChildItem -Path $selfplayDir -Filter 'selfplay_*.jsonl' | Sort-Object Name
-if (-not $shards) { throw "no selfplay_*.jsonl shards in $selfplayDir" }
+$shardsGen    = @(Get-ChildItem -Path $selfplayDirGen -Filter 'selfplay_*.jsonl' | Sort-Object Name)
+$shardsForced = @(Get-ChildItem -Path $selfplayDir    -Filter 'selfplay_*.jsonl' | Sort-Object Name)
+if (-not $shardsGen)    { throw "no selfplay_*.jsonl shards in $selfplayDirGen (general slice missing)" }
+if (-not $shardsForced) { throw "no selfplay_*.jsonl shards in $selfplayDir (forced slice missing)" }
+$shards = $shardsGen + $shardsForced
 if (Test-Path $catJsonl) { Remove-Item $catJsonl }
 foreach ($s in $shards) { Get-Content -LiteralPath $s.FullName | Add-Content -LiteralPath $catJsonl }
 python "$train/vectorize_v2.py" --input $catJsonl --output $h5 --schema $schema

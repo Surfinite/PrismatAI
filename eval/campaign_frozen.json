@@ -1,14 +1,19 @@
 {
   "frozen_N": 1000,
-  "TemperatureK": 999,
+  "TemperatureK": 12,
   "TemperatureTau": 0.7,
   "EpsilonUniform": 0.0,
-  "EpsilonLate": 0.0,
+  "EpsilonLate": 0.05,
   "UCTConstant": 0.3,
   "parent_bin": "neural_weights_mixed_v221.bin",
   "parent_pt": "training/models/deepsets_v221/swa_model.pt",
   "masterbot2016_exe": "c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe",
   "selfplay_threads": 8,
+  "selfplay_mix": {
+    "general_rounds": 43,
+    "forced_rounds": 21,
+    "forced_cards": ["Hotel"]
+  },
   "frozen_date": "2026-06-11",
-  "rationale": "owner decision post-audit: N by judgment (screen-only calibration), whole-game tau-sampling, eps removed as uncalibrated; tau=0.7 set by the pre-agreed probe rule (eval/tau_probe_n1000.json: median normalized entropy 0.984 > 0.90 AND median top-share 0.141 < 0.20 -> near-uniform -> tau=0.7)"
+  "rationale": "regime v2 (2026-06-11, the N-4 discussion): early-noise/late-precision. The v1 whole-game tau-sampling (K=999) measured 40-46% non-argmax moves and significantly longer games -- late noise corrupts the outcome labels of every earlier record. v2: tau=0.7 sampling for turns 0-11 only (past the opening book, through the early-mid region where the MB-flavour data bias lives) + EpsilonLate=0.05 (turns >=12: argmax with a 5% uniform-child chance, ~1.1 mild deviations/game). N stays 1000 -- argmax now governs most moves, so N's argmax quality matters MORE. tau=0.7 unchanged from the pre-agreed probe rule (eval/tau_probe_n1000.json). Data mix: 2/3 general (RL_SelfPlay_General, no forcing -- broadened general-improvement goal) + 1/3 forced-Hotel (RL_Step2_Smoke -- keeps IG-decision density)."
 }

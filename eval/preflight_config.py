@@ -20,8 +20,13 @@ Checks
   5. reference_graph every declared reference resolves (openingBook, filter,
                      subsetFilter, buyLimits, combination, PartialPlayers,
                      include, iterator keys, PlayoutPlayer, WeightsFile file)
-  6. frozen_tuple    RL_SelfPlay tuple == campaign_frozen.json; EpsilonLate
-                     absent (or 0) -- config convention is key-absent
+  6. frozen_tuple    RL_SelfPlay tuple == campaign_frozen.json (regime v2:
+                     EpsilonLate must EQUAL frozen -- absent config key = 0.0,
+                     so frozen 0.05 + absent FAILS; older frozen files without
+                     the key keep the absent-or-0 rule); both self-play blocks
+                     (RL_Step2_Smoke forced + RL_SelfPlay_General) match the
+                     frozen selfplay_threads and selfplay_mix (rounds,
+                     ForcedCards on the forced block ONLY, run:false at rest)
   7. parent_repin    ALL FOUR parent-side players' WeightsFile == frozen
                      parent_bin (F-07 recovery + N-2): RL_Eval (eval pin),
                      RL_Eval_iter0 (the VERDICT OPPONENT), RL_SelfPlay (the
@@ -316,28 +321,77 @@ def check_frozen_tuple(cfg, frozen):
             failures.append("RL_SelfPlay.UCTConstant is %s but campaign_frozen.json freezes it "
                             "at %s -- config drifted; reconcile deliberately"
                             % (sp["UCTConstant"], frozen["UCTConstant"]))
+    blocks = {b.get("name"): b for b in cfg.get("Benchmarks", []) if isinstance(b, dict)}
     # Self-play export threading: the campaign runs Threads:8 (X3-validated); drift to 1
-    # silently octuples wall-clock, drift higher is untested.
+    # silently octuples wall-clock, drift higher is untested. Regime v2: BOTH self-play
+    # blocks (forced + general) must carry the frozen thread count.
     if "selfplay_threads" in frozen:
-        blocks = {b.get("name"): b for b in cfg.get("Benchmarks", []) if isinstance(b, dict)}
-        sp_block = blocks.get("RL_Step2_Smoke")
-        if sp_block is None:
-            failures.append("self-play export block 'RL_Step2_Smoke' not found in Benchmarks "
-                            "(frozen selfplay_threads=%s)" % frozen["selfplay_threads"])
-        elif int(sp_block.get("Threads", 1)) != int(frozen["selfplay_threads"]):
-            failures.append("RL_Step2_Smoke.Threads is %s but campaign_frozen.json freezes "
-                            "selfplay_threads at %s" % (sp_block.get("Threads", 1),
-                                                        frozen["selfplay_threads"]))
-    # EpsilonLate: frozen json says 0.0 and the config convention is KEY-ABSENT;
-    # a present nonzero key would silently re-enable the late-epsilon sampler.
-    if "EpsilonLate" in sp and float(sp["EpsilonLate"]) != 0.0:
-        failures.append("RL_SelfPlay.EpsilonLate is %s -- must be ABSENT (or 0): the frozen "
-                        "tuple has late-epsilon disabled" % sp["EpsilonLate"])
-    if float(frozen.get("EpsilonLate", 0.0)) != 0.0:
-        failures.append("campaign_frozen.json EpsilonLate is %s -- nonzero late-epsilon is "
-                        "outside the frozen-campaign contract (config convention is "
-                        "key-absent); update preflight_config.py deliberately if re-enabling"
-                        % frozen["EpsilonLate"])
+        thread_blocks = ["RL_Step2_Smoke"]
+        if "selfplay_mix" in frozen:
+            thread_blocks.append("RL_SelfPlay_General")
+        for bname in thread_blocks:
+            sp_block = blocks.get(bname)
+            if sp_block is None:
+                failures.append("self-play export block '%s' not found in Benchmarks "
+                                "(frozen selfplay_threads=%s)" % (bname, frozen["selfplay_threads"]))
+            elif int(sp_block.get("Threads", 1)) != int(frozen["selfplay_threads"]):
+                failures.append("%s.Threads is %s but campaign_frozen.json freezes "
+                                "selfplay_threads at %s" % (bname, sp_block.get("Threads", 1),
+                                                            frozen["selfplay_threads"]))
+    # EpsilonLate (regime v2, 2026-06-11): the frozen tuple now freezes a NONZERO late-epsilon
+    # (argmax + eps-uniform for turns >= TemperatureK), so config must EQUAL frozen exactly.
+    # An ABSENT config key means 0.0 to the engine -- frozen 0.05 + absent key FAILS (the
+    # campaign would silently run pure-argmax past the opening window).
+    # Guarded for OLDER frozen files: if frozen lacks the key, the original absent-or-0
+    # convention applies (a present nonzero key would silently re-enable the late sampler).
+    if "EpsilonLate" in frozen:
+        got = float(sp.get("EpsilonLate", 0.0))
+        want = float(frozen["EpsilonLate"])
+        if got != want:
+            failures.append("RL_SelfPlay.EpsilonLate is %s but campaign_frozen.json freezes it "
+                            "at %s -- config drifted; reconcile deliberately (an absent config "
+                            "key means 0.0 to the engine)"
+                            % (sp.get("EpsilonLate", "ABSENT (= 0.0)"), frozen["EpsilonLate"]))
+    elif "EpsilonLate" in sp and float(sp["EpsilonLate"]) != 0.0:
+        failures.append("RL_SelfPlay.EpsilonLate is %s -- must be ABSENT (or 0): this frozen "
+                        "tuple (no EpsilonLate key) has late-epsilon disabled" % sp["EpsilonLate"])
+    # Self-play data mix (regime v2): 2/3 general + 1/3 forced-Hotel across TWO export blocks
+    # (separate export dirs are REQUIRED -- the export counter is per-Tournament-instance, so
+    # two blocks into one dir would clobber filenames). Guarded on frozen carrying the key.
+    mix = frozen.get("selfplay_mix")
+    if isinstance(mix, dict):
+        forced = blocks.get("RL_Step2_Smoke")
+        general = blocks.get("RL_SelfPlay_General")
+        if forced is None:
+            failures.append("selfplay_mix: forced block 'RL_Step2_Smoke' not found in Benchmarks")
+        else:
+            if int(forced.get("rounds", -1)) != int(mix.get("forced_rounds", -1)):
+                failures.append("RL_Step2_Smoke.rounds is %s but campaign_frozen.json "
+                                "selfplay_mix.forced_rounds is %s"
+                                % (forced.get("rounds"), mix.get("forced_rounds")))
+            if forced.get("ForcedCards") != mix.get("forced_cards"):
+                failures.append("RL_Step2_Smoke.ForcedCards is %s but campaign_frozen.json "
+                                "selfplay_mix.forced_cards is %s (the forced slice keeps "
+                                "IG-decision density)"
+                                % (forced.get("ForcedCards"), mix.get("forced_cards")))
+            if forced.get("run") is True:
+                failures.append("RL_Step2_Smoke has \"run\": true -- self-play blocks must rest "
+                                "run:false (drivers flip them transiently)")
+        if general is None:
+            failures.append("selfplay_mix: general block 'RL_SelfPlay_General' not found in "
+                            "Benchmarks (the 2/3 unforced slice of the regime-v2 data mix)")
+        else:
+            if int(general.get("rounds", -1)) != int(mix.get("general_rounds", -1)):
+                failures.append("RL_SelfPlay_General.rounds is %s but campaign_frozen.json "
+                                "selfplay_mix.general_rounds is %s"
+                                % (general.get("rounds"), mix.get("general_rounds")))
+            if "ForcedCards" in general:
+                failures.append("RL_SelfPlay_General has ForcedCards %s -- the general block "
+                                "must have NO ForcedCards (it is the unforced 2/3 slice)"
+                                % general.get("ForcedCards"))
+            if general.get("run") is True:
+                failures.append("RL_SelfPlay_General has \"run\": true -- self-play blocks must "
+                                "rest run:false (drivers flip them transiently)")
     return failures
 
 

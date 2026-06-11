@@ -22,12 +22,13 @@ by `eval/preflight_config.py` (stage 0).
 
 | HP | Symbol | Value | Notes |
 |---|---|---|---|
-| Self-play traversals | `N` (MaxTraversals) | **1000 — FROZEN by judgment** | Owner decision on the screen-only calibration data (the `calibrate_n.py` sweeps were screening, not proof; the Jun-4→9 crippled-iterator window invalidated the earlier N=256/512 picks). A **32-game re-screen at the shipped tuple passes ALL gates** (`eval/n1000_rescreen.json`: mean_len 35.19 in [16.00, 44.97], p0_wr 0.375 in [0.35, 0.65], 51/1126 records with IG clicks). Lives on `RL_SelfPlay` (+ the per-N `RL_SelfPlay_N*` blocks). |
+| Self-play traversals | `N` (MaxTraversals) | **1000 — FROZEN by judgment** | Owner decision on the screen-only calibration data (the `calibrate_n.py` sweeps were screening, not proof; the Jun-4→9 crippled-iterator window invalidated the earlier N=256/512 picks). Under regime v2 argmax governs most moves, so **N's argmax quality matters MORE**, not less. A **32-game re-screen at the regime-v2 tuple passes ALL gates** (`eval/n1000_rescreen_k12.json`; the v1 whole-game-sampling record is `eval/n1000_rescreen.json`). Lives on `RL_SelfPlay` (+ the per-N `RL_SelfPlay_N*` blocks). |
 | Temperature | `τ` (TemperatureTau) | **0.7** | self-play sampler only; eval is pure argmax. Set by the pre-agreed probe rule (`eval/tau_probe_n1000.json`): at N=1000/c=0.3 the root visit distributions are **near-uniform** (median top-share 0.141 < 0.20 AND median normalized entropy 0.984 > 0.90) → τ=0.7 sharpens them. |
-| Temperature horizon | `K` (TemperatureK) | **999** | **whole-game τ-sampling** — the sampler fires for every turn, not an opening window (supersedes the old K=6; see A2). |
-| ε-uniform root noise | `ε` (EpsilonUniform) | **0** | removed as uncalibrated (owner decision); whole-game τ-sampling carries the exploration. `EpsilonLate` is **absent** from the config (key-absent convention, preflight-enforced). |
+| Temperature horizon | `K` (TemperatureK) | **12 (regime v2, 2026-06-11)** | τ-sampling fires for turns **0–11 only** — past the opening book and through the early-mid region where the MB-flavour data bias lives (supersedes the same-day v1 K=999 whole-game sampling — see the regime-v2 note below). |
+| ε-uniform root noise | `ε` (EpsilonUniform) / **`EpsilonLate`** | **0** / **0.05** | EpsilonUniform stays 0 in the opening window (τ carries the early exploration). **`EpsilonLate=0.05`**: turns ≥12 are argmax with a 5% uniform-child chance (~1.1 mild deviations/game among curated portfolio plans) — present in config as a JSON double, preflight-enforced EQUAL to frozen (absent key = 0.0 = FAIL). |
 | UCT constant | `c` (UCTConstant) | **0.3** | the tuned cValue, on every RL player AND injected by `js_engine/query_move.js` by default (M-06 fix — omitting it silently regressed to the engine default 2.0, the worst measured c). |
-| Self-play threads | — | **Threads:8** | `RL_Step2_Smoke` block; the dave engine is x64 and Threads:8 export was audit-verified clean. |
+| Self-play threads | — | **Threads:8** | BOTH self-play blocks (`RL_Step2_Smoke` + `RL_SelfPlay_General`); the dave engine is x64 and Threads:8 export was audit-verified clean. |
+| Self-play data mix | `selfplay_mix` | **⅔ general + ⅓ forced-Hotel** | regime v2: `RL_SelfPlay_General` (rounds:43 → ~86 games, NO ForcedCards — the broadened general-improvement goal) + `RL_Step2_Smoke` (rounds:21 → ~42 games, ForcedCards `["Hotel"]` — keeps IG-decision density). Separate export dirs REQUIRED (per-Tournament-instance export counter). Preflight-enforced from the frozen `selfplay_mix`. |
 | Replay window | `W` | 5 | sliding self-play buffer (`--replay-window 5`). |
 | Rehearsal fraction | — | start **0.30** → floor **0.10**, decay **0.07/iter** | human-only rehearsal mix (`rl_data.rehearsal_fraction_for_iter`). Epoch length = `ceil(sp_total/(1-frac))` draws ≈ one pass over the self-play window, NOT the rehearsal corpus (M-04 fix; LR schedule sized to match). |
 | Verdict (was: promotion gate) | — | **REJECT / REVIEW / INCOMPLETE** | see §3 — rule-out-harm on the general pool; **nothing auto-promotes**. The old group-sequential CI-lower>0.50 gate was deleted 2026-06-10. |
@@ -52,6 +53,24 @@ children); we do **not** tune `MaxChildren`. The durable fix for genuinely-wide 
 (many competing portfolio candidates) is a **candidate policy head + PUCT** (§14, O6), **not** a larger
 `MaxChildren`.
 
+### 1b. Label-quality & exploration regime (v2, 2026-06-11)
+
+The same-day **v1** regime (K=999 whole-game τ-sampling) was replaced after the verification sweep
+measured **40–46% non-argmax moves** and **significantly longer games** under it: late noise corrupts
+the outcome labels of **every earlier record** in the game, while early noise buys position coverage
+cheaply (divergent trajectories whose labels stay truthful under near-greedy continuation). **v2 =
+early-noise/late-precision**: τ=0.7 sampling for turns 0–11 (`TemperatureK=12`), then argmax with a 5%
+uniform-child chance (`EpsilonLate=0.05`, ≈1.1 mild deviations/game among curated portfolio plans) so
+recurring decisions (e.g. the per-turn IG click) still get occasional exploration without whole-game
+label corruption.
+
+**Residual risk (accepted):** a value-only net gets **no counterfactual signal on unplayed branches** —
+with the late game near-greedy, alternatives the argmax never picks are never labelled; the ~1.1 late
+deviations/game is the deliberate compromise between that blindness and label corruption.
+**WATCH at iter-1:** `d_rl` (forced-pool delta) **and the sampled-move fraction** for turns ≥12 from the
+`sampled_idx`/`argmax_idx` stamps (expected ≈5% of late moves; re-screen observed value in
+`eval/n1000_rescreen_k12.json`).
+
 ---
 
 ## 2. External-review addenda (A1, A2, A6, A9) — folded in
@@ -66,15 +85,14 @@ IG-optional config + SAME budget**), **NOT** from the narrow anchor (`RL_Narrow`
 iterator). Using the narrow anchor for `d_reg` would let a pure iterator gap masquerade as a net
 regression. The narrow and STEAMAI anchors are **trajectory yardsticks only** — never gate on them.
 
-### A2 — IG recurs all game → whole-game sampling (RESOLVED in the frozen tuple)
+### A2 — IG recurs all game → late-ε keeps it explored (RESOLVED, regime v2)
 
 The sampler (`τ`, `ε`) only fires for `turnNumber < K`. The original concern: with K=6 and the opening
 book on, the effective IG-exploration window was ≈ turns 3–6, yet **IG is a per-turn decision that recurs
-all game**. The frozen tuple resolves this directly: **`TemperatureK = 999` = whole-game τ-sampling** —
-the τ=0.7 sampler fires every turn, so the per-turn IG decision keeps getting explored without an extra
-noise source. The engine's optional **`EpsilonLate`** (persistent small late-ε for `turnNumber ≥ K`)
-remains implemented but **off / key-absent** (preflight-enforced); it is retained as an escalation lever
-(§6) should whole-game τ-sampling prove insufficient.
+all game**. The v1 answer (K=999 whole-game τ-sampling) over-corrected — 40–46% non-argmax moves
+corrupted outcome labels (§1b). **Regime v2 resolves A2 with `EpsilonLate=0.05`**: for `turnNumber ≥ K`
+(=12) the root stays argmax but a persistent 5% uniform-child chance gives the recurring per-turn IG
+decision exploration all game at ~1.1 mild deviations/game, while τ=0.7 covers turns 0–11.
 
 ### A6 — Perspective round-trip (REQUIRED pre-iter-1 check)
 
@@ -198,11 +216,11 @@ one `(config-hash, net-hash)` delta.
 If the §3 kill-criteria trigger (≥3 flat iterations with a clean §4 triage), escalate **in this order**
 before spending AWS or abandoning the value-only approach:
 
-- **Lever 0 (A2) — enable `EpsilonLate ≈ 0.05`.** Persistent small uniform late-ε on top of the sampler.
-  With the frozen tuple already doing whole-game τ-sampling (K=999), this lever now adds *uniform* noise
-  rather than extending the window — still **try it FIRST** if axis-1 is flat (cheapest; just a config
-  flag; new campaign since it changes the sampler tuple, and the preflight's key-absent check must be
-  updated deliberately).
+- **Lever 0 (A2) — raise `EpsilonLate` / widen the τ window.** Regime v2 already runs
+  `EpsilonLate=0.05` + K=12, so this lever is now *re-tuning* (e.g. ε→0.10, or K→16) rather than
+  enabling — still **try it FIRST** if axis-1 is flat (cheapest; just config values; new campaign since
+  it changes the sampler tuple, and `campaign_frozen.json` + the preflight must be updated together,
+  deliberately — mind §1b's label-corruption tradeoff when raising late noise).
 - **O6 — Candidate-level policy head, then PUCT.** Add a head emitting a prior over *just the ≤~30 whole-turn
   portfolio candidates the iterator emits* (NOT the full click-sequence action space — that's the hard
   "mapping problem" and is why it's deferred). Train it on the MCTS **visit distribution over those
@@ -227,12 +245,13 @@ approach** is the limit — stop the value-only line; do not re-spin.
 These MUST be satisfied before `eval/run_iteration.ps1 -K 1` is run for real. Stage 0
 (`eval/preflight_config.py`) machine-checks most of them.
 
-1. **N / τ / ε — RESOLVED (FROZEN 2026-06-11).** The `calibrate_n.py` sweep ended as *screening only*
-   (and the Jun-4→9 crippled-iterator window invalidated the earlier picks); the owner froze the tuple by
-   judgment: **N=1000, τ=0.7 (probe-driven, `eval/tau_probe_n1000.json`), K=999, ε=0** in
-   `eval/campaign_frozen.json`. A **32-game re-screen at the shipped tuple passes all gates**
-   (`eval/n1000_rescreen.json`). Preflight asserts `config.txt` matches; a `-N` differing from `frozen_N`
-   throws.
+1. **N / τ / ε — RESOLVED (FROZEN 2026-06-11, regime v2).** The `calibrate_n.py` sweep ended as
+   *screening only* (and the Jun-4→9 crippled-iterator window invalidated the earlier picks); the owner
+   froze the tuple by judgment: **N=1000, τ=0.7 (probe-driven, `eval/tau_probe_n1000.json`), K=12,
+   ε=0, EpsilonLate=0.05** in `eval/campaign_frozen.json` (regime v2 — see §1b; supersedes the
+   same-day v1 K=999). A **32-game re-screen at the regime-v2 tuple passes all gates**
+   (`eval/n1000_rescreen_k12.json`; v1 record: `eval/n1000_rescreen.json`). Preflight asserts
+   `config.txt` matches; a `-N` differing from `frozen_N` throws.
 
 2. **iter-0 anchor = v221 (RESOLVED 2026-06-07 — NOT a random net).** `RL_Eval_iter0.WeightsFile` =
    `neural_weights_mixed_v221.bin`, the pre-RL supervised net (= the parent), run on the **SAME** IG-optional
@@ -264,8 +283,10 @@ These MUST be satisfied before `eval/run_iteration.ps1 -K 1` is run for real. St
    engine-stderr load confirmation per anchor, the seat-independent steam anchor (A7/A8), incremental
    atomic manifest writes, and the §3 verdict. Unit-tested (`eval/tests/test_run_eval_main.py`).
 
-7. **Stage-1 self-play block.** `RL_Step2_Smoke` is now `rounds:64, Threads:8, ForcedCards:["Hotel"]`;
-   for a longer production iteration bump `rounds` (the ps1 flags this near the Stage-1 comment) — N
+7. **Stage-1 self-play blocks (regime-v2 mix).** TWO blocks, both `Threads:8`, run in one engine
+   launch: `RL_SelfPlay_General` (`rounds:43`, NO forcing — ⅔) + `RL_Step2_Smoke` (`rounds:21`,
+   `ForcedCards:["Hotel"]` — ⅓). For a longer production iteration scale BOTH `rounds` together
+   (keep the ⅔:⅓ ratio AND update the frozen `selfplay_mix` — preflight enforces they match) — N
    itself stays frozen.
 
 ---

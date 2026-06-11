@@ -77,7 +77,8 @@ def make_config():
                 "type": "Player_UCT", "TimeLimit": 0, "MaxChildren": 40, "MaxTraversals": 1000,
                 "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var",
                 "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_v221.bin", "UCTConstant": 0.3,
-                "SelfPlaySampling": True, "TemperatureTau": 0.7, "TemperatureK": 999, "EpsilonUniform": 0.0,
+                "SelfPlaySampling": True, "TemperatureTau": 0.7, "TemperatureK": 12, "EpsilonUniform": 0.0,
+                "EpsilonLate": 0.05,
             },
             "RL_Eval": {
                 "type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000,
@@ -103,7 +104,11 @@ def make_config():
             },
         },
         "Benchmarks": [
-            {"run": False, "type": "Tournament", "name": "RL_Step2_Smoke", "rounds": 64,
+            {"run": False, "type": "Tournament", "name": "RL_Step2_Smoke", "rounds": 21,
+             "Threads": 8, "ForcedCards": ["Hotel"],
+             "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
+            {"run": False, "type": "Tournament", "name": "RL_SelfPlay_General", "rounds": 43,
+             "Threads": 8,
              "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
             {"run": False, "type": "Tournament", "name": "RL_Eval_iter0_general", "rounds": 64,
              "players": [{"name": "RL_Eval", "group": 1}, {"name": "RL_Eval", "group": 2}]},
@@ -114,13 +119,15 @@ def make_config():
 def make_frozen():
     return {
         "frozen_N": 1000,
-        "TemperatureK": 999,
+        "TemperatureK": 12,
         "TemperatureTau": 0.7,
         "EpsilonUniform": 0.0,
-        "EpsilonLate": 0.0,
+        "EpsilonLate": 0.05,
         "UCTConstant": 0.3,
         "parent_bin": "neural_weights_mixed_v221.bin",
         "parent_pt": "training/models/deepsets_v221/swa_model.pt",
+        "selfplay_threads": 8,
+        "selfplay_mix": {"general_rounds": 43, "forced_rounds": 21, "forced_cards": ["Hotel"]},
     }
 
 
@@ -214,11 +221,23 @@ def test_malformed_json_fails(env, capsys):
 # ---------------------------------------------------------------------------
 
 def test_run_true_block_fails(env, capsys):
-    env["cfg"]["Benchmarks"][0]["run"] = True
+    # Mutate the NON-self-play block: the two self-play blocks are also under the
+    # frozen_tuple selfplay_mix run:false assertion, so only this one isolates run_true.
+    env["cfg"]["Benchmarks"][2]["run"] = True
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "run_true")
-    assert "RL_Step2_Smoke" in out
+    assert "RL_Eval_iter0_general" in out
+
+
+def test_run_true_selfplay_block_fails_both_checks(env, capsys):
+    """A run:true SELF-PLAY block trips run_true AND the frozen_tuple mix assertion."""
+    env["cfg"]["Benchmarks"][0]["run"] = True
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    fails = [ln for ln in out.splitlines() if ln.startswith("FAIL:")]
+    assert any(ln.startswith("FAIL: run_true:") for ln in fails), out
+    assert any(ln.startswith("FAIL: frozen_tuple:") for ln in fails), out
 
 
 # ---------------------------------------------------------------------------
@@ -316,8 +335,17 @@ def test_tau_drift_fails_frozen_tuple(env, capsys):
     assert "TemperatureTau" in out
 
 
-def test_epsilon_late_present_fails_frozen_tuple(env, capsys):
-    """The unguarded-drift review nit: EpsilonLate must be absent (or 0)."""
+def test_temperature_k_drift_fails_frozen_tuple(env, capsys):
+    """Regime-v2 K drift: a config still on whole-game sampling (K=999) must fail."""
+    env["cfg"]["Players"]["RL_SelfPlay"]["TemperatureK"] = 999
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "frozen_tuple")
+    assert "TemperatureK" in out
+
+
+def test_epsilon_late_wrong_value_fails_frozen_tuple(env, capsys):
+    """Regime v2: config EpsilonLate must EQUAL frozen (0.1 != 0.05)."""
     env["cfg"]["Players"]["RL_SelfPlay"]["EpsilonLate"] = 0.1
     rc, out = run_main(env, capsys)
     assert rc == 1
@@ -325,11 +353,35 @@ def test_epsilon_late_present_fails_frozen_tuple(env, capsys):
     assert "EpsilonLate" in out
 
 
-def test_epsilon_late_zero_is_ok(env, capsys):
-    """Explicit 0 is tolerated (frozen json says 0.0; config convention is key-absent)."""
+def test_epsilon_late_absent_fails_frozen_tuple(env, capsys):
+    """Regime v2: an ABSENT config key means 0.0 to the engine -- frozen 0.05 + absent
+    would silently run pure-argmax past the opening window; must FAIL."""
+    del env["cfg"]["Players"]["RL_SelfPlay"]["EpsilonLate"]
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "frozen_tuple")
+    assert "EpsilonLate" in out and "ABSENT" in out
+
+
+def test_legacy_frozen_without_epsilon_late_absent_or_zero_ok(env, capsys):
+    """Older frozen files (no EpsilonLate key) keep the absent-or-0 convention."""
+    del env["frozen"]["EpsilonLate"]
+    del env["cfg"]["Players"]["RL_SelfPlay"]["EpsilonLate"]
+    rc, out = run_main(env, capsys)
+    assert rc == 0, out
     env["cfg"]["Players"]["RL_SelfPlay"]["EpsilonLate"] = 0.0
     rc, out = run_main(env, capsys)
     assert rc == 0, out
+
+
+def test_legacy_frozen_without_epsilon_late_nonzero_config_fails(env, capsys):
+    """Older frozen files: a present NONZERO config key still fails (old rule)."""
+    del env["frozen"]["EpsilonLate"]
+    env["cfg"]["Players"]["RL_SelfPlay"]["EpsilonLate"] = 0.05
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "frozen_tuple")
+    assert "EpsilonLate" in out
 
 
 def test_n_drift_fails_frozen_tuple(env, capsys):
@@ -338,6 +390,61 @@ def test_n_drift_fails_frozen_tuple(env, capsys):
     assert rc == 1
     assert_only_fails(out, "frozen_tuple")
     assert "MaxTraversals" in out
+
+
+def test_general_block_missing_fails_frozen_tuple(env, capsys):
+    """selfplay_mix: the 2/3 general (unforced) block must exist."""
+    env["cfg"]["Benchmarks"] = [b for b in env["cfg"]["Benchmarks"]
+                                if b["name"] != "RL_SelfPlay_General"]
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "frozen_tuple")
+    assert "RL_SelfPlay_General" in out
+
+
+def test_general_block_with_forced_cards_fails_frozen_tuple(env, capsys):
+    """selfplay_mix: ForcedCards on the GENERAL block would silently force 100% Hotel."""
+    env["cfg"]["Benchmarks"][1]["ForcedCards"] = ["Hotel"]
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "frozen_tuple")
+    assert "RL_SelfPlay_General" in out and "ForcedCards" in out
+
+
+def test_forced_rounds_mismatch_fails_frozen_tuple(env, capsys):
+    """selfplay_mix: rounds drift on the forced block breaks the 2/3:1/3 mix."""
+    env["cfg"]["Benchmarks"][0]["rounds"] = 64
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "frozen_tuple")
+    assert "forced_rounds" in out
+
+
+def test_general_rounds_mismatch_fails_frozen_tuple(env, capsys):
+    """selfplay_mix: rounds drift on the general block breaks the 2/3:1/3 mix."""
+    env["cfg"]["Benchmarks"][1]["rounds"] = 10
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "frozen_tuple")
+    assert "general_rounds" in out
+
+
+def test_forced_cards_drift_fails_frozen_tuple(env, capsys):
+    """selfplay_mix: the forced block must force exactly the frozen forced_cards."""
+    env["cfg"]["Benchmarks"][0]["ForcedCards"] = ["Drake"]
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "frozen_tuple")
+    assert "forced_cards" in out
+
+
+def test_general_block_threads_drift_fails_frozen_tuple(env, capsys):
+    """selfplay_threads now covers BOTH self-play blocks."""
+    env["cfg"]["Benchmarks"][1]["Threads"] = 1
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "frozen_tuple")
+    assert "RL_SelfPlay_General.Threads" in out
 
 
 # ---------------------------------------------------------------------------
