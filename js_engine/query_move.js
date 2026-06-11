@@ -42,7 +42,12 @@ function parseArgs(argv) {
         player: null,
         weights: null,
         daveExe: null,
-        rootIterator: 'HardIterator_5var_Root',
+        // Default = the WIDENED IG-subset root (the deployed/campaign action space). The old
+        // default was the narrow HardIterator_5var_Root, which silently auto-fires every IG —
+        // an ad-hoc probe of an IG state would measure the wrong action space and "discover"
+        // over-clicking that is just the narrow iterator (audit T4-6/L-02). Pass
+        // --root-iterator HardIterator_5var_Root explicitly to probe the narrow space.
+        rootIterator: 'HardIterator_5var_IGsubset_Root',
         moveIterator: 'HardIterator_5var',
         timeLimit: 7000,
         maxTraversals: 100000,
@@ -288,6 +293,9 @@ async function main() {
         console.error(`query_move.js: dave exe not found: ${args.daveExe}`);
         process.exit(2);
     }
+    // Self-documenting ad-hoc runs: always say which action space + constant is being measured.
+    console.error(`query_move.js: root=${args.rootIterator} move=${args.moveIterator} ` +
+        `c=${args.uctConstant} (pass --root-iterator HardIterator_5var_Root for the narrow space)`);
 
     let raw;
     try {
