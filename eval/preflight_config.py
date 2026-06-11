@@ -352,6 +352,12 @@ def check_existences(frozen, repo_root):
         path = os.path.join(repo_root, rel)
         if not os.path.isfile(path):
             failures.append("required data file not found: %s" % path)
+    # Steam-anchor baseline (F-08 rewire): for a campaign run the 2016 MasterBot must exist at
+    # its permanent home. (run_eval soft-skips when absent for ad-hoc use; stage 0 fails hard
+    # by design — a campaign run should never silently lose its strength yardstick.)
+    mb = frozen.get("masterbot2016_exe")
+    if mb and not os.path.isfile(mb):
+        failures.append("frozen masterbot2016_exe not found: %s" % mb)
     return failures
 
 
