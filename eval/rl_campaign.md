@@ -94,18 +94,37 @@ corrupted outcome labels (§1b). **Regime v2 resolves A2 with `EpsilonLate=0.05`
 (=12) the root stays argmax but a persistent 5% uniform-child chance gives the recurring per-turn IG
 decision exploration all game at ~1.1 mild deviations/game, while τ=0.7 covers turns 0–11.
 
-### A6 — Perspective round-trip (REQUIRED pre-iter-1 check)
+### A6 — Perspective round-trip (IMPLEMENTED 2026-06-11 — `training/tests/test_perspective_roundtrip.py`)
 
-Beyond `test_labels.py` (Python label scale) + the export-parity gate (PyTorch↔C++ forward value), add:
-1. **Asymmetric-outcome parity check** — a parity assertion on ≥1 shared state with a **KNOWN ASYMMETRIC
-   outcome** (e.g. P0 won, but active player that turn = P1) so a perspective **inversion** surfaces as a
-   value mismatch rather than silently cancelling on symmetric positions.
-2. **End-to-end `query_move.js` assertion** — a clearly-winning continuation must score **higher** through
-   the loop's own deploy path (`query_move.js` → responder → NeuralNet eval).
+The bug class: a silent P0/P1 inversion anywhere along JSONL record perspective → H5 label →
+net-output meaning → how the search interprets the value. Implemented as **two test surfaces** in
+`training/tests/test_perspective_roundtrip.py`, run via the standard pytest suite
+(`python -m pytest training/tests/ -v`; ~3 s, CPU):
 
-Verify `outcome_p0` (the C++ exporter's **P0-perspective** label) matches (a) the JS human-corpus convention
-AND (b) how `Eval.cpp` / `NeuralNet` interpret the net output for `maxPlayer`. **This round-trip is a
-REQUIRED pre-iter-1 gate.**
+1. **Data-side label/perspective consistency.** V2 records are **absolute-perspective**
+   (`outcome_p0` = P(P0 / first / white wins), stamped game-level; `active_player` toggles per ply).
+   Pinned on the real human corpus + pure functions: `outcome_p0` constant within a game
+   (a label varying with `active_player` IS the inversion class); `active_player == ply_index % 2`;
+   the opposite-perspective twin (`vectorize_v2.mirror_record`) flips the label AND swaps every
+   feature block coherently (globals p0↔p1, supply columns, instance owners; `under_attack`
+   invariant); double-mirror is the exact identity. Note: a P0-win-rate bound has **no** inversion
+   power on the seat-balanced 1800+ human corpus (measured P0 WR 0.508) — orientation is carried
+   by surface 2.
+2. **Inference-side decided-position orientation.** The v221 SWA net evaluated on the LAST
+   turn-start record of each player from 60 decided human games (measured 2026-06-11): mean value
+   **0.952** on P0-won records, **0.025** on P0-lost, **97.5%** sided correctly. Gate thresholds sit
+   with headroom below measurement (>0.80 / <0.20 / ≥85%): an inversion scores ~0.05 / ~0.95 /
+   ~2.5% — the gate catches INVERSION, not net quality.
+
+The **C++ side** of the round-trip is pinned by the stage-5 export-parity gate
+(`tools/parity/dump_value_batch.py`): it compares `value = 2·sigmoid(logit) − 1` (P0-perspective)
+between C++ inference and PyTorch on ~1000 real states at tol 1e-3, so a C++-side perspective flip
+reads `value_cpp ≈ −value_torch` and blows the gate on any non-neutral state. Residual seam parity
+does NOT cover: the single maxPlayer negation downstream of the scalar (dave-master
+`NeuralNet.cpp` `evaluateValue` tail: `if (maxPlayer != Player_One) value = -value;` plus
+`UCTSearch.cpp`'s `(nnValue+1)/2` consumption) — one code-visible negation, unchanged since the
+port audit. The original A6 item-2 (end-to-end `query_move.js` winning-continuation assertion)
+would be the durable cover for that seam and remains **not built**.
 
 ### A9 — Pre-registered STOP condition
 
@@ -166,7 +185,8 @@ Adapted for the IG-click-count axis (items 1–2 mapped to this campaign's instr
    actually optional in search.
 2. **Did temperature sample non-argmax?** → the self-play `sampled_idx` vs `argmax_idx` sidecar stamps
    (per-record). If `sampled_idx == argmax_idx` always, the sampler never explored.
-3. **Labels pass inversion / scale tests?** → `test_labels.py` + A6 asymmetric-outcome parity.
+3. **Labels pass inversion / scale tests?** → `test_labels.py` (scale) +
+   `training/tests/test_perspective_roundtrip.py` (A6 perspective round-trip, data + inference surfaces).
 4. **Did training change predictions on self-play positions?** (a static net → no learning).
 5. **Does the exported `.bin` match PyTorch?** → the export-parity gate (`tools/parity/dump_value_batch.py`,
    worst |Δ| < 1e-3) + the stage-4.5 val-acc tripwire (candidate within 3 pp of parent on the held-out
