@@ -1,0 +1,344 @@
+[
+  {
+    "dump": "@Eobd-nYKU2_1.txt",
+    "code": "@Eobd-nYKU2",
+    "realTurn": 15,
+    "side": "P0",
+    "alignedIdx": 120,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "@Eobd-nYKU2_10.txt",
+    "code": "@Eobd-nYKU2",
+    "realTurn": 27,
+    "side": "P0",
+    "alignedIdx": 401,
+    "humanIG": 2,
+    "quality": "exact"
+  },
+  {
+    "dump": "@Eobd-nYKU2_2.txt",
+    "code": "@Eobd-nYKU2",
+    "realTurn": 16,
+    "side": "P1",
+    "alignedIdx": 138,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "@Eobd-nYKU2_3.txt",
+    "code": "@Eobd-nYKU2",
+    "realTurn": 18,
+    "side": "P1",
+    "alignedIdx": 164,
+    "humanIG": 1,
+    "quality": "exact"
+  },
+  {
+    "dump": "@Eobd-nYKU2_4.txt",
+    "code": "@Eobd-nYKU2",
+    "realTurn": 19,
+    "side": "P0",
+    "alignedIdx": 184,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "@Eobd-nYKU2_6.txt",
+    "code": "@Eobd-nYKU2",
+    "realTurn": 20,
+    "side": "P1",
+    "alignedIdx": 202,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "@Eobd-nYKU2_7.txt",
+    "code": "@Eobd-nYKU2",
+    "realTurn": 23,
+    "side": "P0",
+    "alignedIdx": 296,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "@Eobd-nYKU2_8.txt",
+    "code": "@Eobd-nYKU2",
+    "realTurn": 24,
+    "side": "P1",
+    "alignedIdx": 318,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "@Eobd-nYKU2_9.txt",
+    "code": "@Eobd-nYKU2",
+    "realTurn": 26,
+    "side": "P1",
+    "alignedIdx": 373,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "FXa1F-jAdjL_1.txt",
+    "code": "FXa1F-jAdjL",
+    "realTurn": 15,
+    "side": "P0",
+    "alignedIdx": 142,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "FXa1F-jAdjL_2.txt",
+    "code": "FXa1F-jAdjL",
+    "realTurn": 16,
+    "side": "P1",
+    "alignedIdx": 158,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "FXa1F-jAdjL_3.txt",
+    "code": "FXa1F-jAdjL",
+    "realTurn": 17,
+    "side": "P0",
+    "alignedIdx": 176,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "FXa1F-jAdjL_4.txt",
+    "code": "FXa1F-jAdjL",
+    "realTurn": 18,
+    "side": "P1",
+    "alignedIdx": 189,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "FXa1F-jAdjL_5.txt",
+    "code": "FXa1F-jAdjL",
+    "realTurn": 19,
+    "side": "P0",
+    "alignedIdx": 220,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "FXa1F-jAdjL_6.txt",
+    "code": "FXa1F-jAdjL",
+    "realTurn": 20,
+    "side": "P1",
+    "alignedIdx": 249,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "FXa1F-jAdjL_7.txt",
+    "code": "FXa1F-jAdjL",
+    "realTurn": 21,
+    "side": "P0",
+    "alignedIdx": 275,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "FXa1F-jAdjL_8.txt",
+    "code": "FXa1F-jAdjL",
+    "realTurn": 27,
+    "side": "P0",
+    "alignedIdx": 467,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "LReyq-o2cc5_1.txt",
+    "code": "LReyq-o2cc5",
+    "realTurn": 20,
+    "side": "P1",
+    "alignedIdx": 167,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "LReyq-o2cc5_2.txt",
+    "code": "LReyq-o2cc5",
+    "realTurn": 22,
+    "side": "P1",
+    "alignedIdx": 226,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "LReyq-o2cc5_3.txt",
+    "code": "LReyq-o2cc5",
+    "realTurn": 24,
+    "side": "P1",
+    "alignedIdx": 268,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "SkkF1-AC7gP_1.txt",
+    "code": "SkkF1-AC7gP",
+    "realTurn": 13,
+    "side": "P0",
+    "alignedIdx": 97,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "SkkF1-AC7gP_2.txt",
+    "code": "SkkF1-AC7gP",
+    "realTurn": 14,
+    "side": "P1",
+    "alignedIdx": 111,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "SkkF1-AC7gP_3.txt",
+    "code": "SkkF1-AC7gP",
+    "realTurn": 16,
+    "side": "P1",
+    "alignedIdx": 147,
+    "humanIG": 1,
+    "quality": "exact"
+  },
+  {
+    "dump": "SkkF1-AC7gP_4.txt",
+    "code": "SkkF1-AC7gP",
+    "realTurn": 17,
+    "side": "P0",
+    "alignedIdx": 172,
+    "humanIG": 1,
+    "quality": "exact"
+  },
+  {
+    "dump": "SkkF1-AC7gP_5.txt",
+    "code": "SkkF1-AC7gP",
+    "realTurn": 18,
+    "side": "P1",
+    "alignedIdx": 197,
+    "humanIG": 1,
+    "quality": "exact"
+  },
+  {
+    "dump": "SkkF1-AC7gP_6.txt",
+    "code": "SkkF1-AC7gP",
+    "realTurn": 19,
+    "side": "P0",
+    "alignedIdx": 223,
+    "humanIG": 1,
+    "quality": "exact"
+  },
+  {
+    "dump": "SkkF1-AC7gP_7.txt",
+    "code": "SkkF1-AC7gP",
+    "realTurn": 20,
+    "side": "P1",
+    "alignedIdx": 251,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "SkkF1-AC7gP_8.txt",
+    "code": "SkkF1-AC7gP",
+    "realTurn": 21,
+    "side": "P0",
+    "alignedIdx": 281,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_1.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 14,
+    "side": "P1",
+    "alignedIdx": 109,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_10.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 29,
+    "side": "P0",
+    "alignedIdx": 462,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_2.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 17,
+    "side": "P0",
+    "alignedIdx": 151,
+    "humanIG": 3,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_3.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 19,
+    "side": "P0",
+    "alignedIdx": 195,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_4.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 21,
+    "side": "P0",
+    "alignedIdx": 256,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_5.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 23,
+    "side": "P0",
+    "alignedIdx": 309,
+    "humanIG": 0,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_6.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 24,
+    "side": "P1",
+    "alignedIdx": 331,
+    "humanIG": 1,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_7.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 25,
+    "side": "P0",
+    "alignedIdx": 361,
+    "humanIG": 1,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_8.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 27,
+    "side": "P0",
+    "alignedIdx": 407,
+    "humanIG": 1,
+    "quality": "exact"
+  },
+  {
+    "dump": "UIgf7-B9oYN_9.txt",
+    "code": "UIgf7-B9oYN",
+    "realTurn": 28,
+    "side": "P1",
+    "alignedIdx": 432,
+    "humanIG": 1,
+    "quality": "exact"
+  }
+]

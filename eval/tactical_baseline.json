@@ -1,4 +1,24 @@
 {
+ "eobd_t15_ig_0click": {
+  "ig_click_count": 0,
+  "expect_ig_click_count": 0,
+  "ig_feasible_max": 1,
+  "passed": true,
+  "n_clicks": 9,
+  "aivisits_len": 8,
+  "aiargmax": 5,
+  "aichosen": 5
+ },
+ "fxa1f_t16_ig_0click": {
+  "ig_click_count": 0,
+  "expect_ig_click_count": 0,
+  "ig_feasible_max": 2,
+  "passed": true,
+  "n_clicks": 8,
+  "aivisits_len": 14,
+  "aiargmax": 11,
+  "aichosen": 11
+ },
  "ktink_t9_ig": {
   "ig_click_count": 0,
   "expect_ig_click_count": 1,
@@ -7,5 +27,25 @@
   "aivisits_len": 8,
   "aiargmax": 6,
   "aichosen": 6
+ },
+ "lreyq_t20_ig_0click": {
+  "ig_click_count": 0,
+  "expect_ig_click_count": 0,
+  "ig_feasible_max": 1,
+  "passed": true,
+  "n_clicks": 12,
+  "aivisits_len": 20,
+  "aiargmax": 12,
+  "aichosen": 12
+ },
+ "skkf1_t19_ig_1click": {
+  "ig_click_count": 1,
+  "expect_ig_click_count": 1,
+  "ig_feasible_max": 2,
+  "passed": true,
+  "n_clicks": 11,
+  "aivisits_len": 14,
+  "aiargmax": 4,
+  "aichosen": 4
  }
 }

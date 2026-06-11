@@ -1,0 +1,268 @@
+[
+  {
+    "dump": "@Eobd-nYKU2_1",
+    "realTurn": 15,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "@Eobd-nYKU2_10",
+    "realTurn": 27,
+    "side": "P0",
+    "human_ig": 2,
+    "net_ig": 1
+  },
+  {
+    "dump": "@Eobd-nYKU2_2",
+    "realTurn": 16,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "@Eobd-nYKU2_3",
+    "realTurn": 18,
+    "side": "P1",
+    "human_ig": 1,
+    "net_ig": 1
+  },
+  {
+    "dump": "@Eobd-nYKU2_4",
+    "realTurn": 19,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 1
+  },
+  {
+    "dump": "@Eobd-nYKU2_6",
+    "realTurn": 20,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 1
+  },
+  {
+    "dump": "@Eobd-nYKU2_7",
+    "realTurn": 23,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "@Eobd-nYKU2_8",
+    "realTurn": 24,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 1
+  },
+  {
+    "dump": "@Eobd-nYKU2_9",
+    "realTurn": 26,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "FXa1F-jAdjL_1",
+    "realTurn": 15,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "FXa1F-jAdjL_2",
+    "realTurn": 16,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "FXa1F-jAdjL_3",
+    "realTurn": 17,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "FXa1F-jAdjL_4",
+    "realTurn": 18,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "FXa1F-jAdjL_5",
+    "realTurn": 19,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "FXa1F-jAdjL_6",
+    "realTurn": 20,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "FXa1F-jAdjL_7",
+    "realTurn": 21,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "FXa1F-jAdjL_8",
+    "realTurn": 27,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "LReyq-o2cc5_1",
+    "realTurn": 20,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "LReyq-o2cc5_2",
+    "realTurn": 22,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 1
+  },
+  {
+    "dump": "LReyq-o2cc5_3",
+    "realTurn": 24,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "SkkF1-AC7gP_1",
+    "realTurn": 13,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "SkkF1-AC7gP_2",
+    "realTurn": 14,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "SkkF1-AC7gP_3",
+    "realTurn": 16,
+    "side": "P1",
+    "human_ig": 1,
+    "net_ig": 0
+  },
+  {
+    "dump": "SkkF1-AC7gP_4",
+    "realTurn": 17,
+    "side": "P0",
+    "human_ig": 1,
+    "net_ig": 0
+  },
+  {
+    "dump": "SkkF1-AC7gP_5",
+    "realTurn": 18,
+    "side": "P1",
+    "human_ig": 1,
+    "net_ig": 0
+  },
+  {
+    "dump": "SkkF1-AC7gP_6",
+    "realTurn": 19,
+    "side": "P0",
+    "human_ig": 1,
+    "net_ig": 1
+  },
+  {
+    "dump": "SkkF1-AC7gP_7",
+    "realTurn": 20,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "SkkF1-AC7gP_8",
+    "realTurn": 21,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 1
+  },
+  {
+    "dump": "UIgf7-B9oYN_1",
+    "realTurn": 14,
+    "side": "P1",
+    "human_ig": 0,
+    "net_ig": 1
+  },
+  {
+    "dump": "UIgf7-B9oYN_10",
+    "realTurn": 29,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 0
+  },
+  {
+    "dump": "UIgf7-B9oYN_2",
+    "realTurn": 17,
+    "side": "P0",
+    "human_ig": 3,
+    "net_ig": 0
+  },
+  {
+    "dump": "UIgf7-B9oYN_3",
+    "realTurn": 19,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 1
+  },
+  {
+    "dump": "UIgf7-B9oYN_4",
+    "realTurn": 21,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 1
+  },
+  {
+    "dump": "UIgf7-B9oYN_5",
+    "realTurn": 23,
+    "side": "P0",
+    "human_ig": 0,
+    "net_ig": 1
+  },
+  {
+    "dump": "UIgf7-B9oYN_6",
+    "realTurn": 24,
+    "side": "P1",
+    "human_ig": 1,
+    "net_ig": 2
+  },
+  {
+    "dump": "UIgf7-B9oYN_7",
+    "realTurn": 25,
+    "side": "P0",
+    "human_ig": 1,
+    "net_ig": 1
+  },
+  {
+    "dump": "UIgf7-B9oYN_8",
+    "realTurn": 27,
+    "side": "P0",
+    "human_ig": 1,
+    "net_ig": 1
+  },
+  {
+    "dump": "UIgf7-B9oYN_9",
+    "realTurn": 28,
+    "side": "P1",
+    "human_ig": 1,
+    "net_ig": 1
+  }
+]
