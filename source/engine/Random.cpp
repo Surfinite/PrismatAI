@@ -40,13 +40,21 @@ namespace Random
     void Seed(uint64_t seed)
     {
         g_baseSeed.store(seed, std::memory_order_relaxed);
-        g_seedSequence.store(0, std::memory_order_relaxed);
         // Seed the engine deterministically with mixSeed(seed). Do NOT route through
         // nextThreadSeed() here: the thread_local engine is lazily constructed on the
-        // first engine() call (consuming sequence 0 via its constructor), which would
-        // double-bump the sequence counter and seed with mixSeed(seed+1) instead. The
+        // first engine() call (consuming a sequence slot via its constructor), which
+        // would double-bump the sequence counter and seed with the wrong stream. The
         // stream must be a pure function of the seed, so seed directly.
         engine().seed(mixSeed(seed));
+        // E9: reserve sequence 0 for the main thread. The main thread's stream is
+        // mixSeed(seed) == mixSeed(seed + 0); with the counter reset to 0 the FIRST
+        // worker thread's nextThreadSeed() also returned mixSeed(seed + 0), so its
+        // RNG stream exactly duplicated the main thread's. Starting workers at
+        // sequence 1 makes every worker stream distinct from the main thread by
+        // construction. Stored AFTER the engine() call above so a lazy first
+        // construction of the main thread's engine (which consumes one sequence
+        // slot) cannot shift the worker seed sequence.
+        g_seedSequence.store(1, std::memory_order_relaxed);
     }
 
     size_t Int(size_t exclusiveMax)

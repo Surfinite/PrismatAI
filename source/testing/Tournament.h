@@ -34,6 +34,8 @@ class Tournament
     std::vector<int>                    _totalGames;
     std::vector<int>                    _totalWins;
     std::vector<int>                    _totalDraws;
+    std::vector<int>                    _seatGames[2];   // H2: [seat][slot] games as Player_One (seat 0) / Player_Two (seat 1)
+    std::vector<int>                    _seatWins[2];    // H2: [seat][slot] wins  as Player_One (seat 0) / Player_Two (seat 1)
     std::vector<int>                    _totalPlayouts;
     std::vector<int>                    _totalTurns;
     std::vector<int>                    _maxTimeMS;
@@ -44,6 +46,7 @@ class Tournament
     std::vector< std::vector<int> >     _turns;
 
     int getPlayerIndex(const std::string & playerName) const;
+    std::string getDisplayName(const size_t playerIndex) const;
     void parseResult(std::string & result);
     void parseTournamentGameResult(const TournamentGame & game);
     void discardTournamentGameResult(const TournamentGame & game);

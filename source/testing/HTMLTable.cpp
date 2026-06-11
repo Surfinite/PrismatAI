@@ -1,4 +1,6 @@
 #include "HTMLTable.h"
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -65,8 +67,17 @@ void HTMLTable::appendHTMLTableToFile(const std::string & filename, const std::s
     const std::string & blank("");
     FILE * fp = fopen(filename.c_str(), "a");
 
+    // L-09: fopen was unchecked -- with a missing parent directory (the classic
+    // "tests/ doesn't exist" case) every fprintf below null-derefed.
+    if (!fp)
+    {
+        fprintf(stderr, "FATAL: HTMLTable::appendHTMLTableToFile: could not open '%s' for append "
+                        "(missing parent directory, e.g. tests/ ?). Aborting.\n", filename.c_str());
+        abort();
+    }
+
     fprintf(fp, "<br><br>\n");
-    fprintf(fp, _title.c_str());
+    fprintf(fp, "%s", _title.c_str());
 
     std::stringstream divID;
     divID << tableID << "Div";
@@ -76,10 +87,12 @@ void HTMLTable::appendHTMLTableToFile(const std::string & filename, const std::s
     std::string tableJS = "<script type=\"text/javascript\"> $(function() { $(\"#" + tableID + "\").tablesorter({widgets: ['zebra']}); });</script>\n";
     std::string tableHeader = "<div id=\"" + divID.str() + "\"" + (initiallyHidden ? "style=\"display: none\"" : "") + "><table cellpadding=2 border=1 rules=all style=\"font: 12px/1.5em Verdana\" id=\"" + tableID + "\" class=\"tablesorter\">\n";
     
-    fprintf(fp, showJS.c_str());
-    fprintf(fp, hideJS.c_str());
-    fprintf(fp, tableJS.c_str());
-    fprintf(fp, tableHeader.c_str());
+    // L-09: never pass variable text as the fprintf FORMAT string (a stray '%' in a
+    // title/player name would read garbage varargs); route everything through "%s".
+    fprintf(fp, "%s", showJS.c_str());
+    fprintf(fp, "%s", hideJS.c_str());
+    fprintf(fp, "%s", tableJS.c_str());
+    fprintf(fp, "%s", tableHeader.c_str());
 
     fprintf(fp, "<thead>");
     for (size_t h(0); h < _header.size(); ++h)
@@ -90,13 +103,13 @@ void HTMLTable::appendHTMLTableToFile(const std::string & filename, const std::s
             ss << "<th width=\"";
             ss << _colWidth[h];
             ss << "\">";
-            fprintf(fp, ss.str().c_str());
+            fprintf(fp, "%s", ss.str().c_str());
         }
         else
         {
             fprintf(fp, "<th width=\"80\">");
         }
-        fprintf(fp, _header[h].c_str());
+        fprintf(fp, "%s", _header[h].c_str());
         fprintf(fp, "</th>");
     }
 

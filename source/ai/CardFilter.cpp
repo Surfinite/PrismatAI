@@ -86,7 +86,10 @@ void CardFilter::addFilter(const CardFilter & filter)
 
 bool CardFilter::operator [] (const CardType type) const
 {
-    if (_filter.size() < type.getID())
+    // T4-10: reject when getID() == size() too (valid indices are 0..size()-1).
+    // The old 'size() < getID()' admitted the boundary ID, an OOB read -- and for a
+    // default-constructed filter (_filter empty) admitted EVERY id == 0 lookup.
+    if (type.getID() >= _filter.size())
     {
         return false;
     }

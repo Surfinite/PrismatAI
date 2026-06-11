@@ -402,6 +402,7 @@ int NeuralNet::buildCardTypeMapping()
 
     int mapped = 0;
     int unmapped = 0;
+    std::string unmappedNames;   // L-13: name the unmapped types in the summary line
     for (const auto & type : allTypes)
     {
         // Try UIName (display name) first -- this matches the training data
@@ -424,17 +425,22 @@ int NeuralNet::buildCardTypeMapping()
             {
                 // Suppress sentinel types (id=0,1 named "None") — engine
                 // placeholders, not real cards. Only warn for genuine unmaps.
-                if (type.getName() != "None" && unmapped < 10)
+                const bool sentinel = (type.getName() == "None");
+                if (!sentinel && unmapped < 10)
                 {
                     printf("NeuralNet: UNMAPPED type id=%d name='%s' uiName='%s'\n",
                            type.getID(), type.getName().c_str(), type.getUIName().c_str());
                 }
+                if (!unmappedNames.empty()) { unmappedNames += ", "; }
+                unmappedNames += "'" + type.getName() + "' (id=" + std::to_string(type.getID())
+                              + (sentinel ? ", engine sentinel)" : ")");
                 unmapped++;
             }
         }
     }
 
-    printf("NeuralNet: mapped %d / %zu engine card types (%d unmapped)\n", mapped, allTypes.size(), unmapped);
+    printf("NeuralNet: mapped %d / %zu engine card types (%d unmapped: %s)\n",
+           mapped, allTypes.size(), unmapped, unmapped == 0 ? "none" : unmappedNames.c_str());
     return mapped;
 }
 

@@ -18,6 +18,13 @@ class TournamentGame
     size_t          _maxTimeMS[2];
     bool            _discarded;
 
+    // H3 (slot-index attribution): the tournament player-slot index sitting each
+    // seat ([0] = Player_One / white / first, [1] = Player_Two / black / second).
+    // Recorded at dispatch so results are credited by SLOT, not by name lookup --
+    // a name lookup returns the FIRST match, which collapses same-name self-match
+    // blocks (e.g. RL_SelfPlay vs RL_SelfPlay) onto one slot. -1 = not set.
+    int             _playerSlots[2] = { -1, -1 };
+
     // Optional replay capture. When non-empty, playGame() constructs a
     // ReplaySerializer and drives it entirely from the harness: it captures the
     // initial state, replays each completed Move on a GameState clone (one
@@ -43,6 +50,14 @@ public:
     bool wasDiscarded() const;
     const std::string & getDiscardReason() const;
     const std::string & getPlayerName(const PlayerID player) const;
+
+    // H3: record/read which tournament player slots sat which seats (see _playerSlots).
+    void setPlayerSlots(int whiteSlot, int blackSlot)
+    {
+        _playerSlots[0] = whiteSlot;
+        _playerSlots[1] = blackSlot;
+    }
+    int getPlayerSlot(const PlayerID player) const { return _playerSlots[player]; }
     const GameState & getFinalGameState() const;
     const size_t getTotalTimeMS(const PlayerID player) const;
     const size_t getMaxTimeMS(const PlayerID player) const;

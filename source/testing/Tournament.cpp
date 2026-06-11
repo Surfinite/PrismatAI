@@ -87,6 +87,10 @@ void Tournament::run()
     _totalGames = std::vector<int>(_players.size(), 0);
     _totalWins = std::vector<int>(_players.size(), 0);
     _totalDraws = std::vector<int>(_players.size(), 0);
+    _seatGames[0] = std::vector<int>(_players.size(), 0);
+    _seatGames[1] = std::vector<int>(_players.size(), 0);
+    _seatWins[0] = std::vector<int>(_players.size(), 0);
+    _seatWins[1] = std::vector<int>(_players.size(), 0);
     _totalTurns = std::vector<int>(_players.size(), 0);
     _totalPlayouts = std::vector<int>(_players.size(), 0);
     _totalTimeMS = std::vector<int>(_players.size(), 0);
@@ -141,6 +145,11 @@ void Tournament::run()
 
                     TournamentGame g1(state, _players[p1], w1, _players[p2], b1);
                     TournamentGame g2(state, _players[p2], w2, _players[p1], b2);
+
+                    // H3: record which SLOT sat which seat so results are credited
+                    // by slot index, not by (ambiguous) name lookup.
+                    g1.setPlayerSlots((int)p1, (int)p2);
+                    g2.setPlayerSlots((int)p2, (int)p1);
 
                     if (!_saveReplaysDir.empty())
                     {
@@ -285,6 +294,7 @@ TournamentGame Tournament::playGame(const GameState & state, const size_t whiteI
     PlayerPtr black = AIParameters::Instance().getPlayer(Players::Player_Two, _players[blackIndex]);
 
     TournamentGame game(state, _players[whiteIndex], white, _players[blackIndex], black);
+    game.setPlayerSlots((int)whiteIndex, (int)blackIndex);   // H3: credit results by slot, not name
     if (!_saveReplaysDir.empty())
     {
         game.setReplaySaveDir(_saveReplaysDir, _replayGameCounter.fetch_add(1));
@@ -342,7 +352,30 @@ void Tournament::parseTournamentGameResult(const TournamentGame & game)
     int winnerID = game.getFinalGameState().winner();
     int loserID = (game.getFinalGameState().winner() + 1) % 2;
 
-    int playerIndex[2] = {getPlayerIndex(game.getPlayerName(0)), getPlayerIndex(game.getPlayerName(1))};
+    // H3: credit results by the SLOT indices recorded at dispatch. The old
+    // getPlayerIndex(name) lookup returned the FIRST name match, so same-name
+    // self-match blocks (RL_Cal_N*, RL_Step2_Smoke, RL_SelfPlay_General) collapsed
+    // all credit onto slot 0 and slot 1 showed 0 games / -nan(ind).
+    int playerIndex[2] = {game.getPlayerSlot(0), game.getPlayerSlot(1)};
+    if (playerIndex[0] < 0 || playerIndex[1] < 0)
+    {
+        // Fallback for games not dispatched through run() (none today).
+        playerIndex[0] = getPlayerIndex(game.getPlayerName(0));
+        playerIndex[1] = getPlayerIndex(game.getPlayerName(1));
+    }
+    if (playerIndex[0] < 0 || playerIndex[1] < 0
+        || playerIndex[0] >= (int)_players.size() || playerIndex[1] >= (int)_players.size())
+    {
+        fprintf(stderr, "FATAL: Tournament::parseTournamentGameResult: unattributable game '%s' vs '%s' "
+                        "(slots %d, %d of %zu). Aborting.\n",
+                game.getPlayerName(0).c_str(), game.getPlayerName(1).c_str(),
+                playerIndex[0], playerIndex[1], _players.size());
+        abort();
+    }
+
+    // H2: per-seat tallies (seat 0 = Player_One / first, seat 1 = Player_Two / second).
+    _seatGames[0][playerIndex[0]]++;
+    _seatGames[1][playerIndex[1]]++;
 
     _maxTimeMS[playerIndex[0]] = std::max(_maxTimeMS[playerIndex[0]], (int)game.getMaxTimeMS(0));
     _maxTimeMS[playerIndex[1]] = std::max(_maxTimeMS[playerIndex[1]], (int)game.getMaxTimeMS(1));
@@ -374,6 +407,7 @@ void Tournament::parseTournamentGameResult(const TournamentGame & game)
 
         _totalWins[winnerIndex]++;
         _wins[winnerIndex][loserIndex]++;
+        _seatWins[winnerID][winnerIndex]++;   // H2: winnerID IS the winning seat (0 = first, 1 = second)
     }
 }
 
@@ -407,39 +441,54 @@ void Tournament::writeHTMLResults()
     ss << "</table>\n<br><br>\n";
 
     FILE * f = fopen(filename.c_str(), "w");
+    // L-09 family: unchecked fopen null-derefed on the first fprintf when tests/ is
+    // missing, and ss.str() was passed as the fprintf FORMAT string.
+    if (!f)
+    {
+        fprintf(stderr, "FATAL: Tournament::writeHTMLResults: could not open '%s' for write "
+                        "(missing tests/ directory?). Aborting.\n", filename.c_str());
+        abort();
+    }
     fprintf(f, "<html>\n<head>\n");
     fprintf(f, "<script type=\"text/javascript\" src=\"javascript/jquery-1.10.2.min.js\"></script>\n<script type=\"text/javascript\" src=\"javascript/jquery.tablesorter.js\"></script>\n<link rel=\"stylesheet\" href=\"javascript/themes/blue/style.css\" type=\"text/css\" media=\"print, projection, screen\" />\n");
     fprintf(f, "</head>\n");
-    fprintf(f, ss.str().c_str());
+    fprintf(f, "%s", ss.str().c_str());
     fclose(f);
 
     HTMLTable stats("Overall Statistics");
-    stats.setHeader({"Player", "Score", "Games", "Wins", "Loss", "Draw", "Turns", "Turns/G", "MS/Turn", "Max MS"});
-    stats.setColWidth({120, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80});
+    // H2: "P1 W/G" / "P2 W/G" = per-seat wins/games as Player_One (first player) and
+    // as Player_Two (second player). Their games sum to the Games column.
+    stats.setHeader({"Player", "Score", "Games", "Wins", "Loss", "Draw", "P1 W/G", "P2 W/G", "Turns", "Turns/G", "MS/Turn", "Max MS"});
+    stats.setColWidth({120, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80});
 
     for (size_t p(0); p < _players.size(); ++p)
     {
         size_t col = 0;
-        stats.setData(p, col++, _players[p]);
-        stats.setData(p, col++, (_totalWins[p] + 0.5*_totalDraws[p])/_totalGames[p]);
+        stats.setData(p, col++, getDisplayName(p));
+        stats.setData(p, col++, _totalGames[p] == 0 ? 0.0 : (_totalWins[p] + 0.5*_totalDraws[p])/_totalGames[p]);
         stats.setData(p, col++, _totalGames[p]);
         stats.setData(p, col++, _totalWins[p]);
         stats.setData(p, col++, _totalGames[p] - _totalWins[p] - _totalDraws[p]);
         stats.setData(p, col++, _totalDraws[p]);
+        stats.setData(p, col++, std::to_string(_seatWins[0][p]) + "/" + std::to_string(_seatGames[0][p]));
+        stats.setData(p, col++, std::to_string(_seatWins[1][p]) + "/" + std::to_string(_seatGames[1][p]));
         stats.setData(p, col++, _totalTurns[p]);
-        stats.setData(p, col++, (double)_totalTurns[p] / _totalGames[p]);
-        stats.setData(p, col++, (double)_totalTimeMS[p] / _totalTurns[p]);
+        stats.setData(p, col++, _totalGames[p] == 0 ? 0.0 : (double)_totalTurns[p] / _totalGames[p]);
+        stats.setData(p, col++, _totalTurns[p] == 0 ? 0.0 : (double)_totalTimeMS[p] / _totalTurns[p]);
         stats.setData(p, col++, _maxTimeMS[p]);
     }
 
     HTMLTable turnTable("Bot vs. Bot Avg Turns Per Game");
     HTMLTable tableWinPerc("Bot vs. Bot Score Table (row score vs. column)");
     std::vector<std::string> header = {""};
-    header.insert(header.end(), _players.begin(), _players.end());
+    for (size_t p(0); p < _players.size(); ++p)
+    {
+        header.push_back(getDisplayName(p));
+    }
     header.push_back("Total");
     turnTable.setHeader(header);
     tableWinPerc.setHeader(header);
-    
+
     std::vector<size_t> colWidth(header.size(), 120);
     turnTable.setColWidth(colWidth);
     tableWinPerc.setColWidth(colWidth);
@@ -447,8 +496,8 @@ void Tournament::writeHTMLResults()
     for (size_t r(0); r < _players.size(); ++r)
     {
         size_t col = 0;
-        turnTable.setData(r, col, _players[r]);
-        tableWinPerc.setData(r, col, _players[r]);
+        turnTable.setData(r, col, getDisplayName(r));
+        tableWinPerc.setData(r, col, getDisplayName(r));
         col++;
 
         for (size_t p(0); p < _players.size(); ++p)
@@ -480,23 +529,31 @@ void Tournament::writeHTMLResults()
 void Tournament::printResults()
 {
     std::stringstream ss;
-  
+
     size_t colWidth = 10;
     for (size_t i(0); i < _players.size(); ++i)
     {
-        colWidth = std::max(colWidth, _players[i].length() + 2);
+        colWidth = std::max(colWidth, getDisplayName(i).length() + 2);
     }
 
     ss << std::endl << std::endl;
+
+    const size_t totalScoreCol = colWidth + _players.size()*colWidth;   // where each row's TotalScore lands
 
     std::stringstream header;
     for (size_t i(0); i < _players.size(); ++i)
     {
         while (header.str().length() < (i+1)*colWidth) header << " ";
-        header << _players[i];
+        header << getDisplayName(i);
     }
 
-    header << "  TotalScore";
+    // H2: per-seat stats columns (wins/games as first player and as second player)
+    while (header.str().length() < totalScoreCol) header << " ";
+    header << "TotalScore";
+    while (header.str().length() < totalScoreCol + 12) header << " ";
+    header << "P1-W/G";
+    while (header.str().length() < totalScoreCol + 22) header << " ";
+    header << "P2-W/G";
 
     std::cout << header.str() << std::endl;
     ss << header.str() << std::endl;
@@ -504,7 +561,7 @@ void Tournament::printResults()
     for (size_t i(0); i < _players.size(); ++i)
     {
         std::stringstream line;
-        line << _players[i]; while (line.str().length() < colWidth) line << " ";
+        line << getDisplayName(i); while (line.str().length() < colWidth) line << " ";
 
         for (size_t j(0); j < _players.size(); ++j)
         {
@@ -521,6 +578,10 @@ void Tournament::printResults()
         }
 
         line << _totalWins[i] + (0.5*_totalDraws[i]);
+        while (line.str().length() < totalScoreCol + 12) line << " ";
+        line << _seatWins[0][i] << "/" << _seatGames[0][i];
+        while (line.str().length() < totalScoreCol + 22) line << " ";
+        line << _seatWins[1][i] << "/" << _seatGames[1][i];
         line << std::endl;
         ss << line.str();
         std::cout << line.str();
@@ -554,6 +615,21 @@ int Tournament::getPlayerIndex(const std::string & playerName) const
     }
 
     return -1;
+}
+
+std::string Tournament::getDisplayName(const size_t playerIndex) const
+{
+    // H3: same-name self-match blocks are legitimate (slot attribution handles the
+    // accounting); suffix the group so two identically-named rows stay readable.
+    for (size_t i(0); i < _players.size(); ++i)
+    {
+        if (i != playerIndex && _players[i] == _players[playerIndex])
+        {
+            return _players[playerIndex] + " (g" + std::to_string(_playerGroups[playerIndex]) + ")";
+        }
+    }
+
+    return _players[playerIndex];
 }
 
 

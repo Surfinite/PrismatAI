@@ -394,7 +394,10 @@ void AIParameters::parsePlayers(const std::string & keyName, const rapidjson::Va
         
         PRISMATA_ASSERT(val.IsObject(), "Player value must be an Object");
 
-        if (_moveIteratorMap[Players::Player_One].find(name) == _moveIteratorMap[Players::Player_One].end())
+        // T3-10: the duplicate-skip guard checked _moveIteratorMap (copy-paste from
+        // parseMoveIterators), so any player sharing a name with a move iterator was
+        // silently skipped -- the player simply never existed.
+        if (_playerMap[Players::Player_One].find(name) == _playerMap[Players::Player_One].end())
         {
             parsePlayer(Players::Player_One, name, rootValue);
             parsePlayer(Players::Player_Two, name, rootValue);
@@ -891,7 +894,10 @@ PlayerPtr AIParameters::parsePlayer(const PlayerID player, const std::string & p
             PRISMATA_ASSERT(false, "Unknown UCT Evaluation Method Name: %s", evalMethodString.c_str());
         }
 
-        if (args.HasMember("UCTConstant") && args["UCTConstant"].IsDouble())
+        // T3-11: IsNumber, not IsDouble -- an integer literal ("UCTConstant":2) is NOT
+        // IsDouble in rapidjson, so it was SILENTLY ignored and the default applied.
+        // Matches the TemperatureTau/Epsilon* params below.
+        if (args.HasMember("UCTConstant") && args["UCTConstant"].IsNumber())
         {
             params.setCValue(args["UCTConstant"].GetDouble());
         }
@@ -1171,25 +1177,44 @@ MoveIteratorPtr AIParameters::parseMoveIterator(const PlayerID player, const std
 
 PlayerPtr AIParameters::getPlayer(const PlayerID player, const std::string & playerName)
 {
+    // T3-6: a missing name used to soft-assert (PRISMATA_ASSERT prints but does NOT abort)
+    // and then dereference/return garbage. A dangling player reference is a config bug --
+    // fail loudly with the requested name instead.
     auto playerIt = _playerMap[player].find(playerName);
-    PRISMATA_ASSERT(playerIt != _playerMap[player].end(), "AIParameters::getPlayer Couldn't find player variable: %d %s", (int)_playerMap[player].size(), playerName.c_str());
-    if (playerIt == _playerMap[player].end()) { return nullptr; }   // avoid UB end()-deref on a missing player
+    if (playerIt == _playerMap[player].end())
+    {
+        fprintf(stderr, "FATAL: AIParameters::getPlayer: no player named '%s' (%d players registered). Aborting.\n",
+                playerName.c_str(), (int)_playerMap[player].size());
+        abort();
+    }
 
     return playerIt->second->clone();
 }
 
 PPPtr AIParameters::getPartialPlayer(const PlayerID player, const std::string & playerName)
 {
+    // T3-6: missing name -> hard fail (was a soft assert followed by an end()-deref / UB).
     auto playerIt = _partialPlayerMap[player].find(playerName);
-	PRISMATA_ASSERT(playerIt != _partialPlayerMap[player].end(), "AIParameters::getPartialPlayer Couldn't find player variable  %d %s", (int)_partialPlayerMap[player].size(), playerName.c_str());
+    if (playerIt == _partialPlayerMap[player].end())
+    {
+        fprintf(stderr, "FATAL: AIParameters::getPartialPlayer: no partial player named '%s' (%d partial players registered). Aborting.\n",
+                playerName.c_str(), (int)_partialPlayerMap[player].size());
+        abort();
+    }
 
     return playerIt->second->clone();
 }
 
 MoveIteratorPtr AIParameters::getMoveIterator(const PlayerID player, const std::string & iteratorName)
 {
+    // T3-6: missing name -> hard fail (was a soft assert followed by an end()-deref / UB).
     auto iteratorIt = _moveIteratorMap[player].find(iteratorName);
-	PRISMATA_ASSERT(iteratorIt != _moveIteratorMap[player].end(), "AIParameters::getMoveIterator Couldn't find movw iterator variable %d %s", (int)_moveIteratorMap[player].size(), iteratorName.c_str());
+    if (iteratorIt == _moveIteratorMap[player].end())
+    {
+        fprintf(stderr, "FATAL: AIParameters::getMoveIterator: no move iterator named '%s' (%d move iterators registered). Aborting.\n",
+                iteratorName.c_str(), (int)_moveIteratorMap[player].size());
+        abort();
+    }
 
     return iteratorIt->second->clone();
 }
@@ -1206,14 +1231,19 @@ void AIParameters::parseJSONString(const std::string & jsonString)
 
     if (parsingFailed)
     {
-        int errorPos = document.GetErrorOffset();
+        // T3-9: clamp the context window. GetErrorOffset() can be 0 (e.g. a UTF-8 BOM'd
+        // config fails at offset 0) and the old 'errorPos-5' underflowed, so substr()
+        // threw out_of_range and crashed BEFORE reporting. Also make this a hard FATAL:
+        // PRISMATA_ASSERT is soft, so we previously continued into parseJSONValue with a
+        // broken document.
+        const size_t errorPos = document.GetErrorOffset();
+        const size_t ctxBegin = (errorPos >= 5) ? (errorPos - 5) : 0;
+        const size_t ctxLen   = (jsonString.size() > ctxBegin) ? std::min<size_t>(10, jsonString.size() - ctxBegin) : 0;
 
-        std::stringstream ss;
-        ss << std::endl << "JSON Parse Error: " << document.GetParseError() << std::endl;
-        ss << "Error Position:   " << errorPos << std::endl;
-        ss << "Error Substring:  " << jsonString.substr(errorPos-5, 10) << std::endl;
-
-        PRISMATA_ASSERT(!parsingFailed, "Error parsing JSON config file: %s", ss.str().c_str());
+        fprintf(stderr, "FATAL: AIParameters: JSON parse error (code %d) at offset %zu, context '%s'. "
+                        "Hint: an error at offset 0 usually means a UTF-8 BOM -- save the config as UTF-8 without BOM. Aborting.\n",
+                (int)document.GetParseError(), errorPos, jsonString.substr(ctxBegin, ctxLen).c_str());
+        abort();
     }
 
     parseJSONValue(document);

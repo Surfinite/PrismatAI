@@ -986,12 +986,17 @@ void AITools::TestParseJSONString(const std::string & jsonString)
 
     if (parsingFailed)
     {
-        int errorPos = document.GetErrorOffset();
+        // T3-9 (same family as AIParameters::parseJSONString): clamp the context window
+        // so an error at offset < 15 cannot underflow substr() and throw before the
+        // error is reported.
+        const size_t errorPos = document.GetErrorOffset();
+        const size_t ctxBegin = (errorPos >= 15) ? (errorPos - 15) : 0;
+        const size_t ctxLen   = (jsonString.size() > ctxBegin) ? std::min<size_t>(25, jsonString.size() - ctxBegin) : 0;
 
         std::stringstream ss;
         ss << std::endl << "JSON Parse Error: " << document.GetParseError() << std::endl;
         ss << "Error Position:   " << errorPos << std::endl;
-        ss << "Error Substring:  " << jsonString.substr(errorPos-15, 25) << std::endl;
+        ss << "Error Substring:  " << jsonString.substr(ctxBegin, ctxLen) << std::endl;
 
         PRISMATA_ASSERT(!parsingFailed, "Error parsing JSON config file: %s", ss.str().c_str());
     }

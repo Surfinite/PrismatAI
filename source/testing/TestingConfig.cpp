@@ -1,6 +1,8 @@
 #include "TestingConfig.h"
 #include "PrismataAI.h"
 
+#include <algorithm>   // std::min (clamped parse-error context window)
+
 using namespace Prismata;
 
 TestingConfig::TestingConfig()
@@ -17,12 +19,17 @@ void TestingConfig::parseConfigFile(const std::string & filename)
 
     if (parsingFailed)
     {
-        int errorPos = document.GetErrorOffset();
+        // T3-9 (same family as AIParameters::parseJSONString): clamp the context window
+        // so an error at offset < 5 (e.g. a UTF-8 BOM at offset 0) cannot underflow
+        // substr() and throw before the error is reported.
+        const size_t errorPos = document.GetErrorOffset();
+        const size_t ctxBegin = (errorPos >= 5) ? (errorPos - 5) : 0;
+        const size_t ctxLen   = (json.size() > ctxBegin) ? std::min<size_t>(10, json.size() - ctxBegin) : 0;
 
         std::stringstream ss;
         ss << std::endl << "JSON Parse Error: " << document.GetParseError() << std::endl;
         ss << "Error Position:   " << errorPos << std::endl;
-        ss << "Error Substring:  " << json.substr(errorPos-5, 10) << std::endl;
+        ss << "Error Substring:  " << json.substr(ctxBegin, ctxLen) << std::endl;
 
         PRISMATA_ASSERT(!parsingFailed, "Error parsing JSON config file: %s", ss.str().c_str());
     }
