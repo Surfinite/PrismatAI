@@ -53,7 +53,11 @@ $modelDir    = "$train/models/rl_iter_$K"
 $bestPt      = "$modelDir/swa_model.pt"
 $candBin     = "neural_weights_rl_iter$K.bin"          # filename only — resolved under bin/asset/config
 $candBinPath = "$bin/asset/config/$candBin"
-$parentBin   = "neural_weights_mixed_v221.bin"          # current promoted net (gating parent / manifest label)
+# Current promoted net (gating parent / manifest label / stage-7 finally-restore target).
+# Read from campaign_frozen.json so a promotion (which edits the frozen file) propagates
+# here automatically — a stale literal would make the F-07 restore re-pin the OLD parent.
+$parentBin   = (Get-Content -Raw "$eval/campaign_frozen.json" | ConvertFrom-Json).parent_bin
+if (-not $parentBin) { throw "campaign_frozen.json has no parent_bin" }
 $origExe     = 'c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe'  # genuine 2016 MasterBot at its permanent home (steam anchor baseline)
 $parityStates = "$bin/asset/training/parity_states"     # native GameState sidecar (sp_*.json) from self-play
 $schema      = "$train/schema_v2.json"

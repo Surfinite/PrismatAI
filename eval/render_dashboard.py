@@ -26,7 +26,8 @@ FOOTER = (
     "errored; '*' = partial manifest (run died mid-eval).\n"
     "iter0 opponent = the parent promoted net (v221) — general=gate pool (d_reg = WR-0.5), "
     "forced=IG-widened axis (d_rl, information only).\n"
-    "narrow=DSNN_Mixed35_5var | steam=STEAMAI/.ORIG — both are non-gating trajectory yardsticks "
+    "narrow=RL_Narrow (same net+budget, non-IG iterator) | steam=2016 MasterBot "
+    "(prismata_baselines/masterbot2016) — both are non-gating trajectory yardsticks "
     "(marked †). IG=mean IG-click count (self-play/argmax). Promotion is a HUMAN call."
 )
 

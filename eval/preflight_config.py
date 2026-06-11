@@ -303,6 +303,28 @@ def check_frozen_tuple(cfg, frozen):
             failures.append("RL_SelfPlay.%s is %s but campaign_frozen.json freezes it at %s "
                             "-- config drifted; reconcile deliberately (edit BOTH together)"
                             % (cfg_key, sp[cfg_key], frozen[frozen_key]))
+    # UCTConstant: frozen but previously unchecked (final-review gap). Guarded on key
+    # presence so older frozen files / minimal test fixtures stay valid.
+    if "UCTConstant" in frozen:
+        if "UCTConstant" not in sp:
+            failures.append("RL_SelfPlay.UCTConstant missing from config (frozen at %s)"
+                            % frozen["UCTConstant"])
+        elif float(sp["UCTConstant"]) != float(frozen["UCTConstant"]):
+            failures.append("RL_SelfPlay.UCTConstant is %s but campaign_frozen.json freezes it "
+                            "at %s -- config drifted; reconcile deliberately"
+                            % (sp["UCTConstant"], frozen["UCTConstant"]))
+    # Self-play export threading: the campaign runs Threads:8 (X3-validated); drift to 1
+    # silently octuples wall-clock, drift higher is untested.
+    if "selfplay_threads" in frozen:
+        blocks = {b.get("name"): b for b in cfg.get("Benchmarks", []) if isinstance(b, dict)}
+        sp_block = blocks.get("RL_Step2_Smoke")
+        if sp_block is None:
+            failures.append("self-play export block 'RL_Step2_Smoke' not found in Benchmarks "
+                            "(frozen selfplay_threads=%s)" % frozen["selfplay_threads"])
+        elif int(sp_block.get("Threads", 1)) != int(frozen["selfplay_threads"]):
+            failures.append("RL_Step2_Smoke.Threads is %s but campaign_frozen.json freezes "
+                            "selfplay_threads at %s" % (sp_block.get("Threads", 1),
+                                                        frozen["selfplay_threads"]))
     # EpsilonLate: frozen json says 0.0 and the config convention is KEY-ABSENT;
     # a present nonzero key would silently re-enable the late-epsilon sampler.
     if "EpsilonLate" in sp and float(sp["EpsilonLate"]) != 0.0:
