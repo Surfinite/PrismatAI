@@ -753,6 +753,37 @@ class WarmupCosineScheduler(torch.optim.lr_scheduler._LRScheduler):
         return [max(self.min_lr, base_lr * scale) for base_lr in self.base_lrs]
 
 
+def resolve_warmup(warmup_steps, total_steps):
+    """Effective LR warmup steps for this run (N-1 audit fix).
+
+    The argparse default (--warmup-steps 1000) was tuned for the legacy
+    big-corpus path (19k+ optimizer steps). A campaign-scale RL fine-tune has
+    only ~78 TOTAL steps, so warmup never completed and
+    lr = max(min_lr, lr*(step+1)/1000) sat at the 1e-6 floor for the ENTIRE
+    run (peak LR ever reached = exactly min_lr -> candidate ~= parent, null
+    iterations). If the requested warmup can't complete within the run,
+    rescale it to 10% of total steps; otherwise return it untouched (legacy
+    path behavior is byte-identical).
+    """
+    if warmup_steps >= total_steps:
+        effective = max(1, total_steps // 10)
+        print(f"[lr] warmup-steps {warmup_steps} >= total_steps {total_steps} "
+              f"— rescaling warmup to {effective} (N-1: the default was tuned "
+              f"for the legacy big-corpus path)")
+        return effective
+    return warmup_steps
+
+
+def resolve_swa_lr(swa_lr_arg, lr):
+    """SWA-phase constant LR: explicit --swa-lr if given, else legacy lr*0.1.
+
+    The legacy default equals the 1e-6 min-lr floor at the RL fine-tune's
+    lr=1e-5, freezing the SWA phase (half the RL run) — RL invocations pass
+    an explicit --swa-lr (N-1 audit fix).
+    """
+    return swa_lr_arg if swa_lr_arg is not None else lr * 0.1
+
+
 # ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
@@ -965,6 +996,12 @@ def main():
                         help="override the scheduled human fraction")
     parser.add_argument("--swa-start-epoch", type=int, default=None,
                         help="SWA start epoch (default 80%% of --epochs)")
+    parser.add_argument("--swa-lr", type=float, default=None,
+                        help="SWA-phase constant LR (default: --lr * 0.1). "
+                             "The default equals the 1e-6 min-lr floor at the "
+                             "RL fine-tune's --lr 1e-5, freezing the SWA phase "
+                             "(half the run) — RL invocations should pass an "
+                             "explicit value, e.g. 5e-6 (N-1 audit fix).")
 
     args = parser.parse_args()
 
@@ -1219,8 +1256,11 @@ def main():
     # --- LR Schedule: per-step warmup + cosine decay ---
     steps_per_epoch = max(1, train_n // args.batch_size)
     total_steps = steps_per_epoch * args.epochs
+    # N-1 fix: on short RL runs the default 1000-step warmup never completed,
+    # pinning the LR at the 1e-6 floor for the whole run. Rescale when needed.
+    effective_warmup = resolve_warmup(args.warmup_steps, total_steps)
     scheduler = WarmupCosineScheduler(
-        optimizer, warmup_steps=args.warmup_steps,
+        optimizer, warmup_steps=effective_warmup,
         total_steps=total_steps, min_lr=1e-6)
 
     # --- Value criterion ---
@@ -1229,7 +1269,8 @@ def main():
     # --- SWA setup (last 20% of epochs) ---
     swa_start_epoch = args.swa_start_epoch or max(1, int(args.epochs * 0.8))
     swa_model = AveragedModel(model)
-    swa_scheduler = SWALR(optimizer, swa_lr=args.lr * 0.1)
+    swa_lr = resolve_swa_lr(args.swa_lr, args.lr)
+    swa_scheduler = SWALR(optimizer, swa_lr=swa_lr)
     swa_active = False
 
     # --- Run metadata ---
@@ -1239,6 +1280,8 @@ def main():
         "batch_size": args.batch_size,
         "lr": args.lr,
         "warmup_steps": args.warmup_steps,
+        "effective_warmup_steps": effective_warmup,
+        "swa_lr": swa_lr,
         "dropout": args.dropout,
         "policy_weight": args.policy_weight,
         "patience": args.patience,

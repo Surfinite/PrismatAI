@@ -210,6 +210,11 @@ if ($LASTEXITCODE -ne 0) { throw "vectorize_v2.py exited $LASTEXITCODE" }
 #    --rl-mode wires the replay buffer (window W), human rehearsal, colour
 #    balance, and SWA (Task 6). Pass prior iterations' H5 too if present so the
 #    sliding window has its W shards.
+#    --swa-lr 5e-6 (N-1 fix): the train.py default (lr*0.1 = 1e-6 at lr=1e-5)
+#    equals the min-lr floor, freezing the SWA phase (epochs 3-6, HALF the run).
+#    5e-6 = half the fine-tune LR — keeps SWA-phase learning alive without
+#    overshooting the cosine tail. (train.py also auto-rescales the 1000-step
+#    warmup default down to ~10% of this run's ~78 total steps.)
 # -----------------------------------------------------------------------------
 Write-Host "`n[3/8] RL fine-tune (rl-mode, W=$Window) -> $modelDir"
 $spFiles = @()
@@ -227,7 +232,7 @@ python "$train/train.py" --model deepsets --property-table $propTable `
     --train-file $spFiles[-1] --val-file $humanValH5 `
     --rl-mode --init-weights $ParentPt --selfplay-files @spFiles --human-file $humanH5 `
     --replay-window $Window --rl-iteration $K `
-    --epochs 6 --lr 1e-5 --swa-start-epoch 3 --device xpu `
+    --epochs 6 --lr 1e-5 --swa-start-epoch 3 --swa-lr 5e-6 --device xpu `
     --output-dir $modelDir
 if ($LASTEXITCODE -ne 0) { throw "train.py exited $LASTEXITCODE" }
 if (-not (Test-Path $bestPt)) { throw "expected SWA model not found: $bestPt" }
