@@ -1,18 +1,27 @@
-# RL self-play eval harness (Task 7)
+# RL self-play eval harness
 
-Per-iteration evaluation for the RL self-play loop: win-rate math with Wilson CIs, a
-group-sequential **promotion gate**, a card-set-level (clustered) CI for the paired
-colour-swap design, a manifest orchestrator, and action-coverage metrics for the
-IG-optional axis.
+Per-iteration evaluation for the RL self-play loop: win-rate math with **iid Wilson CIs**, a
+**REJECT / REVIEW / INCOMPLETE verdict** (rule-out-harm; nothing auto-promotes), an **incremental
+atomic manifest**, **active provenance** (config pre-flight + engine-stderr load confirmation),
+and action-coverage metrics for the IG-optional axis. The campaign contract is
+`eval/rl_campaign.md`; the operational reference is `eval/rl_runbook.md`; the frozen tuple is
+`eval/campaign_frozen.json`.
 
 ```
 eval/
-  wilson.py            # win_rate, wilson_ci, decisive, decisive_gate (A3), clustered_ci (A4)
-  run_eval.py          # orchestrator: anchors, sequential gate, manifest
-  action_coverage.py   # IG fire-rate + root-entropy metrics (RUNTIME DEFERRED, see below)
-  tests/test_wilson.py # unit tests for the stats (incl. A3 stricter-gate, A4 clustered CI)
-  tests/test_parse.py  # unit tests for both parsers (real HTML statsTable + A7 seat-independent)
-  manifests/           # per-iteration eval_iter_<N>.json output
+  wilson.py             # win_rate + wilson_ci (iid 95%) — the COMPLETE stats surface (see below)
+  run_eval.py           # orchestrator: anchors, verdict, provenance, incremental manifest
+  preflight_config.py   # stage 0: config integrity + frozen tuple + parent re-pin (hard-fails)
+  campaign_frozen.json  # the frozen HP tuple (N=1000, tau=0.7, K=999, eps=0, c=0.3, Threads:8)
+  run_iteration.ps1     # one-iteration driver (stages 0-8)
+  tactical_suite.py     # O7 IG-click-COUNT regression suite (vs tactical_baseline.json)
+  action_coverage.py    # IG click-count distribution + feasible-max binning
+  render_dashboard.py   # per-iteration human-facing results table
+  calib_states/         # 41 curated states (incl. ktink_t9) — calibration + coverage probes
+  ig_battery/           # IG battery states (tactical/coverage defaults)
+  tests/                # test_wilson, test_parse, test_run_eval_main, test_preflight,
+                        # test_dashboard, test_ig_feasible
+  manifests/            # per-iteration eval_iter_<N>.json output
 ```
 
 Run the tests:
@@ -23,27 +32,68 @@ cd c:/libraries/PrismataAI/eval && python -m pytest tests/ -v
 
 ## The three anchors (one path each)
 
-| Anchor   | What                                    | Path                                  | Role |
-|----------|-----------------------------------------|---------------------------------------|------|
-| `iter0`  | wide-untrained iter-0 weights, IG-optional config | C++ tournament (`Prismata_Testing.exe`) | **regression-gate ref (A1)** |
-| `narrow` | `DSNN_Mixed35_5var` (the deployment net)| C++ tournament                        | trajectory yardstick |
-| `steam`  | STEAMAI / `PrismataAI.exe.ORIG`         | `matchup_clean.js`, `--player-switch` | trajectory yardstick (**DEFERRED live**) |
+| Anchor   | What                                                         | Path                                  | Role |
+|----------|--------------------------------------------------------------|---------------------------------------|------|
+| `iter0`  | candidate vs **PARENT promoted net** (`RL_Eval_iter0` = v221, SAME IG-optional config + budget) | C++ tournament (`Prismata_Testing.exe`) | **verdict input** (general pool); forced pool = `d_rl` info |
+| `narrow` | `RL_Narrow` = v221 on `HardIterator_5var_Root` (**iterator-only variable** vs the candidate) | C++ tournament                        | trajectory yardstick (non-gating) |
+| `steam`  | candidate (DaveAI + injected `RL_Eval` block + `--candidate-weights`) vs the **genuine 2016 MasterBot** at `c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe` | `matchup_clean.js`, `--player-switch`, `--steam-exe-b` | trajectory yardstick (non-gating; **live 2-game verified** post F-08 rewire) |
+
+The earlier narrow anchor (`DSNN_Mixed35_5var`) was replaced by `RL_Narrow` so the narrow
+comparison isolates the iterator (same v221 net, same budget, same c=0.3). The earlier steam
+anchor was mis-wired (the candidate never played); the F-08 rewire injects an `RL_Eval` player
+block into the DaveAI side and threads the candidate `.bin` via `--candidate-weights`.
+
+## Verdict (replaces the old GO / sequential gate — 2026-06-10)
+
+The old rule (`d_rl >= +5pp AND CI-lower > 0.5`, group-sequential 128→256→512) was deleted as
+statistically incoherent at 128 games (P(GO | true +5pp) ≈ 13%). Now (`run_eval.py`):
+
+- **REJECT** iff the iter0/**general** anchor completed AND its 95% Wilson `ci_upper < 0.5`
+  (candidate statistically proven worse than the parent);
+- **REVIEW** iff it completed and `ci_upper >= 0.5` (everything else is a human call);
+- **INCOMPLETE** iff that anchor is missing/errored.
+
+`d_rl` (forced) and `d_reg` (general) are recorded as **information only**, each with a Wilson CI
+on the win rate (`forced_wr_ci` / `general_wr_ci`). Nothing auto-promotes.
+
+## Statistics: iid Wilson ONLY
+
+`wilson.py` (`win_rate`, `wilson_ci`) is the **complete** statistics surface. The former
+`decisive` / `decisive_gate` (A3 Pocock sequential) / `clustered_ci` (A4 per-card-set) helpers
+were **dead code with zero live callers** and were removed 2026-06-10 per the RL-loop audit:
+the C++ tournament HTML emits only aggregate W/L/D/Games per player — **no per-card-set scores
+exist to cluster on, and no sequential-testing machinery is wired anywhere**.
+
+## Incremental manifest + active provenance
+
+- The manifest is (re)written **atomically after every completed pool/anchor** (temp file +
+  `os.replace`), carrying `"complete": false` and `anchors_completed` until the final write — a
+  killed run no longer erases hours of tournament results (the Jun-8 failure mode).
+- **Provenance is active, not just a stamp**: before any block flips on, `run_eval.py` asserts
+  `Players.RL_Eval.WeightsFile` == the `--weights` basename (hard abort otherwise). Each C++
+  anchor's engine **stderr must contain the per-player NeuralNet load line for the candidate
+  `.bin`** ("AIParameters: created per-player NeuralNet from ..."); the result is stamped
+  `engine_confirmed_load` and a completed-but-unconfirmed anchor **hard-fails** after being
+  recorded for the post-mortem.
+- Engine-side guardrails (dave `26075fa`/`d0ec633`): the engine now **hard-fails at construction**
+  on an unknown or raw-empty opening book, an unknown filter (including the
+  `findCardFilter`/`subsetFilter` path), and a NeuralNet weights-load failure; the UCT value path
+  guards against an unloaded net (X5b). Filtered-to-empty books warn once instead of dying.
 
 ## Deployment budget, not self-play N (A1)
 
 All eval players run at the **deployment budget** `TimeLimit:7000 / MaxTraversals:100000`,
-NOT the self-play throughput N (`MaxTraversals:512`). Accordingly the `RL_Eval` player in
-the dave `config.txt` was changed from `TimeLimit:0 / MaxTraversals:512` to
-`TimeLimit:7000 / MaxTraversals:100000`. `RL_SelfPlay` is left at the self-play N (512)
-unchanged — the eval budget is decoupled from the self-play budget.
+NOT the self-play throughput N. `RL_SelfPlay` runs the frozen self-play tuple
+(`MaxTraversals:1000`, τ=0.7, K=999, ε=0 — `campaign_frozen.json`, preflight-asserted) — the
+eval budget is decoupled from the self-play budget.
 
 ## d_reg rule (A1)
 
-The regression gate `d_reg` (candidate net_k vs the pre-RL net) **must** be computed from
-`RL_Eval_iter0_general` — SAME config + SAME budget. Do **not** compute it from the narrow
-`DSNN_Mixed35_5var` baseline: that baseline runs a different config (HardIterator_5var) at
-the same budget, so a pure config/budget gap would trip `d_reg < -Y` and spuriously block a
-GO. `narrow` and `steam` are **trajectory yardsticks only** — never gate on them.
+`d_reg` (candidate vs the parent net — informational since 2026-06-10) **must** come from
+`RL_Eval_iter0_general` — SAME config + SAME budget. Do **not** compute it from the `narrow`
+anchor: `RL_Narrow` runs a different iterator (`HardIterator_5var_Root`) at the same budget, so
+an iterator gap would masquerade as a net regression. `narrow` and `steam` are **trajectory
+yardsticks only** — never gate on them.
 
 ## A7 — seat-independent identity parsing (NOT the seat tally)
 
@@ -51,40 +101,20 @@ GO. `narrow` and `steam` are **trajectory yardsticks only** — never gate on th
 
 ```
 [Parallel] --- Win Rates (seat-independent) ---
-[Parallel] DaveAI(RL_Eval): 53.9%
-[Parallel] SteamAI(HardestAI): 46.1%
+[Parallel] Player A [DAVEAI[RL_Eval]]: 53.9%
+[Parallel] Player B [STEAMAI[HardestAI]]: 46.1%
 ```
 
-`parse_matchup_seatindep()` reads the **candidate identity's** rate from this block. It
-deliberately ignores the `[Parallel] White: N (X%)` / `Black:` / `Draws:` seat tally — for
-a switched candidate the seat tally is NOT the candidate's win rate. (`[Pair]` is the serial
-path; `[Parallel]` is the parallel path.)
+`parse_matchup_seatindep()` reads the **candidate identity's** rate from this block
+(exact-case substring on the label — `RL_Eval` keeps its argv case). It deliberately ignores the
+`[Parallel] White: N (X%)` / `Black:` / `Draws:` seat tally — for a switched candidate the seat
+tally is NOT the candidate's win rate. (`[Pair]` is the serial path; `[Parallel]` is parallel.)
 
-## A8 — STEAMAI is a fixed-N yardstick (NOT sequential)
+## A8 — STEAMAI is a fixed-N yardstick
 
-Only the candidate-vs-parent **promotion gate** uses sequential escalation
-(`sequential_gate()`, 128→256→512). The STEAMAI yardstick uses a fixed `--steam-games` N
-(default 200) plus a CI — no escalation. The `narrow` C++ yardstick is likewise a fixed-N
-comparison + CI.
-
-## A3 — group-sequential promotion gate
-
-`decisive()` (naive "95% CI excludes 0.5", peeked at 128/256/512) has a family-wise Type-I of
-~10–12%. That is tolerable for the **final asymmetric GO** signal, but a false-positive
-*promotion* would poison the replay buffer. `decisive_gate()` therefore uses a Pocock-style
-constant-z boundary (`Z_POCOCK_3LOOK = 2.289`, nominal alpha' ~ 0.022 per look) at the
-interim looks, relaxing to full 95% alpha at the final look. Worked borderline case at the
-interim look (verified): n=128, wins=76 (59.4%) → 95% iid CI lower bound 0.507 (`decisive`=True),
-Pocock-z CI lower bound 0.493 (`decisive_gate(final_look=False)`=False).
-
-## A4 — clustered (card-set-level) CI preferred for the paired pools
-
-The paired colour-swap design has negative within-pair correlation that iid Wilson ignores,
-yielding too-wide CIs (wasted games / spurious "inconclusive"). `clustered_ci(set_scores)`
-takes per-card-set seat-independent scores and returns `(mean, lo, hi)` from a normal interval
-on the across-set mean (SE = std/sqrt(k)). **This is the statistically-correct interval for
-the paired pools** once per-set scores are parsed; the iid `wilson_ci` is the conservative
-fallback.
+The STEAMAI yardstick uses a fixed `--steam-games` N (default 200) plus a Wilson CI — no
+escalation (no sequential machinery exists anywhere; see the statistics note above). The
+`narrow` C++ yardstick is likewise a fixed-N comparison + CI.
 
 ## Parse-format note (validated Step 5, 2026-06-03)
 
@@ -92,55 +122,54 @@ The C++ tournament's **stdout** carries only a seat-symmetric *score matrix* (pl
 score + a `TotalScore` column) and a `Games completed:` line — it does **not** carry
 per-player Wins/Loss/Draw/Games. The canonical per-player W/L/D/Games table is written to the
 **HTML** results file `tests/Tournament_<name>_<date>.html` (table `id="statsTable"`, columns
-Player, Score, Games, Wins, Loss, Draw, …). `run_cpp_tournament()` reads that HTML file and
-`parse_tournament_stdout()` parses its statsTable rows; a stdout score-matrix fallback is kept
-for diagnostics. The original plan regex (which assumed W/L/D in stdout) was corrected to this
-HTML-statsTable form, validated against a real `AB_5var_Smoke` run
+Player, Score, Games, Wins, Loss, Draw, …). `run_cpp_tournament()` reads that HTML file (with a
+staleness guard: the HTML's mtime must postdate the run) and `parse_tournament_stdout()` parses
+its statsTable rows; a stdout score-matrix fallback is kept for diagnostics. The original plan
+regex (which assumed W/L/D in stdout) was corrected to this HTML-statsTable form, validated
+against a real `AB_5var_Smoke` run
 (`{DSNN_Mixed35_5var_F1s: w2 d0 g4, DSNN_M35_1s_c03: w2 d0 g4}`).
 
 ## Config blocks (dave `config.txt`)
 
-Four `run:false` tournament blocks added (paired group1/group2, `Seed:2026`, `RandomCards:8`,
-`Threads:8`, `rounds:64`):
+Four anchor tournament blocks (paired group1/group2, `Seed:2026`, `RandomCards:8`,
+`Threads:8`, `rounds:64`, `run:false` at rest — `run_eval.py` flips one at a time and flips it
+back in a `finally`):
 
-- `RL_Eval_iter0_forced` / `RL_Eval_iter0_general`  — `RL_Eval` vs `RL_Eval_iter0`
-- `RL_Eval_narrow_forced` / `RL_Eval_narrow_general` — `RL_Eval` vs `DSNN_Mixed35_5var`
+- `RL_Eval_iter0_forced` (`ForcedCards:["Hotel"]`) / `RL_Eval_iter0_general` — `RL_Eval` vs `RL_Eval_iter0`
+- `RL_Eval_narrow_forced` (`ForcedCards:["Hotel"]`) / `RL_Eval_narrow_general` — `RL_Eval` vs `RL_Narrow`
 
-`ForcedCards:["Hotel"]` and the `RL_Eval_iter0` player are **not yet wired** (Task 12/13);
-unknown fields and run:false blocks referencing an undefined player are silently ignored by
-the C++ parser — **verified**: with all four blocks present, `Prismata_Testing.exe` parsed
-`config.txt` and ran the fast smoke block to completion (exit 0), no parse error / abort. The
-iter0 blocks were therefore KEPT, not removed.
+`ForcedCards` IS wired (engine support landed; the self-play block `RL_Step2_Smoke` also forces
+Hotel), and `RL_Eval_iter0` is a fully defined player pointing at `neural_weights_mixed_v221.bin`
+(the parent — per the 2026-06-07 decision, NOT a wide-untrained placeholder).
+`eval/preflight_config.py` (stage 0) asserts zero `run:true` blocks at rest, the RL iterator
+shape, opening-book sizes, the full declared reference graph (including `WeightsFile`
+existence), the frozen tuple, and the `RL_Eval` parent re-pin.
 
-## Cross-path sanity (Step 7)
+## Cross-path sanity (Step 7, historical)
 
 `HardestAIUCT` self-play on both paths (small-sample bound, NOT a gate). Caveat: the two paths
 use **different engines** — the C++ tournament path is the dave `Prismata_Testing.exe`, while
-`matchup_clean.js` drives the main-repo `build/Release/prismata_selfplay.exe` (fresh process per
-turn). So this bounds the *combined* engine+path effect, not a pure path effect.
+`matchup_clean.js` drives fresh per-turn processes. So this bounds the *combined* engine+path
+effect, not a pure path effect.
 
 - C++ tournament (`HardestAIUCT_1s_TMP` self-play, 16 games / 32 seat-games, 1 s, Seed 2026):
   **50.0%** seat-independent (16W / 16L / 0D — exactly symmetric, as expected for identical
   config self-play).
 - `matchup_clean.js` (`HardestAIUCT` self-play, 16 games, 1 s, `--player-switch`):
   seat-independent Player A **50.0%**, Player B **43.8%** (White 56.3% / Black 37.5%, 1 draw).
-- Delta: **~0–6 pp** (Player A matches the C++ path exactly at 50.0%; the ~6 pp spread is
-  within sampling noise at this very small N — single-digit absolute game counts).
+- Delta: **~0–6 pp** (within sampling noise at this very small N).
 
-The full 128-game cross-path measurement is **deferred** (documented bound only; small N here).
-Note these two paths use different engines (dave `Prismata_Testing.exe` vs main-repo
-`prismata_selfplay.exe`), so this bounds the combined engine+path effect, not a pure path
-effect. This run also confirmed the live `matchup_clean.js` seat-independent line shape —
-`[Parallel] Player A [HardestAIUCT[HardestAI]]: 50%` — which `parse_matchup_seatindep` handles.
+The full 128-game cross-path measurement remains deferred (documented bound only).
 
-## DEFERRED items
+## Remaining deferred items
 
-| Item | Blocked on | Task |
-|------|-----------|------|
-| STEAMAI live anchor run | `PrismataAI.exe.ORIG` not on disk | Task 14 |
-| `human_val.py` live run (6s/12s yardstick) | needs `.ORIG` + A12 standalone-loads-config | Task 14 |
-| `action_coverage.py` runtime | `js_engine/query_move.js` + exporter `ig_present`/`ig_click_count`/`ig_feasible_max` stamps (dave@6037382) | Task 10 / Task 5 |
-| `RL_Eval_iter0_*` block execution | wide-untrained iter-0 weights not yet generated (`RL_Eval_iter0` is defined but still points at the `neural_weights_mixed_35prop.bin` placeholder) | Task 14 |
+| Item | Status |
+|------|--------|
+| Full production iteration (multi-hour self-play → train → eval) | DEFERRED to the user — all machinery + prerequisites in place (`rl_campaign.md` "Run prerequisites") |
+| `human_val.py` live run (6s/12s yardstick) | not yet run live; the MasterBot baseline now exists at its permanent home |
+| Throughput table (games/hour at N=1000 etc.) | measure on the first real iteration (`rl_campaign.md` Throughput) |
 
-The orchestration wiring of the live anchor runs (mapping `run_cpp_tournament` / `run_steam`
-results into `manifest['anchors']`) is left as documented hooks; live runs happen in Task 14.
+Previously-deferred items now RESOLVED: the STEAMAI anchor (F-08 rewire, live 2-game verified);
+`action_coverage.py` runtime (exporter `ig_present`/`ig_click_count`/`ig_feasible_max` stamps,
+dave `6037382`, + `js_engine/query_move.js`); `RL_Eval_iter0` weights (= v221, not a
+placeholder); `run_eval.py` anchor orchestration (complete + unit-tested).

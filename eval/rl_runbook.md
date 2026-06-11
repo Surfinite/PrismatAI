@@ -1,0 +1,104 @@
+# RL Iteration Runbook — one loop, at a glance
+
+> Reference card for what `eval/run_iteration.ps1 -K <k>` does, what must be true before it starts, and
+> what changes between iterations. One sentence per step; tags mark what's load-bearing:
+> **[core]** = the loop doesn't work without it · **[gate]** = cheap check that aborts a bad run ·
+> **[optional]** = yardstick/reporting, removable without breaking the loop.
+> The Jun-9/Jun-10 audit findings (E1 random-init, M-03 val leak, F-07 dangling repoint, F-08 steam
+> mis-wire, M-04 epoch sizing, M-06 missing UCTConstant, dead stats) are all FIXED in the current code;
+> the two FINDINGS docs in `docs/superpowers/plans/` remain the historical record.
+
+## Pre-flight (before ANY iteration) — ENFORCED by `eval/preflight_config.py` (stage 0)
+
+The driver runs this automatically and aborts on any FAIL; it is also runnable standalone before any
+engine launch. It never rewrites `config.txt` — drift must be reconciled deliberately (edit
+`campaign_frozen.json` AND `config.txt` together).
+
+| Check (preflight name) | What it asserts | Why |
+|---|---|---|
+| `json_bom` | `config.txt` is strict JSON, no BOM | BOM makes the C++ parser skip the file silently |
+| `run_true` | every Benchmarks block `run:false` at rest | a stray `run:true` runs an unintended tournament on launch |
+| `iterator_shape` | `HardIterator_5var_IGsubset_Root` = AbilitySubset/IG_Only wrapping the 5-variant NoIG portfolio, dims [1,5,5,1], exact variant set; `V5_CS2_NoIG` transitively reaches `LiveOpeningBook2` | the Jun-4→9 crippled-iterator incident — now machine-checked |
+| `book_sizes` | `LiveOpeningBook2` == 50, `DefaultOpeningBook` == 4 (post SWF port) | book truncation/drift |
+| `reference_graph` | every declared reference resolves (openingBook, filter, subsetFilter, buyLimits, combination, PartialPlayers, include, iterator keys, PlayoutPlayer, WeightsFile file on disk) | dangling names; complements the engine's own construction-time hard-fails |
+| `frozen_tuple` | `RL_SelfPlay` MaxTraversals/TemperatureK/Tau/EpsilonUniform == `campaign_frozen.json`; `EpsilonLate` absent (or 0) | the three-way N skew happened once; the tuple IS the campaign identity |
+| `parent_repin` | `RL_Eval.WeightsFile` == the frozen `parent_bin` | F-07 recovery — a killed run must not leave an unpromoted candidate pinned |
+| `existences` | frozen `parent_pt`, the train/val H5s, and the 2016 MasterBot exe all exist | warm-start, M-03 val, and the steam yardstick depend on them |
+
+Two guards live OUTSIDE the preflight: no `use_dsnn.txt` / `PRISMATA_FORCE_DSNN` anywhere on an exe path
+(`run_eval.py` asserts these at eval time), and the engine itself now **hard-fails at construction** on
+unknown/empty books, unknown filters, and NN weights-load failures (dave `26075fa`/`d0ec633`), with an
+unloaded-net guard on the UCT value path (X5b).
+
+## The stages (0–8, plus the 4.5 tripwire)
+
+**0 — Structural preflight [gate]** — `preflight_config.py` (the table above); also rejects a `-N` that
+differs from `frozen_N`.
+
+**1 — Self-play export [core]** — flips `RL_Step2_Smoke` (`rounds:64`, **`Threads:8`**, ForcedCards Hotel)
+to `run:true` and runs `Prismata_Testing.exe`: the parent-net-guided UCT (frozen N=1000, whole-game
+τ=0.7 sampling) plays itself and writes one JSONL record per position, labelled with the eventual game
+outcome. Clears stale shards + parity sidecar first; flips the block back in a `finally`.
+
+**2 — Vectorize [core]** — concatenates the shards and converts JSONL → H5 tensors (schema v2.2.1), the
+format `train.py` consumes.
+
+**3 — Train [core]** — **warm-starts from the parent checkpoint via `--init-weights`** (E1 fix:
+`train.py --rl-mode` now HARD-FAILS without it; iter-1's parent = `deepsets_v221/swa_model.pt`, whose
+export is byte-identical to the deployed v221 `.bin`; iter K>1 = the previous iteration's SWA), then
+fits 6 low-LR epochs (SWA from epoch 3) on the last-W iterations' H5s mixed with human rehearsal.
+Validates on the **HELD-OUT** `human_val_1700_v2.h5` (M-03 fix — never the rehearsal file). Epoch
+length = ~one pass over the self-play window, not the rehearsal corpus (M-04 fix; LR schedule sized to
+match). Produces `swa_model.pt`.
+
+**4 — Export [core]** — converts `swa_model.pt` → `neural_weights_rl_iter<K>.bin` (the C++ DSN2 format).
+
+**4.5 — Val-acc tripwire [gate]** — candidate vs parent val-acc on the held-out human set
+(`eval_deepsets_h5.py`); **aborts if the candidate is >3.0 pp below its parent** (parent ≈71.8% on
+this set) — catches an E1-class bad-init/bad-train cheaply, before the expensive eval stages.
+
+**5 — Export-parity gate [gate]** — asserts C++ inference == PyTorch on a state batch (worst |Δ| < 1e-3),
+explicitly pinning `--pt`/`--bin` to THIS candidate; catches export/feature bugs, NOT net quality.
+
+**6 — Tactical suite [gate]** — replays the curated IG positions through the candidate via
+`query_move.js` (which injects the tuned `UCTConstant 0.3` by default — M-06) and fails only on a
+regression vs `eval/tactical_baseline.json`. The baseline's standing ktink FAIL is recorded
+(count 0 of feasible 2, want 1, at the suite's 3 s budget) — it is **budget-dependent** (the correct
+1-click line wins at N=256) and never gates, being a never-passed case.
+
+**7 — Eval [core]** — repoints `RL_Eval.WeightsFile` → the candidate, runs `run_eval.py` (anchors:
+iter0 = vs parent, forced+general; narrow = vs `RL_Narrow`; steam = DaveAI+candidate vs the 2016
+MasterBot at its permanent home), then **always restores `RL_Eval` → the parent in a `finally`**
+(F-07 fix). `run_eval.py` adds: active provenance (config must already point at the candidate;
+engine stderr must confirm the candidate-net load per anchor), an **incremental atomic manifest**
+(a kill keeps finished anchors), and the **verdict** — REJECT iff general-pool Wilson ci_upper < 0.5,
+REVIEW otherwise, INCOMPLETE if the general anchor is missing. Nothing auto-promotes.
+
+**8 — Coverage + dashboard [optional]** — tabulates the IG-click-count distribution (with feasible-max
+binning) from the self-play data and renders the human-facing results table.
+
+## Between iterations (manual today)
+
+1. **Decide** from the manifest/dashboard: promote, iterate, or stop. REJECT = proven worse on the
+   general pool; REVIEW = your judgment on the recorded numbers (`d_rl`/`d_reg` + CIs are information,
+   not gates).
+2. **If promoting:** the candidate becomes the new parent — update `RL_SelfPlay.WeightsFile` AND
+   `RL_Eval.WeightsFile` (the data generator + eval pin), the frozen `parent_bin`/`parent_pt` in
+   `campaign_frozen.json`, and the next iteration's warm-start `.pt`; commit the new `.bin` + config +
+   `campaign_frozen.json` together so the campaign identity stays one consistent tuple (the preflight's
+   `parent_repin`/`frozen_tuple` checks will otherwise fail the next run — by design).
+3. **If iterating:** keep the parent everywhere (stage 7 already restored `RL_Eval`); adjust data;
+   quarantine the failed candidate's artifacts (`training/data/rl_iter_<K>/`, the `.bin`) — the replay
+   window selects H5s **by filename**, so stale/invalid iterations would silently rejoin the training
+   mix at the same K.
+4. **Increment K** — stage 3's sliding window then picks up `rl_iter_{K-W+1..K}` automatically.
+
+## The knobs that ARE the campaign identity
+
+Single source of truth: **`eval/campaign_frozen.json`** (stage 0 asserts `config.txt` matches; nothing
+rewrites either side silently). Frozen 2026-06-11: `N=1000` (self-play MaxTraversals) ·
+`TemperatureTau=0.7` / `TemperatureK=999` (whole-game τ-sampling) · `EpsilonUniform=0` /
+`EpsilonLate` absent · `UCTConstant=0.3` · `Threads:8` self-play · `W=5` (replay window) ·
+epochs/lr (6 @ 1e-5, SWA from 3) · rehearsal fraction (0.30 → 0.10, −0.07/iter) · anchor budget
+(7000 ms / 100k) · parent weights (v221). Change any of these mid-campaign and iteration results stop
+being comparable — that's a NEW campaign (`rl_campaign.md` §1).
