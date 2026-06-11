@@ -156,7 +156,7 @@ function Get-ValAcc {
 #    integrity, zero run:true Benchmarks blocks, RL iterator shape (the
 #    crippled-iterator guard), opening-book sizes, the full declared reference
 #    graph (incl. WeightsFile existence), EpsilonLate key-absent convention,
-#    RL_Eval parent re-pin (F-07), and parent_pt / data-H5 existences.
+#    all-four parent re-pins (F-07/N-2), and parent_pt / data-H5 existences.
 #    The tuple stays FROZEN by owner decision: nothing here rewrites config.txt;
 #    reconcile drift deliberately (edit campaign_frozen.json AND config.txt
 #    together) — the script must never silently mutate the campaign identity.

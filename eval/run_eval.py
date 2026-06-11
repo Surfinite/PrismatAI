@@ -407,6 +407,12 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
     # N-2: each C++ anchor's opponent (RL_Eval_iter0 = the verdict opponent; RL_Narrow) is
     # parent-pinned, so the engine stderr must confirm the PARENT net load too.
     parent_basename = os.path.basename(args.parent_weights) if args.parent_weights else None
+    if parent_basename and parent_basename == weights_basename:
+        # One stderr load line would satisfy BOTH stamps -> a candidate-vs-itself eval would
+        # pass silently. A deliberate self-match sanity run should omit --parent-weights.
+        raise RuntimeError(f"--weights and --parent-weights are the same file ({weights_basename}) "
+                           "-- candidate-vs-itself is not a gating eval. Omit --parent-weights "
+                           "for a deliberate self-match.")
     # Active provenance pre-flight: the config must already point the candidate player at the
     # candidate net BEFORE any tournament flips on.
     verify_config_weights(args.dave_bin, args.candidate_player, weights_basename)
