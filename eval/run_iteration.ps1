@@ -197,15 +197,22 @@ Write-Host "`n[1/8] self-play (2/3 general -> $selfplayDirGen ; 1/3 forced-Hotel
 if (Test-Path $selfplayDir)    { Remove-Item "$selfplayDir/selfplay_*.jsonl"    -ErrorAction SilentlyContinue }
 if (Test-Path $selfplayDirGen) { Remove-Item "$selfplayDirGen/selfplay_*.jsonl" -ErrorAction SilentlyContinue }
 if (Test-Path $parityStates)   { Remove-Item "$parityStates/sp_*.json"          -ErrorAction SilentlyContinue }
-Edit-Config -Op run -Name RL_SelfPlay_General -Value true
-Edit-Config -Op run -Name RL_Step2_Smoke -Value true
-Push-Location $bin   # the exe resolves asset/config/* (cardLibrary.jso, config.txt) CWD-relative
+# BOTH run:true flips live INSIDE the try (V-C): a throw between/during the flips must still
+# reach the finally that restores BOTH blocks (setting run:false on an already-false block is
+# an idempotent no-op), otherwise a half-flipped config stays run:true until the next preflight.
 try {
-    & "$bin/Prismata_Testing.exe"   # runs every run:true Benchmarks block in one launch
-    if ($LASTEXITCODE -ne 0) { throw "Prismata_Testing.exe (self-play) exited $LASTEXITCODE" }
+    Edit-Config -Op run -Name RL_SelfPlay_General -Value true
+    Edit-Config -Op run -Name RL_Step2_Smoke -Value true
+    Push-Location $bin   # the exe resolves asset/config/* (cardLibrary.jso, config.txt) CWD-relative
+    try {
+        & "$bin/Prismata_Testing.exe"   # runs every run:true Benchmarks block in one launch
+        if ($LASTEXITCODE -ne 0) { throw "Prismata_Testing.exe (self-play) exited $LASTEXITCODE" }
+    }
+    finally {
+        Pop-Location
+    }
 }
 finally {
-    Pop-Location
     Edit-Config -Op run -Name RL_Step2_Smoke -Value false
     Edit-Config -Op run -Name RL_SelfPlay_General -Value false
 }

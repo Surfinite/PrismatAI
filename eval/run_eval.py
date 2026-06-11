@@ -14,8 +14,10 @@ All eval players run at the DEPLOYMENT budget (TimeLimit:7000/MaxTraversals:1000
 
 VERDICT (2026-06-10, replaces the old GO gate): the old rule (d_rl >= +5pp AND forced
 ci_lower > 0.5) was statistically incoherent at 128 games — an observed +5pp needed 58.7% to
-fire, so P(GO | true +5pp) ~ 13%. "Prove improvement" is replaced by "rule out harm" + human
-judgment:
+fire, so P(GO | true +5pp) ~ 13%. "Prove improvement" is replaced by "detect proven harm" +
+human judgment — REVIEW means the numbers could not prove harm, NOT that safety is certified
+(at n=128, P(REJECT | true -5pp) ~ 18%, P(REJECT | true parity) ~ 2.1%; REJECT reliably fires
+only for ~-10pp-and-worse regressions):
   REJECT     iff the general-pool anchor completed AND its 95% Wilson ci_upper < 0.5
              (the candidate is statistically proven worse than the parent);
   REVIEW     iff it completed and ci_upper >= 0.5 (everything else is a human call);
@@ -428,7 +430,7 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
         "complete": False,
         "anchors_completed": [],
         "anchors": {}, "pools": {},
-        "notes": ("Verdict = rule-out-harm on iter0/general (candidate vs PARENT promoted net, "
+        "notes": ("Verdict = detect-proven-harm on iter0/general (candidate vs PARENT promoted net, "
                   "unforced sets): " + VERDICT_RULE + " narrow + steam are non-gating trajectory "
                   "yardsticks. CIs are iid Wilson (the tournament HTML emits no per-card-set "
                   "scores, so no paired/sequential statistics exist). Manifest is written "

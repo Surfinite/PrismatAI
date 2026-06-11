@@ -25,13 +25,13 @@ by `eval/preflight_config.py` (stage 0).
 | Self-play traversals | `N` (MaxTraversals) | **1000 — FROZEN by judgment** | Owner decision on the screen-only calibration data (the `calibrate_n.py` sweeps were screening, not proof; the Jun-4→9 crippled-iterator window invalidated the earlier N=256/512 picks). Under regime v2 argmax governs most moves, so **N's argmax quality matters MORE**, not less. A **32-game re-screen at the regime-v2 tuple passes ALL gates** (`eval/n1000_rescreen_k12.json`; the v1 whole-game-sampling record is `eval/n1000_rescreen.json`). Lives on `RL_SelfPlay` (+ the per-N `RL_SelfPlay_N*` blocks). |
 | Temperature | `τ` (TemperatureTau) | **0.7** | self-play sampler only; eval is pure argmax. Set by the pre-agreed probe rule (`eval/tau_probe_n1000.json`): at N=1000/c=0.3 the root visit distributions are **near-uniform** (median top-share 0.141 < 0.20 AND median normalized entropy 0.984 > 0.90) → τ=0.7 sharpens them. |
 | Temperature horizon | `K` (TemperatureK) | **12 (regime v2, 2026-06-11)** | τ-sampling fires for turns **0–11 only** — past the opening book and through the early-mid region where the MB-flavour data bias lives (supersedes the same-day v1 K=999 whole-game sampling — see the regime-v2 note below). |
-| ε-uniform root noise | `ε` (EpsilonUniform) / **`EpsilonLate`** | **0** / **0.05** | EpsilonUniform stays 0 in the opening window (τ carries the early exploration). **`EpsilonLate=0.05`**: turns ≥12 are argmax with a 5% uniform-child chance (~1.1 mild deviations/game among curated portfolio plans) — present in config as a JSON double, preflight-enforced EQUAL to frozen (absent key = 0.0 = FAIL). |
+| ε-uniform root noise | `ε` (EpsilonUniform) / **`EpsilonLate`** | **0** / **0.05** | EpsilonUniform stays 0 in the opening window (τ carries the early exploration). **`EpsilonLate=0.05`**: turns ≥12 are argmax with a 5% uniform-child chance (~1.1 mild deviations/game a priori; measured **0.69/game** at the 32-game re-screen — 23% of late roots are single-child and uniform picks can land on argmax) — present in config as a JSON double, preflight-enforced EQUAL to frozen (absent key = 0.0 = FAIL). |
 | UCT constant | `c` (UCTConstant) | **0.3** | the tuned cValue, on every RL player AND injected by `js_engine/query_move.js` by default (M-06 fix — omitting it silently regressed to the engine default 2.0, the worst measured c). |
 | Self-play threads | — | **Threads:8** | BOTH self-play blocks (`RL_Step2_Smoke` + `RL_SelfPlay_General`); the dave engine is x64 and Threads:8 export was audit-verified clean. |
 | Self-play data mix | `selfplay_mix` | **⅔ general + ⅓ forced-Hotel** | regime v2: `RL_SelfPlay_General` (rounds:43 → ~86 games, NO ForcedCards — the broadened general-improvement goal) + `RL_Step2_Smoke` (rounds:21 → ~42 games, ForcedCards `["Hotel"]` — keeps IG-decision density). Separate export dirs REQUIRED (per-Tournament-instance export counter). Preflight-enforced from the frozen `selfplay_mix`. |
 | Replay window | `W` | 5 | sliding self-play buffer (`--replay-window 5`). |
 | Rehearsal fraction | — | start **0.30** → floor **0.10**, decay **0.07/iter** | human-only rehearsal mix (`rl_data.rehearsal_fraction_for_iter`). Epoch length = `ceil(sp_total/(1-frac))` draws ≈ one pass over the self-play window, NOT the rehearsal corpus (M-04 fix; LR schedule sized to match). |
-| Verdict (was: promotion gate) | — | **REJECT / REVIEW / INCOMPLETE** | see §3 — rule-out-harm on the general pool; **nothing auto-promotes**. The old group-sequential CI-lower>0.50 gate was deleted 2026-06-10. |
+| Verdict (was: promotion gate) | — | **REJECT / REVIEW / INCOMPLETE** | see §3 — detect-proven-harm on the general pool; **nothing auto-promotes**. The old group-sequential CI-lower>0.50 gate was deleted 2026-06-10. |
 | Rollback margin | `Y` | 0.03 (**recorded metadata only**) | nothing gates on it since 2026-06-10; `d_reg` is informational (with `general_wr_ci`). |
 | Eval budget | — | **MaxTraversals 100000 / TimeLimit 7000 (7 s)** | **deployment-representative; DECOUPLED from self-play N** — A1. Candidate AND every anchor run at this budget. |
 | Effect size | `E` | +5 pp (**recorded metadata only**) | the smallest IG-driven gain judged worth AWS spend; informs the human call, gates nothing (the old GO rule that used it was statistically incoherent — see §3). |
@@ -60,16 +60,30 @@ measured **40–46% non-argmax moves** and **significantly longer games** under 
 the outcome labels of **every earlier record** in the game, while early noise buys position coverage
 cheaply (divergent trajectories whose labels stay truthful under near-greedy continuation). **v2 =
 early-noise/late-precision**: τ=0.7 sampling for turns 0–11 (`TemperatureK=12`), then argmax with a 5%
-uniform-child chance (`EpsilonLate=0.05`, ≈1.1 mild deviations/game among curated portfolio plans) so
+uniform-child chance (`EpsilonLate=0.05`, ≈1.1 mild deviations/game a priori; measured **0.69/game** at
+the 32-game re-screen, `eval/n1000_rescreen_k12.json` — 23% of late roots are single-child and uniform
+picks can land on argmax) so
 recurring decisions (e.g. the per-turn IG click) still get occasional exploration without whole-game
 label corruption.
 
 **Residual risk (accepted):** a value-only net gets **no counterfactual signal on unplayed branches** —
-with the late game near-greedy, alternatives the argmax never picks are never labelled; the ~1.1 late
-deviations/game is the deliberate compromise between that blindness and label corruption.
+with the late game near-greedy, alternatives the argmax never picks are never labelled; the ~1.1 a-priori
+(0.69 measured) late deviations/game is the deliberate compromise between that blindness and label corruption.
 **WATCH at iter-1:** `d_rl` (forced-pool delta) **and the sampled-move fraction** for turns ≥12 from the
 `sampled_idx`/`argmax_idx` stamps (expected ≈5% of late moves; re-screen observed value in
 `eval/n1000_rescreen_k12.json`).
+
+### 1c. Historical-baseline discontinuity (2026-06-10)
+
+dave commit `09c5436` (Jun 10 — SWF-faithful buy-tree port + the 4-entry `DefaultOpeningBook` + the
+`DefaultLimits` Mobile-Animus cap) changed partial players consumed by **every deployed player AND the
+Playout evaluator**. Consequence: **every number measured before Jun 10** — including the pre-RL cValue
+sweep that chose the frozen `c=0.3`, the May 17–18 parity/DSNN results, and the Jun-8 anchor runs — was
+measured against a **DIFFERENT opponent configuration** and is **not comparable** to post-port numbers.
+The campaign re-baselines forward: the tuple was frozen **post-port** (2026-06-11) and the stage-0
+preflight asserts the post-port shape (`iterator_shape`, `book_sizes`). `c=0.3` is **retained** on the
+cValue sweep's *monotonicity* (strength was monotonic in 1/c — a buy-tree change is unlikely to invert
+a monotonic trend); a re-sweep is a cheap future experiment if iter-1 behaves oddly.
 
 ---
 
@@ -92,7 +106,9 @@ book on, the effective IG-exploration window was ≈ turns 3–6, yet **IG is a 
 all game**. The v1 answer (K=999 whole-game τ-sampling) over-corrected — 40–46% non-argmax moves
 corrupted outcome labels (§1b). **Regime v2 resolves A2 with `EpsilonLate=0.05`**: for `turnNumber ≥ K`
 (=12) the root stays argmax but a persistent 5% uniform-child chance gives the recurring per-turn IG
-decision exploration all game at ~1.1 mild deviations/game, while τ=0.7 covers turns 0–11.
+decision exploration all game at ~1.1 mild deviations/game a priori (measured 0.69/game at the 32-game
+re-screen — 23% of late roots are single-child and uniform picks can land on argmax), while τ=0.7 covers
+turns 0–11.
 
 ### A6 — Perspective round-trip (IMPLEMENTED 2026-06-11 — `training/tests/test_perspective_roundtrip.py`)
 
@@ -135,7 +151,7 @@ and the value-only-RL-on-this-axis line is **stopped**, not re-spun.
 
 Cost note: the **local false-positive cost is more than £400** — a wrong "spend AWS" call buys the whole
 AWS campaign's engineering + monitoring + opportunity cost. That asymmetry is why the verdict (§3) is
-conservative (rule-out-harm + human judgment, never auto-promote) and the regression measurement (A1) is
+conservative (detect-proven-harm + human judgment, never auto-promote) and the regression measurement (A1) is
 wired carefully.
 
 ---
@@ -145,8 +161,10 @@ wired carefully.
 The spec's original GO rule (`CI_lower(d_rl) > 0 AND d_rl >= E AND d_reg >= -Y`) was **deleted as
 statistically incoherent at the configured sample size**: at 128 games/anchor, an observed +5 pp needed
 ~58.7% to clear the CI condition, so P(GO | true +5 pp) ≈ 13% — the gate could essentially never fire on
-the effect it was pre-registered for. "Prove improvement" is replaced by **"rule out harm" + human
-judgment** (`run_eval.py::compute_verdict`, `VERDICT_RULE`):
+the effect it was pre-registered for. "Prove improvement" is replaced by **"detect proven harm" + human
+judgment** (`run_eval.py::compute_verdict`, `VERDICT_RULE`). **REVIEW means the numbers could not prove
+harm — NOT that safety is certified.** Honest power at n=128: P(REJECT | true −5pp) ≈ 18% and
+P(REJECT | true parity) ≈ 2.1% — REJECT reliably fires only for ~−10pp-and-worse regressions:
 
 ```
 verdict input = the iter0/GENERAL anchor (candidate vs PARENT promoted net, unforced sets,
@@ -198,9 +216,10 @@ Adapted for the IG-click-count axis (items 1–2 mapped to this campaign's instr
    passive stamps (`candidate_net_sha256`) and the contamination asserts (no `PRISMATA_FORCE_DSNN`, no
    `use_dsnn.txt`; a missing 2016-MasterBot baseline soft-skips ONLY the steam yardstick — stage-0
    preflight hard-fails on it for campaign runs).
-7. **Was eval statistically powered for the question asked?** → the verdict is rule-out-harm, which 128
-   games CAN answer; *proving* a +5 pp gain would need ≈600 games/anchor at p<0.05 — that remains the bar
-   for the human AWS-spend judgment, not an automated gate.
+7. **Was eval statistically powered for the question asked?** → the verdict is detect-proven-harm — at
+   128 games REJECT reliably fires only for ~−10pp-and-worse regressions (§3); *proving* a +5 pp gain
+   would need ≈600 games/anchor at p<0.05 — that remains the bar for the human AWS-spend judgment, not
+   an automated gate.
 8. **Was self-play non-degenerate at N?** → the calibrate_n non-degeneracy check; game-length / ply stats.
 9. **Did rehearsal overwhelm the RL signal?** → rehearsal fraction schedule (start 0.30 → floor 0.10).
 10. **Target-up but general-down (overfit, not no-learning)?** → compare forced-pool `d_rl` vs general-pool

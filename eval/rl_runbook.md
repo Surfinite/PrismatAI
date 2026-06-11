@@ -113,7 +113,9 @@ rewrites either side silently). Frozen 2026-06-11 (**regime v2** — early-noise
 superseding the same-day v1 whole-game sampling, which measured 40–46% non-argmax moves +
 significantly longer games): `N=1000` (self-play MaxTraversals) · `TemperatureTau=0.7` /
 `TemperatureK=12` (τ-sampling turns 0–11 only) · `EpsilonUniform=0` / **`EpsilonLate=0.05`** (turns
-≥12: argmax with a 5% uniform-child chance, ~1.1 mild deviations/game) · `UCTConstant=0.3` ·
+≥12: argmax with a 5% uniform-child chance, ~1.1 mild deviations/game a priori — measured 0.69/game at
+the 32-game re-screen: 23% of late roots are single-child and uniform picks can land on argmax) ·
+`UCTConstant=0.3` ·
 `Threads:8` self-play · self-play mix **⅔ general + ⅓ forced-Hotel** (`selfplay_mix`:
 `RL_SelfPlay_General` rounds:43 + `RL_Step2_Smoke` rounds:21) · `W=5` (replay window) · epochs/lr
 (6 @ 1e-5, SWA from 3) · rehearsal fraction (0.30 → 0.10, −0.07/iter) · anchor budget (7000 ms /

@@ -1,7 +1,7 @@
 # RL self-play eval harness
 
 Per-iteration evaluation for the RL self-play loop: win-rate math with **iid Wilson CIs**, a
-**REJECT / REVIEW / INCOMPLETE verdict** (rule-out-harm; nothing auto-promotes), an **incremental
+**REJECT / REVIEW / INCOMPLETE verdict** (detect-proven-harm; nothing auto-promotes), an **incremental
 atomic manifest**, **active provenance** (config pre-flight + engine-stderr load confirmation),
 and action-coverage metrics for the IG-optional axis. The campaign contract is
 `eval/rl_campaign.md`; the operational reference is `eval/rl_runbook.md`; the frozen tuple is
@@ -12,7 +12,7 @@ eval/
   wilson.py             # win_rate + wilson_ci (iid 95%) — the COMPLETE stats surface (see below)
   run_eval.py           # orchestrator: anchors, verdict, provenance, incremental manifest
   preflight_config.py   # stage 0: config integrity + frozen tuple + parent re-pin (hard-fails)
-  campaign_frozen.json  # the frozen HP tuple (N=1000, tau=0.7, K=999, eps=0, c=0.3, Threads:8)
+  campaign_frozen.json  # the frozen HP tuple (N=1000, tau=0.7, K=12, eps=0 + EpsilonLate=0.05, c=0.3, Threads:8)
   run_iteration.ps1     # one-iteration driver (stages 0-8)
   tactical_suite.py     # O7 IG-click-COUNT regression suite (vs tactical_baseline.json)
   action_coverage.py    # IG click-count distribution + feasible-max binning

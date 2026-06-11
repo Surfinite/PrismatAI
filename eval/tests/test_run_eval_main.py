@@ -131,7 +131,7 @@ def test_observed_plus5pp_is_review_not_reject(tmp_path):
     # 71/128 ~ 55.5% (the observed +5pp the OLD gate demanded but could never certify).
     # This INVERTS the old test at former line :96 (test_no_go_when_ci_straddles_half), which
     # encoded "+5pp observed but CI straddles 0.5 -> NO GO" as correct behavior. Under the new
-    # rule-out-harm semantics the same evidence is REVIEW — explicitly NOT a rejection — and
+    # detect-proven-harm semantics the same evidence is REVIEW — explicitly NOT a rejection — and
     # the promotion judgment belongs to the human.
     table = _full_table(_anchor("RL_Eval_iter0_general", 71))
     m = run_eval.build_manifest(_args(tmp_path), steam_available=False,
