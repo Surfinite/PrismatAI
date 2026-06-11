@@ -24,13 +24,20 @@ to `--root-iterator HardIterator_5var_IGsubset_Root` / `--move-iterator HardIter
   "request": { "mergedDeck": [...], "gameState": {...}, "aiParameters": {...} }, // F6 CurrentInfo
   "root_iterator": "HardIterator_5var_IGsubset_Root",  // optional per-case override (else CLI default)
   "move_iterator": "HardIterator_5var",                // optional per-case override (else CLI default)
-  "expect": { "ig_click_count": 1 } | null,            // asserted COUNT (null = informational, no gate)
+  "expect": { "ig_click_count": 1,                     // asserted COUNT (null expect = informational, no gate)
+              "ig_feasible_max": 2 } | null,           // OPTIONAL curated denominator override (reporting only)
   "note": "where it came from / why it matters"
 }
 ```
 
 - **`known_move`** — run through the suite as a PASS/FAIL gate. PASS iff
   `count_ig_clicks(resp) == expect.ig_click_count`.
+- **`expect.ig_feasible_max`** — optional, never gates. The suite reports each case as
+  `count k of feasible m` where `m = min(ready IGs, attainable red)` (mirrors the engine's
+  `ig_feasible_max` stamp, dave@6037382). If absent, `m` is computed from the case's
+  `request.gameState` + `mergedDeck` — but ONLY for action-phase states; a pre-swoosh
+  defense-phase dump would undercount (red zeroed, assigned producers unreset), so such cases
+  report `?` unless this override is curated.
 - **`looks_forced`** — NOT a gate (`expect: null`). Appended to `eval/backlog_action_space.md` as
   an informational watch-list of positions with no known-correct IG-click count yet.
 - **`root_iterator` / `move_iterator`** — optional per-case overrides; fall back to the CLI

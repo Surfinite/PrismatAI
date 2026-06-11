@@ -4,6 +4,8 @@ manifest.
 Two signals:
   * self-play sampled IG-click-count distribution, read from the C++ exporter's per-record
     ig_present (0/1) + ig_click_count (int) stamps (REPLACES the old binary ig_legal/ig_fired);
+    binned against ig_feasible_max = min(ready IGs, attainable red) when present
+    (dave@6037382) — see selfplay_ig_rate for the pair/normalized views and old-record fallback;
   * argmax IG-click-COUNT distribution + root entropy, from query_move.js run over an IG battery
     with the widened HardIterator_5var_IGsubset_Root (the count metric is only selectable there).
 
@@ -32,10 +34,22 @@ IGSUBSET_MOVE = "HardIterator_5var"
 def selfplay_ig_rate(jsonl_dir):
     """Self-play sampled IG-click-COUNT distribution from the C++ exporter stamps.
 
-    Each self-play V2 record now carries ig_present (0/1) and ig_click_count (int >= 0). Among
-    turns where IG was present, report the mean IG-click count and the count distribution."""
+    Each self-play V2 record carries ig_present (0/1) and ig_click_count (int >= 0); records
+    exported since dave@6037382 also carry ig_feasible_max = min(ready IGs, attainable red)
+    evaluated at the mover's Action-phase entry (the meaningful denominator: a player with
+    4 IGs but only RR can click at most 2). Among ig_present turns we report:
+      * the raw mean / count distribution (always — backward compatible);
+      * when the stamp is present, the (ig_click_count, ig_feasible_max) PAIR distribution
+        and a normalized count/feasible view over feasible_max > 0 turns (feasible_max == 0
+        turns are excluded from the normalized view — nothing was clickable);
+      * how many ig_present records LACKED ig_feasible_max (old exporter records fall back
+        to the raw-count view only) and how many violate count <= feasible (telemetry —
+        should be 0 by construction).
+    All new keys are additive; existing manifest keys keep their names and meanings."""
     present = 0
-    counts = []  # ig_click_count over ig_present turns
+    counts = []   # ig_click_count over ig_present turns (raw view, always)
+    pairs = []    # (ig_click_count, ig_feasible_max) over ig_present turns carrying the stamp
+    missing_feasible = 0  # ig_present turns lacking ig_feasible_max (pre-stamp records)
     for f in glob.glob(os.path.join(jsonl_dir, "*.jsonl")):
         with open(f, encoding="utf-8") as fh:
             for line in fh:
@@ -45,15 +59,42 @@ def selfplay_ig_rate(jsonl_dir):
                 r = json.loads(line)
                 if r.get("ig_present"):
                     present += 1
-                    counts.append(int(r.get("ig_click_count", 0)))
+                    k = int(r.get("ig_click_count", 0))
+                    counts.append(k)
+                    if "ig_feasible_max" in r:
+                        pairs.append((k, int(r["ig_feasible_max"])))
+                    else:
+                        missing_feasible += 1
     dist = {}
     for c in counts:
         dist[c] = dist.get(c, 0) + 1
+
+    pair_dist = {}
+    for k, m in pairs:
+        key = f"{k}/{m}"
+        pair_dist[key] = pair_dist.get(key, 0) + 1
+    norm = [k / m for k, m in pairs if m > 0]
+    norm_dist = {}
+    for v in norm:
+        key = f"{v:.2f}"
+        norm_dist[key] = norm_dist.get(key, 0) + 1
+    violations = sum(1 for k, m in pairs if k > m)
+
     return {
         "ig_present_turns": present,
         "mean_ig_clicks_selfplay": (sum(counts) / len(counts)) if counts else None,
         # stringify keys so the dist round-trips cleanly through JSON
         "ig_click_dist_selfplay": {str(k): dist[k] for k in sorted(dist)},
+        # --- feasible-max binning (additive keys; absent-field fallback is the raw view above) ---
+        # (count/feasible) pair distribution, keys "k/m", sorted numerically by (k, m)
+        "ig_feasible_pair_dist": {k: pair_dist[k]
+                                  for k in sorted(pair_dist, key=lambda s: tuple(map(int, s.split("/"))))},
+        "ig_feasible_turns": len(pairs),                 # ig_present turns carrying the stamp
+        "ig_feasible_positive_turns": len(norm),         # of those, turns with feasible_max > 0
+        "ig_click_norm_mean": (sum(norm) / len(norm)) if norm else None,
+        "ig_click_norm_dist": {k: norm_dist[k] for k in sorted(norm_dist, key=float)},
+        "ig_feasible_missing_records": missing_feasible, # old records lacking ig_feasible_max
+        "ig_feasible_invariant_violations": violations,  # count > feasible (should be 0)
     }
 
 

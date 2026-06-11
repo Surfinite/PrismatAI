@@ -59,9 +59,22 @@ CASE FORMAT (eval/tactical_cases/*.json)
   "request": { "mergedDeck": [...], "gameState": {...}, "aiParameters": {...} },  # F6 CurrentInfo
   "root_iterator": str | absent,   # per-case override; falls back to --root-iterator
   "move_iterator": str | absent,   # per-case override; falls back to --move-iterator
-  "expect": { "ig_click_count": int } | null,   # null = informational (no gate)
+  "expect": { "ig_click_count": int,            # asserted COUNT (null expect = informational)
+              "ig_feasible_max": int | absent } # optional curated denominator override
+            | null,
   "note": str
 }
+
+FEASIBLE-MAX REPORTING (count k of feasible m)
+----------------------------------------------
+Each case's result is reported as `count k of feasible m`, mirroring the engine's
+ig_feasible_max stamp (dave@6037382): m = min(ready IGs of the mover, attainable red).
+Priority: an explicit `expect.ig_feasible_max` in the case file wins; otherwise m is computed
+from the case's request gameState + mergedDeck (the response carries no state), but ONLY when
+the state is already in the action phase — a pre-swoosh defense-phase dump would undercount
+(red pool zeroed, last turn's assigned producers unreset), so we report m as unknown ("?")
+there rather than a wrong number; curate `expect.ig_feasible_max` for such cases.
+m never gates pass/fail — the gate stays count == expect.ig_click_count.
 """
 import argparse
 import json
@@ -114,6 +127,75 @@ def count_ig_clicks(resp):
         if isinstance(args, dict) and args.get("cardName") in IG_NAMES:
             n += 1
     return n
+
+
+def _red_in_mana(mana):
+    """Count red ('C') in a client mana/script code string (digits = gold; letters repeat)."""
+    return str(mana).count("C") if mana is not None else 0
+
+
+def feasible_max_for_case(case):
+    """Best-effort ig_feasible_max for a tactical case: min(ready IGs, attainable red).
+
+    Mirrors the engine stamp (dave-master TournamentGame computeIGFeasibleMax):
+      ready IG       = mover-owned IG instance, alive, role 'default' (ability not yet
+                       used), constructionTime == 0, delay == 0;
+      attainable red = mover's red pool + red ('C') in the abilityScript receive of the
+                       mover's READY click-ability units (no current card produces red on
+                       click — all red production is beginOwnTurnScript — so this term is
+                       0 today; kept for engine-definition parity). Ability red COSTS and
+                       charge bookkeeping are ignored, exactly like the engine stamp.
+
+    Priority:
+      1. explicit `expect.ig_feasible_max` in the case file (curated override);
+      2. computed from request.gameState + request.mergedDeck, ONLY when the state is
+         already in the action phase (the decision point). For a pre-swoosh defense-phase
+         dump the red pool is zeroed and assigned producers have not reset, so a naive
+         computation would undercount — return None (unknown) instead.
+
+    Returns int, or None when unknown."""
+    override = (case.get("expect") or {}).get("ig_feasible_max")
+    if override is not None:
+        return int(override)
+
+    req = case.get("request") or {}
+    gs = req.get("gameState") or {}
+    if gs.get("phase") != "action":
+        return None
+
+    mover = int(gs.get("turn", 0))  # client gameState: "turn" = active player index
+    mana = gs.get("whiteMana") if mover == 0 else gs.get("blackMana")
+    attainable_red = _red_in_mana(mana)
+
+    # cardName -> red in abilityScript receive (mergedDeck receive uses the client mana code;
+    # it may also be a bare int = gold, which contains no red).
+    ability_red = {}
+    has_click_ability = set()
+    for entry in req.get("mergedDeck") or []:
+        script = entry.get("abilityScript")
+        if not isinstance(script, dict):
+            continue
+        name = entry.get("name")
+        has_click_ability.add(name)
+        recv = script.get("receive")
+        if isinstance(recv, str):
+            ability_red[name] = _red_in_mana(recv)
+
+    ready_igs = 0
+    for inst in gs.get("table") or []:
+        if inst.get("owner") != mover or inst.get("deadness") != "alive":
+            continue
+        if inst.get("role") != "default":
+            continue
+        if int(inst.get("constructionTime", 0)) != 0 or int(inst.get("delay", 0)) != 0:
+            continue
+        name = inst.get("cardName")
+        if name in IG_NAMES:
+            ready_igs += 1
+        if name in has_click_ability:
+            attainable_red += ability_red.get(name, 0)
+
+    return min(ready_igs, attainable_red)
 
 
 def load_cases():
@@ -269,6 +351,7 @@ def main():
     for c in known:
         name = c.get("name", c.get("_file", "?"))
         expect = (c.get("expect") or {}).get("ig_click_count")
+        feasible = feasible_max_for_case(c)  # int | None (never gates pass/fail)
         try:
             resp = query(c, args.player, args.weights, args.dave_exe,
                          args.time_limit, args.timeout, args.root_iterator, args.move_iterator)
@@ -285,6 +368,7 @@ def main():
         results[name] = {
             "ig_click_count": got,
             "expect_ig_click_count": expect,
+            "ig_feasible_max": feasible,  # int | None (unknown); reporting only, never gates
             "passed": passed,
             "n_clicks": len(resp.get("aiclicks") or []),
             "aivisits_len": len(resp.get("aivisits") or []),
@@ -293,7 +377,8 @@ def main():
         }
         status = "PASS" if passed else "FAIL"
         want = "n/a" if expect is None else expect
-        print(f"  [{status}] {name} (ig_click_count={got}, want={want}) "
+        feas = "?" if feasible is None else feasible
+        print(f"  [{status}] {name} (count {got} of feasible {feas}, want={want}) "
               f"[clicks={results[name]['n_clicks']}, visits={results[name]['aivisits_len']}, "
               f"argmax={results[name]['aiargmax']}, chosen={results[name]['aichosen']}]")
 
