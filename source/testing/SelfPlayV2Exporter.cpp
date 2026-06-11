@@ -31,10 +31,10 @@ void SelfPlayV2Exporter::capture(const GameState & state, int plyIndex)
     _rawStates.emplace_back(plyIndex, state.toJSONString());
 }
 
-void SelfPlayV2Exporter::stampLastMove(int igClickCount, int sampledIdx, int argmaxIdx, int rootChildren, bool rootTruncated)
+void SelfPlayV2Exporter::stampLastMove(int igClickCount, int igFeasibleMax, int sampledIdx, int argmaxIdx, int rootChildren, bool rootTruncated)
 {
     if (_moveStamps.empty()) return;
-    _moveStamps.back() = MoveStamp{ igClickCount, sampledIdx, argmaxIdx, rootChildren, rootTruncated };
+    _moveStamps.back() = MoveStamp{ igClickCount, igFeasibleMax, sampledIdx, argmaxIdx, rootChildren, rootTruncated };
 }
 
 bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
@@ -101,7 +101,8 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
         doc.AddMember("total_plies", totalPlies, alloc);
 
         const MoveStamp & ms = _moveStamps[i];
-        doc.AddMember("ig_click_count", ms.igClickCount, alloc);
+        doc.AddMember("ig_click_count",  ms.igClickCount,  alloc);
+        doc.AddMember("ig_feasible_max", ms.igFeasibleMax, alloc);
         doc.AddMember("sampled_idx",    ms.sampledIdx,   alloc);
         doc.AddMember("argmax_idx",     ms.argmaxIdx,    alloc);
         doc.AddMember("root_children",  ms.rootChildren, alloc);

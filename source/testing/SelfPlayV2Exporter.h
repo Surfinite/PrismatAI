@@ -23,6 +23,11 @@ public:
     // played (the turn-start record is captured BEFORE the action-phase move exists):
     //   igClickCount - # of Infusion-Grid (codename "Hotel") self-sac USE_ABILITY
     //                  clicks the active player made in the move actually played.
+    //   igFeasibleMax- the max # of IG clicks the mover COULD have made this turn:
+    //                  min(ready Hotel count, attainable red), evaluated at decision
+    //                  time (the mover's Action-phase entry — see TournamentGame's
+    //                  computeIGFeasibleMax for the exact definition). Invariant:
+    //                  igClickCount <= igFeasibleMax. 0 when no ready IGs.
     //   sampledIdx   - root child index the search chose after temperature/eps
     //                  sampling (Player_UCT::lastChosenIdx), or -1 if not a UCT mover.
     //   argmaxIdx    - most-visited root child index (Player_UCT::lastArgmaxIdx), or -1.
@@ -30,7 +35,7 @@ public:
     //                  (Player_UCT::rootChildren), or 0 if not a UCT mover.
     //   rootTruncated- whether the MaxChildren cap bound at the root AND the iterator still
     //                  had candidates (Player_UCT::rootTruncated); observe-only telemetry.
-    struct MoveStamp { int igClickCount = 0; int sampledIdx = -1; int argmaxIdx = -1; int rootChildren = 0; bool rootTruncated = false; };
+    struct MoveStamp { int igClickCount = 0; int igFeasibleMax = 0; int sampledIdx = -1; int argmaxIdx = -1; int rootChildren = 0; bool rootTruncated = false; };
 
 private:
 
@@ -63,7 +68,7 @@ public:
     // Set the move-derived fields on the most-recently-captured record. Called once
     // per player-turn AFTER the action-phase move is played (see TournamentGame).
     // No-op if no record has been captured yet.
-    void stampLastMove(int igClickCount, int sampledIdx, int argmaxIdx, int rootChildren, bool rootTruncated);
+    void stampLastMove(int igClickCount, int igFeasibleMax, int sampledIdx, int argmaxIdx, int rootChildren, bool rootTruncated);
 
     // Backfill outcome_p0 + total_plies into every stashed record and write the
     // JSONL file. outcome_p0 = (winner==Player_One ? 1.0 : Player_None ? 0.5 : 0.0).
