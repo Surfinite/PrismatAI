@@ -32,6 +32,7 @@ class TournamentGame
     // finalizes at end. Dave's engine (Game / GameState) is unmodified.
     std::string                       _replaySaveDir;
     int                               _replayGameIndex = 0;
+    std::string                       _replayMetaJson;   // serialized provenance object from Tournament (RC-3)
     std::unique_ptr<ReplaySerializer> _serializer;
 
     // Optional DeepSets V2 training-data capture (RL self-play). When the dir is
@@ -68,6 +69,13 @@ public:
     {
         _replaySaveDir = dir;
         _replayGameIndex = gameIndex;
+    }
+
+    // Optional replay provenance meta (serialized JSON object), embedded as the
+    // replay's top-level "meta" by the serializer at finalize (RC-3).
+    void setReplayMeta(const std::string & metaJson)
+    {
+        _replayMetaJson = metaJson;
     }
 
     // Enable per-turn DeepSets V2 training-record export for this game. dir =

@@ -3,6 +3,8 @@
 #include "Timer.h"
 #include "PrismataAI.h"
 #include "Random.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
 
 #include <iostream>
 #include <iomanip>
@@ -61,6 +63,26 @@ Tournament::Tournament(const rapidjson::Value & tournamentValue)
     {
         _players.push_back(tournamentValue["players"][i]["name"].GetString());
         _playerGroups.push_back(tournamentValue["players"][i]["group"].GetInt());
+    }
+
+    // Replay provenance meta (RC-3): serialized once here, embedded as the
+    // top-level "meta" object of every replay this tournament writes. Additive
+    // keys — viewers ignore them. Built with rapidjson (not string concat) so
+    // the tournament name is JSON-escaped.
+    if (!_saveReplaysDir.empty())
+    {
+        rapidjson::Document meta(rapidjson::kObjectType);
+        auto & a = meta.GetAllocator();
+        rapidjson::Value name(_name.c_str(), static_cast<rapidjson::SizeType>(_name.size()), a);
+        meta.AddMember("tournament", name, a);
+        // Seed:0 = time-based / non-reproducible — omit rather than stamp a misleading 0.
+        // (At Threads>1 even a nonzero seed governs only the card-set sequence — §1d.)
+        if (_seed != 0) { meta.AddMember("seed", static_cast<uint64_t>(_seed), a); }
+        meta.AddMember("threads", static_cast<unsigned>(_threads), a);
+        rapidjson::StringBuffer buf;
+        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+        meta.Accept(w);
+        _replayMetaJson.assign(buf.GetString(), buf.GetSize());
     }
 }
 
@@ -151,16 +173,24 @@ void Tournament::run()
                     g1.setPlayerSlots((int)p1, (int)p2);
                     g2.setPlayerSlots((int)p2, (int)p1);
 
-                    if (!_saveReplaysDir.empty())
+                    // One shared id per game keeps game_NNNN.json.gz and
+                    // selfplay_NNNN.jsonl index-paired (replay-audit O1).
+                    if (!_saveReplaysDir.empty() || !_exportTrainingV2Dir.empty())
                     {
-                        g1.setReplaySaveDir(_saveReplaysDir, _replayGameCounter.fetch_add(1));
-                        g2.setReplaySaveDir(_saveReplaysDir, _replayGameCounter.fetch_add(1));
-                    }
-
-                    if (!_exportTrainingV2Dir.empty())
-                    {
-                        g1.setExportTrainingV2(_exportTrainingV2Dir, _exportV2GameCounter.fetch_add(1));
-                        g2.setExportTrainingV2(_exportTrainingV2Dir, _exportV2GameCounter.fetch_add(1));
+                        const int gid1 = _artifactGameCounter.fetch_add(1);
+                        const int gid2 = _artifactGameCounter.fetch_add(1);
+                        if (!_saveReplaysDir.empty())
+                        {
+                            g1.setReplaySaveDir(_saveReplaysDir, gid1);
+                            g2.setReplaySaveDir(_saveReplaysDir, gid2);
+                            g1.setReplayMeta(_replayMetaJson);
+                            g2.setReplayMeta(_replayMetaJson);
+                        }
+                        if (!_exportTrainingV2Dir.empty())
+                        {
+                            g1.setExportTrainingV2(_exportTrainingV2Dir, gid1);
+                            g2.setExportTrainingV2(_exportTrainingV2Dir, gid2);
+                        }
                     }
 
                     playGame(g1, t);
@@ -295,13 +325,20 @@ TournamentGame Tournament::playGame(const GameState & state, const size_t whiteI
 
     TournamentGame game(state, _players[whiteIndex], white, _players[blackIndex], black);
     game.setPlayerSlots((int)whiteIndex, (int)blackIndex);   // H3: credit results by slot, not name
-    if (!_saveReplaysDir.empty())
+    // One shared id per game keeps game_NNNN.json.gz and selfplay_NNNN.jsonl
+    // index-paired even at Threads>1 (replay-audit O1).
+    if (!_saveReplaysDir.empty() || !_exportTrainingV2Dir.empty())
     {
-        game.setReplaySaveDir(_saveReplaysDir, _replayGameCounter.fetch_add(1));
-    }
-    if (!_exportTrainingV2Dir.empty())
-    {
-        game.setExportTrainingV2(_exportTrainingV2Dir, _exportV2GameCounter.fetch_add(1));
+        const int gid = _artifactGameCounter.fetch_add(1);
+        if (!_saveReplaysDir.empty())
+        {
+            game.setReplaySaveDir(_saveReplaysDir, gid);
+            game.setReplayMeta(_replayMetaJson);
+        }
+        if (!_exportTrainingV2Dir.empty())
+        {
+            game.setExportTrainingV2(_exportTrainingV2Dir, gid);
+        }
     }
     game.playGame();
 

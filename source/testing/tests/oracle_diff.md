@@ -83,3 +83,44 @@ correlates them back to instances.
 Task 19's intent — establishing serializer fidelity — is met via mechanic-based
 verification plus adversarial review. No automated `matchup_clean.js` diff was
 run, by design: it would be misleading rather than informative.
+
+## Addendum — 2026-06-12 replay-audit fixes (audit doc:
+## `PrismataAI/docs/superpowers/plans/2026-06-10-replay-export-audit-FINDINGS.md`)
+
+A full audit (4 investigators + empirical runs) verified the capture mechanism
+**exact** (re-applied states == V2 exporter turn-start records, 34/34 + 96/96
+plies; all phase transitions incl. `beginTurn` run inside `doAction`; action
+resolution RNG-free) and landed these serializer/harness fixes:
+
+- **Trailing `turnBoundaries` sentinel dropped at finalize** (V1/RC-1): the old
+  `== states.Size()` entry crashed `nextTurn()` in all three viewers; now
+  `turnBoundaries.length == turns`, matching the JS writer.
+- **HUD charge gate fixed** (F3): `abilityUsable` now gates on CURRENT charges
+  (the old `startingCharge < chargeUsed` form was unsatisfiable dead code, and
+  its "beginTurn refreshes charges" justification was false — charges are spent
+  permanently). Depleted Rhino/Tia/Sentinel/Bombarder no longer inflate
+  maxAttack/oppAttackPotential.
+- **Sniper `*` gated on potentiallyMoreAttack** (F6): only Apollo counts
+  (Kinetic Driver lacks pMA in the SWF card data; Deadeye is `abilityNetherfy`,
+  not a targetAction unit — outside this loop on both sides).
+- **Provenance meta** (RC-3): top-level `formatVersion:1`, `gameIndex`,
+  `savedAtUtc`, and a `meta` object (tournament/seed/threads) — additive;
+  viewers ignore unknown keys.
+- **Shared per-game artifact id** (O1): one counter feeds both
+  `game_NNNN.json.gz` and `selfplay_NNNN.jsonl`, so the indices pair to the
+  same game even at Threads>1.
+- **Failure paths loud** (R7/R11): `finalize()` failure now logs; after each
+  move re-application the clone is fingerprint-compared against the live state
+  (turn/player/phase/card-counts/resources) and a diverged replay is dropped
+  loudly instead of written corrupt.
+- **Parity sidecars gzipped** (`sp_*.json.gz`, shared `GzipUtil.h`) into
+  **per-export-dir** `<exportTrainingV2>_parity` dirs (a shared sibling dir let
+  two same-launch tournaments overwrite each other's `sp_0000_*` — adversarial
+  review catch), and **archived per iteration** (slice-prefixed) with the
+  replays by `run_iteration.ps1` stage 1.5.
+
+Known limitations carried forward (documented in the audit doc): `numTurns`
+keeps the ENGINE convention (= JS `numTurns` − 1) **deliberately** — changing
+it would break `GameState::initFromJSON` re-extraction; consumers must use the
+explicit `turn` field, never `numTurns` parity. `deadness` stays coarse
+alive/dead; `actions[]` keep raw recycled CardIDs.

@@ -40,8 +40,14 @@ public:
 
     // Record a turn boundary in turnBoundaries[]. Called once per real turn,
     // AFTER that turn's per-action snapshots have been pushed (so the boundary
-    // index points past the turn's last action).
+    // index points past the turn's last action). finalize() drops the final
+    // boundary (== states.Size()) to match the JS convention — see finalize().
     void recordTurnBoundary();
+
+    // Optional provenance meta (embedded as the top-level "meta" object at
+    // finalize). Pass a serialized JSON object, e.g. {"tournament":...,
+    // "seed":..., "threads":...}. Additive — consumers ignore unknown keys.
+    void setMetaJson(const std::string & metaJson) { _metaJson = metaJson; }
 
     // Finalize: set winner + write `<dir>/game_<idx>.json.gz`.
     // Returns true on success, false if the file couldn't be written.
@@ -53,6 +59,7 @@ public:
 private:
     std::string _p0;
     std::string _p1;
+    std::string _metaJson;   // serialized provenance object; empty = omit
     std::vector<std::string> _cardSet;
     rapidjson::Document _doc;        // root document; states[] / actions[] / turnBoundaries[]
     rapidjson::Value _states;        // arrays owned by _doc

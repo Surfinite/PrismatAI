@@ -16,8 +16,12 @@ class Tournament
     std::string                         _date;
     std::string                         _saveReplaysDir;   // empty = disabled
     std::string                         _exportTrainingV2Dir;   // empty = disabled
-    mutable std::atomic<int>            _replayGameCounter{0};
-    mutable std::atomic<int>            _exportV2GameCounter{0};
+    // ONE id per game, shared by the replay (game_NNNN.json.gz) and the V2 export
+    // (selfplay_NNNN.jsonl), so the two artifacts stay index-paired even at Threads>1
+    // — the old independent counters could interleave across workers and pair
+    // game_0007 with a different game's selfplay_0007 (replay-audit O1 fix).
+    mutable std::atomic<int>            _artifactGameCounter{0};
+    std::string                         _replayMetaJson;   // provenance object embedded in each replay (RC-3)
     size_t                              _rounds;
     size_t                              _totalGamesPlayed;
     size_t                              _discardedGames;

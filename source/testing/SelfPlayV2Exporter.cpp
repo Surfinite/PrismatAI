@@ -1,5 +1,6 @@
 #include "SelfPlayV2Exporter.h"
 #include "V2Record.h"
+#include "GzipUtil.h"
 
 #include <cstdio>
 #include <fstream>
@@ -114,14 +115,20 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
         out << buffer.GetString() << "\n";
     }
 
-    // Parity-states sidecar: write each stashed raw state to a sibling parity_states/
-    // dir (e.g. asset/training/rl_smoke_v2 -> asset/training/parity_states) as
-    // sp_<gameId>_<plyIndex>.json. These bare-doc state files feed the C++<->PyTorch
-    // value export-parity harness (tools/parity/dump_value_batch.py +
-    // compare_parity_deepsets.py). This does NOT alter the V2 JSONL output above.
+    // Parity-states sidecar: write each stashed raw state as gzipped
+    // sp_<gameId>_<plyIndex>.json.gz (raw .json only as a compress-failure
+    // fallback) into a PER-EXPORT-DIR sidecar dir, <outDir>_parity
+    // (e.g. asset/training/rl_step2_v2 -> asset/training/rl_step2_v2_parity).
+    // Per-dir (NOT a shared sibling) because gameIds restart at 0 in every
+    // Tournament instance: two export blocks in one exe launch would otherwise
+    // overwrite each other's sp_0000_* files in a shared dir (the 2026-06-12
+    // review blocker). These bare-doc state files feed the C++<->PyTorch value
+    // export-parity harness (tools/parity/dump_value_batch.py +
+    // compare_parity_deepsets.py) and are archived per RL iteration as the
+    // future-schema re-extraction source. Does NOT alter the V2 JSONL above.
     {
         const std::filesystem::path parityDir =
-            std::filesystem::path(_outDir).parent_path() / "parity_states";
+            std::filesystem::path(_outDir + "_parity");
 
         std::error_code pec;
         std::filesystem::create_directories(parityDir, pec);
@@ -134,14 +141,29 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
         {
             for (const auto & rs : _rawStates)
             {
+                // Gzipped since the 2026-06-12 replay-audit fixes: the sidecars are now
+                // ARCHIVED per iteration (run_iteration.ps1) as the future-schema
+                // re-extraction source, and raw they cost ~10x the V2 JSONL. python's
+                // gzip + the parity tooling (tools/parity/dump_value_batch.py) read
+                // .json.gz directly; on the rare compression failure fall back to the
+                // legacy raw .json so the state is never lost (tooling globs both).
+                const std::string gz = gzipCompress(rs.second);
                 char spName[64];
                 std::snprintf(spName, sizeof(spName), "sp_%04d_%04d.json", gameId, rs.first);
-                const std::filesystem::path spPath = parityDir / spName;
+                std::string spFile(spName);
+                if (!gz.empty()) { spFile += ".gz"; }
+                const std::filesystem::path spPath = parityDir / spFile;
 
                 std::ofstream sp(spPath, std::ios::binary);
                 if (sp)
                 {
-                    sp << rs.second;
+                    const std::string & payload = gz.empty() ? rs.second : gz;
+                    sp.write(payload.data(), static_cast<std::streamsize>(payload.size()));
+                    if (!sp.good())
+                    {
+                        fprintf(stderr, "[SelfPlayV2Exporter] short write on parity state %s\n",
+                                spPath.string().c_str());
+                    }
                 }
                 else
                 {

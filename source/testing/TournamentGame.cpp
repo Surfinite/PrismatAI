@@ -107,6 +107,7 @@ void TournamentGame::playGame(size_t updateIntervalSec)
             if (!ct.isBaseSet()) cardSet.push_back(ct.getUIName());
         }
         _serializer = std::make_unique<ReplaySerializer>(_playerNames[0], _playerNames[1], cardSet);
+        if (!_replayMetaJson.empty()) { _serializer->setMetaJson(_replayMetaJson); }
         _serializer->captureInitialState(init);
     }
 
@@ -239,18 +240,48 @@ void TournamentGame::playGame(size_t updateIntervalSec)
         // exactly the states the real game passed through — Game::doMove applies
         // the same actions via GameState::doAction — without any engine-side hook.
         // Order matches the schema: per-action states first, then the trailing
-        // turn boundary (which points past the last action and is harmless for
-        // the scrubber).
+        // turn boundary (the final one is dropped again at finalize — see
+        // ReplaySerializer::finalize).
         if (_serializer)
         {
             const Move & move = _game.getPreviousMove();
             for (ActionID a(0); a < move.size(); ++a)
             {
                 const Action & action = move.getAction(a);
+                // Mirror Game::doMove exactly: it soft-asserts on a false doAction and
+                // CONTINUES, so a deterministic false recurs identically here and is not
+                // by itself divergence. The real divergence tripwire is the end-state
+                // comparison below.
                 preMoveState->doAction(action);
                 _serializer->captureActionApplied(*preMoveState, action);
             }
-            _serializer->recordTurnBoundary();
+
+            // Equivalence tripwire (audit R11): after re-applying the full move, the
+            // clone must have reached the live game's post-move state. The capture's
+            // correctness is by-construction (doMove == doAction sequence, RNG-free),
+            // but an engine change could silently break that — compare cheap scalar
+            // fingerprints and drop the replay (loudly) rather than write a corrupt one.
+            // V2 export is unaffected.
+            const GameState & live = _game.getState();
+            const bool diverged =
+                   preMoveState->getTurnNumber()   != live.getTurnNumber()
+                || preMoveState->getActivePlayer() != live.getActivePlayer()
+                || preMoveState->getActivePhase()  != live.getActivePhase()
+                || preMoveState->numCards(Players::Player_One) != live.numCards(Players::Player_One)
+                || preMoveState->numCards(Players::Player_Two) != live.numCards(Players::Player_Two)
+                || preMoveState->getResources(Players::Player_One).getString() != live.getResources(Players::Player_One).getString()
+                || preMoveState->getResources(Players::Player_Two).getString() != live.getResources(Players::Player_Two).getString();
+            if (diverged)
+            {
+                fprintf(stderr, "[ReplaySerializer] re-application diverged from the live state after turn %d "
+                                "— dropping replay game_%04d (capture equivalence broken; see audit R11)\n",
+                        (int)live.getTurnNumber(), _replayGameIndex);
+                _serializer.reset();
+            }
+            else
+            {
+                _serializer->recordTurnBoundary();
+            }
         }
 
         if (updateIntervalSec > 0 && updateTimer.getElapsedTimeInSec() >= updateIntervalSec)
@@ -270,7 +301,13 @@ void TournamentGame::playGame(size_t updateIntervalSec)
                             : (w == Players::Player_Two) ? 1
                             : -1; // draw / no winner
         const int turns = static_cast<int>(finalState.getTurnNumber());
-        _serializer->finalize(winnerInt, turns, _replaySaveDir, _replayGameIndex);
+        if (!_serializer->finalize(winnerInt, turns, _replaySaveDir, _replayGameIndex))
+        {
+            // R7: a failed write (disk full, dir vanished, compression failure) must
+            // not be silent — the replay is the iteration's forensic record.
+            fprintf(stderr, "[ReplaySerializer] FAILED to write %s/game_%04d.json.gz\n",
+                    _replaySaveDir.c_str(), _replayGameIndex);
+        }
         _serializer.reset();
     }
 

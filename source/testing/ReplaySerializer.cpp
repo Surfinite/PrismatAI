@@ -12,7 +12,8 @@
 #include <cstdio>
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
-#include "miniz/miniz.h"
+#include "GzipUtil.h"
+#include <ctime>
 
 namespace Prismata
 {
@@ -66,48 +67,19 @@ namespace
         obj.AddMember(rapidjson::StringRef(key), v, a);
     }
 
-    // Wrap `data` as a standard gzip (.gz) stream: 10-byte gzip header + raw
-    // DEFLATE body (miniz) + CRC32 + ISIZE footer. The browser's
-    // DecompressionStream('gzip') in /replay/local reads this directly (it keys
-    // on the 0x1f 0x8b magic). Returns empty on compression failure.
-    std::string gzipCompress(const std::string & data)
-    {
-        size_t deflatedLen = 0;
-        // window_bits = -15 => raw deflate (no zlib header); level 9; same params
-        // miniz's own zip writer uses for stored entries.
-        const mz_uint flags = tdefl_create_comp_flags_from_zip_params(9, -15, MZ_DEFAULT_STRATEGY);
-        void * deflated = tdefl_compress_mem_to_heap(data.data(), data.size(), &deflatedLen, flags);
-        if (!deflated) { return std::string(); }
-
-        std::string out;
-        out.reserve(deflatedLen + 18);
-
-        const unsigned char header[10] = { 0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0x00, 0xff };
-        out.append(reinterpret_cast<const char *>(header), 10);
-        out.append(static_cast<const char *>(deflated), deflatedLen);
-        mz_free(deflated);
-
-        const mz_ulong crc = mz_crc32(MZ_CRC32_INIT,
-                                      reinterpret_cast<const unsigned char *>(data.data()),
-                                      data.size());
-        auto appendLE = [&out](mz_uint32 v) {
-            const char b[4] = { char(v & 0xff), char((v >> 8) & 0xff),
-                                char((v >> 16) & 0xff), char((v >> 24) & 0xff) };
-            out.append(b, 4);
-        };
-        appendLE(static_cast<mz_uint32>(crc));                       // CRC32 of uncompressed data
-        appendLE(static_cast<mz_uint32>(data.size() & 0xffffffffu)); // ISIZE mod 2^32
-        return out;
-    }
+    // gzipCompress lives in GzipUtil.h (shared with SelfPlayV2Exporter's
+    // parity sidecars since the 2026-06-12 replay-audit fixes).
 
     // ===================== Task 17: derived display fields =====================
     // Faithful port of js_engine/StateHelper.js (attack/chill/sniper potential) and
     // replay_exporter.js computeEconEstimate (gold range). Zero engine changes — all
     // values come from existing read-only accessors. Documented approximations:
-    //   * snipers count ignores CardTypeInfo.potentiallyMoreAttack (not exposed via
-    //     CardType) — only affects a "*" suffix on the attack number.
-    //   * chargeGained is not exposed, treated as 0 in the ability-usable gate.
-    //   * attack-resonate bonus (rare units, +1 attack) is not modelled.
+    //   * snipers: potentiallyMoreAttack is not exposed via CardType, so the gate is
+    //     hardcoded to the only pMA snipe unit in the ranked pool (Apollo) — see
+    //     isPotentiallyMoreAttackSniper (2026-06-12 F6 fix).
+    //   * chargeGained is not exposed, treated as 0 in the ability-usable gate
+    //     (true for every ranked cardLibrary.jso unit — none has chargeGained).
+    //   (gold- and attack-resonate ARE modelled — see resonateBonus below.)
 
     // gold a script's effect produces. NOTE: do NOT gate on Script::hasEffect() —
     // that is false for receive-only scripts (no create/destroy), which would drop
@@ -132,13 +104,29 @@ namespace
     // ability usable next turn (health/charge gate).
     // Charge: only gate when the unit actually uses charges (Card.cpp:681 does the same);
     // otherwise chargeUsed is vestigial (e.g. Drone has chargeUsed=1 but usesCharges()==false).
-    // Use startingCharge — beginTurn() refreshes m_currentCharges to it — so this models the
-    // unit's charge at the start of the next turn rather than its (possibly tapped) current value.
+    // Gate on the CURRENT charge — charges are spent permanently (useAbility) and are NOT
+    // refreshed by beginTurn (Card::beginTurn never writes m_currentCharges), so a depleted
+    // Rhino/Tia produces no further ability attack. Mirrors the engine's own legality gate
+    // (Card.cpp:681) and the SWF/JS HUD gate (StateHelper.js: inst.charge >= card.chargeUsed).
+    // [2026-06-12 replay-audit F3 fix: the old startingCharge form was unsatisfiable dead
+    // code, over-counting depleted charge units by up to +7 attack vs the live client.]
     bool abilityUsable(const Card & c, const CardType & ct)
     {
         if (c.currentHealth() + ct.getHealthGained() < ct.getHealthUsed()) return false;
-        if (ct.usesCharges() && ct.getStartingCharge() < ct.getChargeUsed()) return false;
+        if (ct.usesCharges() && c.getCurrentCharges() < ct.getChargeUsed()) return false;
         return true;
+    }
+
+    // SWF gates the sniper '*' suffix on the card's potentiallyMoreAttack flag, which is
+    // not exposed via CardType. Of the two ranked targetAction:"snipe" units, the SWF card
+    // data (90.bin) sets it ONLY on Apollo — Kinetic Driver lacks it (its snipe cannot raise
+    // attack-through), so the live client never counts it. Deadeye Operative is not a
+    // targetAction unit at all (abilityNetherfy — modelled as a destroy script, never
+    // reaches this loop). Hardcoded because the set is tiny and fixed in the ranked pool.
+    // [2026-06-12 replay-audit F6 fix.]
+    bool isPotentiallyMoreAttackSniper(const CardType & ct)
+    {
+        return ct.getUIName() == "Apollo";
     }
 
     // count a player's in-window units of a given internal card name (resonate target)
@@ -205,8 +193,9 @@ namespace
                 {
                     if (ct.getTargetAbilityType() == ActionTypes::CHILL)
                         p.disrupt += static_cast<int>(ct.getTargetAbilityAmount());
-                    else if (ct.getTargetAbilityType() == ActionTypes::SNIPE)
-                        ++p.snipers;   // approx (potentiallyMoreAttack not exposed)
+                    else if (ct.getTargetAbilityType() == ActionTypes::SNIPE
+                             && isPotentiallyMoreAttackSniper(ct))
+                        ++p.snipers;   // pMA-gated (matches the SWF '*' rule)
                 }
             }
         }
@@ -494,8 +483,52 @@ bool ReplaySerializer::finalize(int winner, int turns,
 {
     auto & a = _doc.GetAllocator();
 
+    // Drop the trailing turn boundary (== states.Size(), pushed after the final
+    // turn). JS-produced replays never carry it, and all shipped viewers'
+    // nextTurn() dereference boundaries unclamped — the sentinel made next-turn
+    // navigation inside the last turn throw on every C++ replay. Removing it
+    // also restores the JS convention turnBoundaries.length == turns.
+    // [2026-06-12 replay-audit V1/RC-1 fix.]
+    // 'while' for defensiveness — today the sentinel is unique (the empty-move discard
+    // path guarantees >=1 state per recorded turn), but a duplicate must never survive.
+    while (!_turnBoundaries.Empty()
+           && _turnBoundaries[_turnBoundaries.Size() - 1].GetInt() == static_cast<int>(_states.Size()))
+    {
+        _turnBoundaries.PopBack();
+    }
+
     // ---- Top-level wrapper (matchup-format schema the PixiJS viewer consumes) ----
     _doc.AddMember("replay", true, a);
+    // Provenance header (RC-3): additive keys — every existing consumer stores only
+    // the fields it knows, so these are ignored by the viewers and available to
+    // tooling. formatVersion 1 = first stamped revision (post replay-audit fixes).
+    _doc.AddMember("formatVersion", 1, a);
+    _doc.AddMember("gameIndex", gameIndex, a);
+    if (!_metaJson.empty())
+    {
+        rapidjson::Document metaDoc;
+        if (!metaDoc.Parse(_metaJson.c_str()).HasParseError() && metaDoc.IsObject())
+        {
+            rapidjson::Value meta(metaDoc, a);   // deep copy into _doc's allocator
+            _doc.AddMember("meta", meta, a);
+        }
+        else
+        {
+            fprintf(stderr, "[ReplaySerializer] invalid meta JSON ignored for game %d\n", gameIndex);
+        }
+    }
+    {
+        char ts[32];
+        const std::time_t now = std::time(nullptr);
+        std::tm utc{};
+#ifdef _WIN32
+        gmtime_s(&utc, &now);
+#else
+        gmtime_r(&now, &utc);
+#endif
+        std::strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", &utc);
+        addStr(_doc, "savedAtUtc", ts, a);
+    }
     addStr(_doc, "p0", _p0, a);
     addStr(_doc, "p1", _p1, a);
     _doc.AddMember("winner", winner, a);             // 0 = white, 1 = black, -1 = draw
@@ -531,7 +564,10 @@ bool ReplaySerializer::finalize(int winner, int turns,
     // ---- Write <outDir>/game_NNNN.json.gz ----
     std::error_code ec;
     std::filesystem::create_directories(outDir, ec);
-    if (ec) { return false; }
+    // create_directories can set ec spuriously on an already-existing dir (MSVC edge
+    // case / concurrent first-writers at Threads>1). is_directory is the source of
+    // truth — same guard as SelfPlayV2Exporter::finalize.
+    if (ec && !std::filesystem::is_directory(outDir)) { return false; }
 
     char filename[64];
     std::snprintf(filename, sizeof(filename), "game_%04d.json.gz", gameIndex);
