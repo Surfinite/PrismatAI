@@ -1,7 +1,6 @@
 # PROMPT: fix `in_card_set` (and audit ALL) train/inference feature consistency → retrain
 
-> Paste this into a fresh session. SEPARATE track from the v2.2 RL-prep handoff
-> (`2026-06-06-v22-rl-prep-continuation.md`) — don't collide on its files. Two repos:
+> Two repos:
 > main `c:/libraries/PrismataAI` (`feature/production-vectors`), engine
 > `c:/libraries/PrismataAI-dave-master` (`dave-master-jsonclean`). Verify both branches before any commit.
 
