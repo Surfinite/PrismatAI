@@ -27,6 +27,8 @@ Checks
                      (RL_Step2_Smoke forced + RL_SelfPlay_General) match the
                      frozen selfplay_threads and selfplay_mix (rounds,
                      ForcedCards on the forced block ONLY, run:false at rest)
+  7b. selfplay_replays  both self-play blocks carry the expected saveReplays dirs
+                     (per-iteration replay archive contract, 2026-06-12)
   7. parent_repin    ALL FOUR parent-side players' WeightsFile == frozen
                      parent_bin (F-07 recovery + N-2): RL_Eval (eval pin),
                      RL_Eval_iter0 (the VERDICT OPPONENT), RL_SelfPlay (the
@@ -444,6 +446,36 @@ def check_parent_repin(cfg, frozen):
 
 
 # ---------------------------------------------------------------------------
+# Check 7b: saveReplays on both self-play blocks (2026-06-12 replay-audit fixes).
+# The per-iteration replay archive (forensic record + future-schema source) is
+# part of the iteration contract; a drifted/removed saveReplays key would make
+# stage 1.5 throw only AFTER the full self-play run. Structural expectation,
+# hardcoded like iterator_shape.
+# ---------------------------------------------------------------------------
+
+SELFPLAY_REPLAY_DIRS = (
+    ("RL_Step2_Smoke",      "asset/replays/rl_selfplay_forced"),
+    ("RL_SelfPlay_General", "asset/replays/rl_selfplay_general"),
+)
+
+
+def check_selfplay_replays(cfg):
+    failures = []
+    blocks = {b.get("name"): b for b in cfg.get("Benchmarks", []) if isinstance(b, dict)}
+    for name, expected in SELFPLAY_REPLAY_DIRS:
+        node = blocks.get(name)
+        if not isinstance(node, dict):
+            failures.append("Tournament block '%s' not found (expected saveReplays '%s')"
+                            % (name, expected))
+            continue
+        got = node.get("saveReplays")
+        if got != expected:
+            failures.append("%s.saveReplays is %r but the iteration contract expects '%s' "
+                            "(stage 1.5 archives replays per iteration)" % (name, got, expected))
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Check 8: file existences (frozen parent_pt + data H5s)
 # ---------------------------------------------------------------------------
 
@@ -514,6 +546,7 @@ def run_checks(config_path, frozen_path, repo_root):
         results.append(("book_sizes", check_book_sizes(cfg)))
         results.append(("reference_graph",
                         check_reference_graph(cfg, os.path.dirname(os.path.abspath(config_path)))))
+        results.append(("selfplay_replays", check_selfplay_replays(cfg)))
         if frozen is not None:
             results.append(("frozen_tuple", check_frozen_tuple(cfg, frozen)))
             results.append(("parent_repin", check_parent_repin(cfg, frozen)))

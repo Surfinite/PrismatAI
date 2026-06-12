@@ -15,7 +15,10 @@
 # This orchestrates already-built tools (it does NOT rebuild them):
 #   preflight  : eval/preflight_config.py            (stage 0 — config integrity + frozen tuple + parent re-pin)
 #   self-play  : Prismata_Testing.exe over TWO run:true blocks in dave's config.txt
-#                (regime-v2 mix: RL_SelfPlay_General 2/3 unforced + RL_Step2_Smoke 1/3 forced-Hotel)
+#                (regime-v2 mix: RL_SelfPlay_General 2/3 unforced + RL_Step2_Smoke 1/3 forced-Hotel;
+#                 both blocks also saveReplays — stage 1.5 archives replays + parity
+#                 sidecars into training/data/rl_iter_<K>/ as the per-iteration
+#                 forensic record + future-schema re-extraction source)
 #   vectorize  : training/vectorize_v2.py
 #   train      : training/train.py --rl-mode (Task 6)
 #   export     : training/export_weights_v2.py
@@ -66,7 +69,13 @@ $frozenEarly = Get-Content -Raw "$eval/campaign_frozen.json" | ConvertFrom-Json
 $parentBin   = $frozenEarly.parent_bin
 if (-not $parentBin) { throw "campaign_frozen.json has no parent_bin" }
 $origExe     = 'c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe'  # genuine 2016 MasterBot at its permanent home (steam anchor baseline)
-$parityStates = "$bin/asset/training/parity_states"     # native GameState sidecar (sp_*.json) from self-play
+# LIVE sidecar dirs (sp_*.json.gz), PER export dir (<exportTrainingV2>_parity since the
+# 2026-06-12 review: a shared sibling dir let the two same-launch blocks overwrite each
+# other's sp_0000_* files — per-Tournament gameIds both start at 0). Stage 1.5 archives
+# both into $workDir/parity_states with a slice prefix.
+$parityLiveForced = "${selfplayDir}_parity"
+$parityLiveGen    = "${selfplayDirGen}_parity"
+$parityStatesLegacy = "$bin/asset/training/parity_states"  # pre-2026-06-12 shared dir — wiped only
 $schema      = "$train/schema_v2.json"
 $propTable   = "$train/property_table.json"
 $humanH5     = "$train/data/human_1800_v2.h5"           # rehearsal data (--human-file) ONLY — never the val set
@@ -194,9 +203,27 @@ Write-Host "`n[1/8] self-play (2/3 general -> $selfplayDirGen ; 1/3 forced-Hotel
 # Clear stale shards (BOTH dirs) + parity sidecar from any prior iteration: the C++ export
 # game counter resets to 0 each run, so a shorter run would otherwise leave higher-numbered
 # selfplay_*.jsonl that Stage 2's glob would wrongly concatenate into this iter's data.
+# (Sidecars are sp_*.json.gz since the 2026-06-12 replay-audit fixes; clear both patterns.
+# A successful prior iteration leaves these dirs empty — its artifacts were ARCHIVED into
+# its own training/data/rl_iter_<k>/; anything still here is a crashed run's residue.)
 if (Test-Path $selfplayDir)    { Remove-Item "$selfplayDir/selfplay_*.jsonl"    -ErrorAction SilentlyContinue }
 if (Test-Path $selfplayDirGen) { Remove-Item "$selfplayDirGen/selfplay_*.jsonl" -ErrorAction SilentlyContinue }
-if (Test-Path $parityStates)   { Remove-Item "$parityStates/sp_*.json"          -ErrorAction SilentlyContinue }
+foreach ($pd in @($parityLiveForced, $parityLiveGen, $parityStatesLegacy)) {
+    if (Test-Path $pd) { Remove-Item "$pd/sp_*.json","$pd/sp_*.json.gz" -ErrorAction SilentlyContinue }
+}
+# Replays are the iteration's forensic record — NEVER delete. Any leftovers from a
+# crashed/aborted run are moved aside (timestamped) instead of wiped, so the C++ counter
+# restart cannot silently overwrite them and they remain inspectable.
+$replayLiveGen    = "$bin/asset/replays/rl_selfplay_general"
+$replayLiveForced = "$bin/asset/replays/rl_selfplay_forced"
+foreach ($rl in @($replayLiveGen, $replayLiveForced)) {
+    if ((Test-Path $rl) -and (Get-ChildItem -Path $rl -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) {
+        $orphanDir = "$train/data/_orphans/replays_$(Get-Date -Format yyyyMMdd_HHmmss)_$(Split-Path $rl -Leaf)"
+        New-Item -ItemType Directory -Force -Path $orphanDir | Out-Null
+        Move-Item "$rl/game_*.json.gz" $orphanDir
+        Write-Host "moved leftover replays from $rl -> $orphanDir (crashed prior run?)"
+    }
+}
 # BOTH run:true flips live INSIDE the try (V-C): a throw between/during the flips must still
 # reach the finally that restores BOTH blocks (setting run:false on an already-false block is
 # an idempotent no-op), otherwise a half-flipped config stays run:true until the next preflight.
@@ -216,6 +243,70 @@ finally {
     Edit-Config -Op run -Name RL_Step2_Smoke -Value false
     Edit-Config -Op run -Name RL_SelfPlay_General -Value false
 }
+
+# -----------------------------------------------------------------------------
+# 1.5) Archive this iteration's state artifacts (2026-06-12 replay-audit fixes).
+#      - parity sidecars (sp_*.json.gz, engine-native turn-start states): the
+#        FUTURE-SCHEMA re-extraction source — any future C++ exporter can rebuild
+#        training data from these via --dump-v2-record. Previously DELETED each
+#        iteration (replay-audit S1, High).
+#      - replays (game_*.json.gz, per-action snapshots + outcome + meta): human-
+#        viewable forensic record; turn-start states recoverable via
+#        states[p==0 ? 0 : turnBoundaries[p]-1]. Same shared per-game id as the
+#        selfplay_NNNN.jsonl shards (O1 fix), so game_0007 == selfplay_0007.
+#      Stage 5's parity gate reads the ARCHIVED sidecars (this run's own states).
+# -----------------------------------------------------------------------------
+Write-Host "`n[1.5/8] archive sidecars + replays -> $workDir"
+$parityArchive = "$workDir/parity_states"
+# Same-K re-run guard: a prior attempt of THIS iteration may have archived already
+# (e.g. it failed later, at train/parity). Names restart at sp_0000/game_0000 every
+# run, so archiving into a non-empty dest would either throw mid-move or silently mix
+# two generations. Move any existing archive aside (timestamped, never deleted).
+$staleArchives = @()
+if ((Test-Path $parityArchive) -and (Get-ChildItem -Path "$parityArchive/*" -Include 'sp_*.json','sp_*.json.gz' -ErrorAction SilentlyContinue)) { $staleArchives += $parityArchive }
+foreach ($slice in @('general', 'forced')) {
+    $d = "$workDir/replays/$slice"
+    if ((Test-Path $d) -and (Get-ChildItem -Path $d -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) { $staleArchives += $d }
+}
+if ($staleArchives) {
+    $aside = "$train/data/_orphans/rl_iter_${K}_superseded_$(Get-Date -Format yyyyMMdd_HHmmss)"
+    New-Item -ItemType Directory -Force -Path $aside | Out-Null
+    foreach ($d in $staleArchives) {
+        $leaf = ($d -replace [regex]::Escape($workDir), '') -replace '^[/\\]', '' -replace '[/\\]', '_'
+        Move-Item $d "$aside/$leaf"
+    }
+    Write-Host "prior attempt's archive for iteration $K moved aside -> $aside"
+}
+New-Item -ItemType Directory -Force -Path $parityArchive | Out-Null
+# Archive FLAT with a slice prefix (general_sp_* / forced_sp_*): keeps stage 5's
+# non-recursive glob working, makes slice attribution explicit, and the prefixed
+# names cannot collide across the two blocks.
+$sidecarCount = 0
+foreach ($pair in @(@($parityLiveGen, 'general'), @($parityLiveForced, 'forced'))) {
+    $src = $pair[0]; $slice = $pair[1]
+    $files = @(Get-ChildItem -Path "$src/*" -Include 'sp_*.json.gz','sp_*.json' -ErrorAction SilentlyContinue)
+    foreach ($f in $files) { Move-Item $f.FullName "$parityArchive/${slice}_$($f.Name)" }
+    $sidecarCount += $files.Count
+}
+if ($sidecarCount -eq 0) { throw "no parity sidecars (sp_*.json.gz) in $parityLiveGen / $parityLiveForced after self-play — exporter regression, or exportTrainingV2 drifted in config.txt?" }
+foreach ($pair in @(@($replayLiveGen, 'general'), @($replayLiveForced, 'forced'))) {
+    $src = $pair[0]; $slice = $pair[1]
+    $dst = "$workDir/replays/$slice"
+    New-Item -ItemType Directory -Force -Path $dst | Out-Null
+    if ((Test-Path $src) -and (Get-ChildItem -Path $src -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) {
+        Move-Item "$src/game_*.json.gz" $dst
+    } else {
+        # The replays are part of the iteration contract (forensic record + future-schema
+        # source) — a missing slice means saveReplays drifted out of the config block or
+        # the serializer failed wholesale. Fail loudly rather than complete a "successful"
+        # iteration with no record.
+        throw "no replays in $src ($slice slice) — saveReplays missing from the config block, or serializer failure (check stderr for [ReplaySerializer] lines)"
+    }
+}
+Write-Host ("archived: {0} sidecars; replays general={1} forced={2}" -f `
+    $sidecarCount, `
+    @(Get-ChildItem -Path "$workDir/replays/general" -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue).Count, `
+    @(Get-ChildItem -Path "$workDir/replays/forced"  -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue).Count)
 
 # -----------------------------------------------------------------------------
 # 2) Concat V2 shards (BOTH export dirs) -> one JSONL -> vectorize -> H5.
@@ -298,8 +389,10 @@ Write-Host "`n[5/8] export-parity GATE"
 # PyTorch<->C++ round-trip). Without them, dump_value_batch.py defaults --pt/--bin to None and
 # compare_parity_deepsets.py falls back to its HARDCODED interim (ep30) reference — which would
 # compare C++(candidate) vs PyTorch(ep30) and fail for the wrong reason on any real iteration.
+# Reads the ARCHIVED sidecars (stage 1.5) — guaranteed to be THIS run's own states,
+# not whatever a shared live dir happens to hold (replay-audit A-1/M-08).
 python "$tools/parity/dump_value_batch.py" `
-    --states-dir $parityStates --weights $candBinPath --dave-bin $bin `
+    --states-dir $parityArchive --weights $candBinPath --dave-bin $bin `
     --pt $bestPt --bin $candBinPath
 if ($LASTEXITCODE -ne 0) { throw "export-parity GATE FAILED (worst |Δ| >= 1e-3) — aborting iteration" }
 

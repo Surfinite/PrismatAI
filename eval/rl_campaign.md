@@ -96,6 +96,28 @@ across N. `Threads:1` blocks do **not** share sets across blocks even at the sam
 interleaves with the set draws, so each block's per-set sequence diverges after game 1. Outcome-level
 reproducibility exists only at `Threads:1`.
 
+### 1e. Per-iteration state archive (2026-06-12 — replay-audit fixes)
+
+Every iteration retains, under `training/data/rl_iter_<K>/`, alongside the JSONL/H5:
+- **`parity_states/{general,forced}_sp_*.json.gz`** — engine-native turn-start `GameState` JSON
+  (gzipped), one per ply, slice-prefixed (the engine writes per-block `<exportTrainingV2>_parity`
+  dirs — gameIds restart at 0 per block, so a shared dir would collide; stage 1.5 archives both
+  flat with the prefix). **This is the future-schema insurance**: if the DSNN feature schema
+  evolves, past self-play is re-extractable by running any future `--dump-v2-record` exporter over
+  these states — no re-generation with old weights needed. (Previously deleted every iteration; the
+  V2 JSONL alone is schema-frozen and cannot serve this purpose.) ⚠️ Do NOT reuse
+  `training/extract_fleet_training_data.py` unmodified on archived C++ REPLAYS — it applies the JS
+  convention `states[turnBoundaries[p]]`; the C++ rule is `states[p==0 ? 0 : turnBoundaries[p]-1]`.
+- **`replays/{general,forced}/game_*.json.gz`** — per-action snapshot replays (matchup format,
+  viewable on `/replay/local`), each carrying a `meta` provenance header (tournament/seed/threads;
+  `formatVersion:1`). The replay index **is** the V2 shard index (one shared per-game id,
+  Threads-safe), so `game_0007.json.gz` is exactly `selfplay_0007.jsonl`'s game; a replay's
+  turn-start state for ply p is `states[p==0 ? 0 : turnBoundaries[p]-1]` (verified equal to the V2
+  capture).
+- Cost: ~15–20 MB per 128-game iteration (replays ~50 KB gz/game; sidecars ~3 KB gz/state; capture
+  overhead measured below run-to-run noise). Replay leftovers from crashed runs are moved to
+  `training/data/_orphans/`, never deleted.
+
 ---
 
 ## 2. External-review addenda (A1, A2, A6, A9) — folded in

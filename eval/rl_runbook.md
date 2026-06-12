@@ -31,7 +31,7 @@ silently swap the net on every query_move/tactical/coverage call; `run_eval.py` 
 on unknown/empty books, unknown filters/iterators/partials/players, and NN weights-load failures
 (dave `26075fa`/`d0ec633`/`6e93480`), with an unloaded-net guard on the UCT value path (X5b).
 
-## The stages (0–8, plus the 4.5 tripwire)
+## The stages (0–8, plus the 1.5 archive and 4.5 tripwire)
 
 **0 — Structural preflight [gate]** — `preflight_config.py` (the table above); also rejects a `-N` that
 differs from `frozen_N`.
@@ -43,8 +43,20 @@ keeps IG-decision density), i.e. **⅔ general + ⅓ forced-Hotel**, each into i
 (separate dirs REQUIRED — the export counter is per-Tournament-instance). The parent-net-guided UCT
 (frozen N=1000) plays itself under the **early-noise/late-precision regime** (τ=0.7 sampling turns
 0–11; turns ≥12 argmax with `EpsilonLate=0.05` uniform-child chance) and writes one JSONL record per
-position, labelled with the eventual game outcome. Clears stale shards (both dirs) + parity sidecar
-first; flips both blocks back in a `finally`.
+position, labelled with the eventual game outcome. Both blocks also `saveReplays` (per-action snapshot
+replays, ~50 KB gz/game, viewable on `/replay/local`). Clears stale shards (both dirs) + parity
+sidecars first (replay leftovers are moved to `training/data/_orphans/`, never deleted); flips both
+blocks back in a `finally`.
+
+**1.5 — Archive state artifacts [core, 2026-06-12 replay-audit fixes]** — moves this run's parity
+sidecars (`sp_*.json.gz`, engine-native turn-start states from the per-block
+`<exportTrainingV2>_parity` dirs, archived flat with a `general_`/`forced_` slice prefix — the
+**future-schema re-extraction source**: any future exporter can rebuild training data from them via
+`--dump-v2-record`) and replays
+(`game_*.json.gz` — forensic record; same per-game id as the `selfplay_NNNN.jsonl` shards, so
+`game_0007` IS shard 0007's game; turn-start state = `states[p==0 ? 0 : turnBoundaries[p]-1]`) into
+`training/data/rl_iter_<K>/{parity_states, replays/{general,forced}}/`. Disk: ~50 KB gz/game replays
++ ~3 KB gz/state sidecars ≈ 15–20 MB per 128-game iteration.
 
 **2 — Vectorize [core]** — concatenates the shards from BOTH export dirs (general then forced; game
 boundaries re-detected via `ply_index==0`) and converts JSONL → H5 tensors (schema v2.2.1), the
@@ -69,6 +81,8 @@ this set) — catches an E1-class bad-init/bad-train cheaply, before the expensi
 
 **5 — Export-parity gate [gate]** — asserts C++ inference == PyTorch on a state batch (worst |Δ| < 1e-3),
 explicitly pinning `--pt`/`--bin` to THIS candidate; catches export/feature bugs, NOT net quality.
+Reads the stage-1.5 **archived** sidecars (`rl_iter_<K>/parity_states/`) — guaranteed to be this
+run's own states, never a shared live dir's leftovers.
 
 **6 — Tactical suite [gate]** — replays the curated IG positions through the candidate via
 `query_move.js` (which injects the tuned `UCTConstant 0.3` by default — M-06) and fails only on a

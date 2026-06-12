@@ -423,6 +423,14 @@ def run_selfplay_block(dave_bin, N, vectorize_out, schema=None):
     # concatenated into this N's metrics (same class as the run_iteration.ps1 Stage-1 clear).
     for _stale in glob.glob(os.path.join(export_dir, "selfplay_*.jsonl")):
         os.remove(_stale)
+    # Also clear this block's parity-sidecar dir (<export_dir>_parity since 2026-06-12;
+    # calibration sidecars are throwaway) plus any residue in the pre-2026-06-12 SHARED
+    # parity_states dir, so stale states never mix into a later parity gate (M-08).
+    for _parity_dir in (export_dir + "_parity",
+                        os.path.join(dave_bin, "asset", "training", "parity_states")):
+        for _stale in glob.glob(os.path.join(_parity_dir, "sp_*.json")) \
+                    + glob.glob(os.path.join(_parity_dir, "sp_*.json.gz")):
+            os.remove(_stale)
     set_block_run(dave_bin, block, True)
     try:
         p = subprocess.run([os.path.join(dave_bin, "Prismata_Testing.exe")],

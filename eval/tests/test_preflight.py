@@ -106,9 +106,11 @@ def make_config():
         "Benchmarks": [
             {"run": False, "type": "Tournament", "name": "RL_Step2_Smoke", "rounds": 21,
              "Threads": 8, "ForcedCards": ["Hotel"],
+             "saveReplays": "asset/replays/rl_selfplay_forced",
              "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
             {"run": False, "type": "Tournament", "name": "RL_SelfPlay_General", "rounds": 43,
              "Threads": 8,
+             "saveReplays": "asset/replays/rl_selfplay_general",
              "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
             {"run": False, "type": "Tournament", "name": "RL_Eval_iter0_general", "rounds": 64,
              "players": [{"name": "RL_Eval", "group": 1}, {"name": "RL_Eval", "group": 2}]},
@@ -399,12 +401,15 @@ def test_n_drift_fails_frozen_tuple(env, capsys):
 
 
 def test_general_block_missing_fails_frozen_tuple(env, capsys):
-    """selfplay_mix: the 2/3 general (unforced) block must exist."""
+    """selfplay_mix: the 2/3 general (unforced) block must exist. Since the
+    2026-06-12 replay-archive contract, a missing block correctly fails BOTH
+    frozen_tuple (selfplay_mix) and selfplay_replays (7b)."""
     env["cfg"]["Benchmarks"] = [b for b in env["cfg"]["Benchmarks"]
                                 if b["name"] != "RL_SelfPlay_General"]
     rc, out = run_main(env, capsys)
     assert rc == 1
-    assert_only_fails(out, "frozen_tuple")
+    assert "FAIL: frozen_tuple" in out
+    assert "FAIL: selfplay_replays" in out
     assert "RL_SelfPlay_General" in out
 
 
@@ -451,6 +456,25 @@ def test_general_block_threads_drift_fails_frozen_tuple(env, capsys):
     assert rc == 1
     assert_only_fails(out, "frozen_tuple")
     assert "RL_SelfPlay_General.Threads" in out
+
+
+def test_missing_save_replays_fails_selfplay_replays(env, capsys):
+    """7b (2026-06-12): the per-iteration replay archive is part of the iteration
+    contract — a dropped/drifted saveReplays key must fail at stage 0, not after
+    the full self-play run (stage 1.5 would otherwise be the first to notice)."""
+    del env["cfg"]["Benchmarks"][1]["saveReplays"]
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "selfplay_replays")
+    assert "RL_SelfPlay_General.saveReplays" in out
+
+
+def test_drifted_save_replays_dir_fails_selfplay_replays(env, capsys):
+    env["cfg"]["Benchmarks"][0]["saveReplays"] = "asset/replays/somewhere_else"
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "selfplay_replays")
+    assert "RL_Step2_Smoke.saveReplays" in out
 
 
 # ---------------------------------------------------------------------------

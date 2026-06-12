@@ -399,7 +399,14 @@ window.PrismataViewer = (function() {
             winnerName: data.winnerName || (data.winner === 0 ? data.p0 : data.winner === 1 ? data.p1 : 'Draw'),
             turns: data.turns || 0, cardSet: data.cardSet || [],
             states: data.states, actions: data.actions || [],
-            turnBoundaries: data.turnBoundaries || []
+            // Externally-authored files (C++ snapshot exporters) may carry a
+            // trailing boundary == states.length; out-of-range entries wedge
+            // nextTurn and wreck the scrubber turn bands, so drop them here.
+            // (Back-port of ladder ed58edb so a bundle regen cannot revert it;
+            // post-2026-06-12 C++ replays no longer emit the sentinel.)
+            turnBoundaries: (data.turnBoundaries || []).filter(function (b) {
+                return typeof b === 'number' && b >= 0 && b < data.states.length;
+            })
         };
         stateIndex = 0;
         totalStates = REPLAY.states.length;

@@ -212,6 +212,10 @@ def process_replay(replay_data, card_info, game_id=""):
 
     records = []
 
+    # JS-WRITER CONVENTION ONLY: for JS-produced fleet replays turnBoundaries[p] IS the
+    # turn-start state index. C++ snapshot replays (formatVersion>=1, RL archive) use the
+    # OTHER convention — turn-start = states[p==0 ? 0 : turnBoundaries[p]-1] (rl_campaign
+    # §1e). Do NOT point this extractor at archived C++ replays without adapting.
     for ply_idx, state_idx in enumerate(turn_boundaries):
         if state_idx >= len(states):
             break

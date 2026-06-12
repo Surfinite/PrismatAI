@@ -141,7 +141,7 @@ back in a `finally`):
 `ForcedCards` IS wired (engine support landed; the self-play block `RL_Step2_Smoke` also forces
 Hotel), and `RL_Eval_iter0` is a fully defined player pointing at `neural_weights_mixed_v221.bin`
 (the parent — per the 2026-06-07 decision, NOT a wide-untrained placeholder).
-`eval/preflight_config.py` (stage 0, 9 checks) asserts zero `run:true` blocks at rest, the RL
+`eval/preflight_config.py` (stage 0, 10 checks) asserts zero `run:true` blocks at rest, the RL
 iterator shape, opening-book sizes, the full declared reference graph (including `WeightsFile`
 existence), the frozen tuple (incl. regime-v2 `EpsilonLate` + the dual-block self-play mix),
 ALL FOUR parent re-pins (`RL_Eval`/`RL_Eval_iter0`/`RL_SelfPlay`/`RL_Narrow`), required-file

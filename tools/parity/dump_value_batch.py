@@ -7,11 +7,14 @@ worst |value_cpp - value_torch| >= 1e-3.
 The 5-state harness (tools/parity/compare_parity_deepsets.py with the 5 final35_state_*.json
 fixtures) only covers a handful of hand-picked positions. This driver fans the same
 comparison out over hundreds-to-1000 real self-play states emitted by the
-SelfPlayV2Exporter parity sidecar (bin/asset/training/parity_states/sp_*.json), giving a
-broad export-parity proof for an RL candidate weight set before it is trusted.
+SelfPlayV2Exporter parity sidecar (sp_*.json.gz — gzipped since 2026-06-12; legacy raw
+sp_*.json also accepted; run_iteration archives them per iteration into
+training/data/rl_iter_<K>/parity_states/), giving a broad export-parity proof for an RL
+candidate weight set before it is trusted.
 
 State files are the bare-doc shape GameState::toJSONString() emits, which
-PrismataAI.exe --dump-features consumes directly (no "gameState" wrapper needed).
+PrismataAI.exe --dump-features consumes directly (no "gameState" wrapper needed);
+.gz states are inflated into _batch_out/_inflated/ first.
 
 MATCHED-TRIPLE RULE: --weights (the C++ --dump-features weights) MUST correspond to
 --pt/--bin (the Python reference), or parity spuriously fails. Defaults use the interim
@@ -20,15 +23,17 @@ docs/scratch/deepsets_mixed_35prop.bin, compared against compare_parity_deepsets
 interim defaults (ep30 .pt + interim .bin). For an RL candidate, pass
 --weights candidate.bin --pt candidate.pt --bin candidate.bin so all three stay matched.
 
-Usage (interim baseline proof):
+Usage (interim baseline proof — point --states-dir at an iteration's DURABLE archive;
+the live <exportTrainingV2>_parity dirs are transient, archived/cleared per run):
   python tools/parity/dump_value_batch.py \
-    --states-dir c:/libraries/PrismataAI-dave-master/bin/asset/training/parity_states \
+    --states-dir c:/libraries/PrismataAI/training/data/rl_iter_1/parity_states \
     --weights c:/libraries/PrismataAI/docs/scratch/deepsets_mixed_35prop.bin \
     --dave-bin c:/libraries/PrismataAI-dave-master/bin \
     --limit 1000
 """
 import argparse
 import glob
+import gzip
 import os
 import subprocess
 import sys
@@ -54,9 +59,18 @@ def main():
                     help="max number of state JSONs to sample (default 1000)")
     args = ap.parse_args()
 
-    states = sorted(glob.glob(os.path.join(args.states_dir, "*.json")))[:args.limit]
+    # The sidecar exporter writes sp_*.json.gz since the 2026-06-12 replay-audit fixes
+    # (gzipped, archived per iteration); accept legacy raw .json too. Dedupe by stem
+    # (prefer .gz) so a dir holding both forms of one state never double-counts it,
+    # then sort so the sample stays deterministic across mixed dirs.
+    by_stem = {}
+    for f in sorted(glob.glob(os.path.join(args.states_dir, "*.json"))):
+        by_stem[f] = f
+    for f in sorted(glob.glob(os.path.join(args.states_dir, "*.json.gz"))):
+        by_stem[f[:-3]] = f   # stem 'x.json' -> prefer the .gz form
+    states = sorted(by_stem.values())[:args.limit]
     if not states:
-        print(f"no state JSONs in {args.states_dir}", file=sys.stderr)
+        print(f"no state JSONs (.json / .json.gz) in {args.states_dir}", file=sys.stderr)
         sys.exit(2)
 
     # Write the per-state dumps into a dedicated subdir so they never get confused with
@@ -64,13 +78,26 @@ def main():
     out_dir = os.path.join(args.parity_dir, "_batch_out")
     os.makedirs(out_dir, exist_ok=True)
 
+    # PrismataAI.exe --dump-features reads plain files only: inflate .gz states into
+    # a scratch subdir first and hand the exe the inflated path.
+    inflate_dir = os.path.join(out_dir, "_inflated")
+    os.makedirs(inflate_dir, exist_ok=True)
+
     exe = os.path.join(args.dave_bin, "PrismataAI.exe")
     dumps = []
     for i, s in enumerate(states):
+        inflated = None
+        if s.endswith(".gz"):
+            inflated = os.path.join(inflate_dir, f"in_sp_{i:05d}.json")
+            with gzip.open(s, "rb") as fz, open(inflated, "wb") as fo:
+                fo.write(fz.read())
+            s = inflated
         out = os.path.join(out_dir, f"out_sp_{i:05d}.json")
         r = subprocess.run([exe, "--dump-features", s, out, args.weights],
                            cwd=args.dave_bin,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if inflated is not None:
+            os.remove(inflated)   # scratch only — don't leave ~1000 raw states on disk
         if r.returncode != 0:
             print(f"--dump-features failed (exit {r.returncode}) on {s}", file=sys.stderr)
             sys.exit(2)
