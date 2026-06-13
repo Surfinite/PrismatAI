@@ -33,6 +33,9 @@ class UCTSearch
     int                     _lastChosenIdx = -1;
     int                     _lastArgmaxIdx = -1;
     bool                    _rootTruncated = false;   // MaxChildren cap bound at the root + iterator had more (candidates dropped)
+    double                  _lastRootWinRate = 0.5;   // chosen root child's backed-up win rate, MAXPLAYER perspective
+                                                      // (B1/A6 2026-06-13: the end-to-end orientation signal — a maxPlayer
+                                                      // sign flip in NeuralNet::evaluateValue inverts this)
 
 public:
 
@@ -43,6 +46,7 @@ public:
     double              traverse(UCTNode & node);
     void                uct(GameState & state, size_t depth, const int lastPlayerToMove);
     UCTNode *           getBestRootNode(bool allowSampling);
+    std::vector<int>    rootChildIGClickCounts();   // per-root-child Infusion-Grid click counts (J5 targeted exploration)
     double              getBestRootWinRate();
     void                computeRootPriors();
 
@@ -69,6 +73,7 @@ public:
     int                 lastChosenIdx() const { return _lastChosenIdx; }
     int                 lastArgmaxIdx() const { return _lastArgmaxIdx; }
     bool                rootTruncated() const { return _rootTruncated; }
+    double              lastRootWinRate() const { return _lastRootWinRate; }
 
     // graph printing functions
     void                printSubTree(const UCTNode & node, GameState state, std::string filename, size_t maxDepth);

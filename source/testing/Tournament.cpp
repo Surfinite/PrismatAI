@@ -172,6 +172,9 @@ void Tournament::run()
                     // by slot index, not by (ambiguous) name lookup.
                     g1.setPlayerSlots((int)p1, (int)p2);
                     g2.setPlayerSlots((int)p2, (int)p1);
+                    // A4: both colour-swap games share round r's card set.
+                    g1.setRoundIndex((int)r);
+                    g2.setRoundIndex((int)r);
 
                     // One shared id per game keeps game_NNNN.json.gz and
                     // selfplay_NNNN.jsonl index-paired (replay-audit O1).
@@ -274,12 +277,12 @@ void Tournament::run()
             }
         };
 
-        auto submitGame = [&](const GameState & state, const size_t whiteIndex, const size_t blackIndex)
+        auto submitGame = [&](const GameState & state, const size_t whiteIndex, const size_t blackIndex, const int roundIndex)
         {
             waitForGameSlot();
-            games.emplace_back(std::async(std::launch::async, [this, state, whiteIndex, blackIndex]()
+            games.emplace_back(std::async(std::launch::async, [this, state, whiteIndex, blackIndex, roundIndex]()
             {
-                return playGame(state, whiteIndex, blackIndex);
+                return playGame(state, whiteIndex, blackIndex, roundIndex);
             }));
         };
 
@@ -297,8 +300,8 @@ void Tournament::run()
                         continue;
                     }
 
-                    submitGame(state, p1, p2);
-                    submitGame(state, p2, p1);
+                    submitGame(state, p1, p2, (int)r);
+                    submitGame(state, p2, p1, (int)r);
                 }
             }
         }
@@ -318,13 +321,14 @@ void Tournament::run()
     std::cout << std::endl << "Tournament complete" << std::endl;
 }
 
-TournamentGame Tournament::playGame(const GameState & state, const size_t whiteIndex, const size_t blackIndex) const
+TournamentGame Tournament::playGame(const GameState & state, const size_t whiteIndex, const size_t blackIndex, const int roundIndex) const
 {
     PlayerPtr white = AIParameters::Instance().getPlayer(Players::Player_One, _players[whiteIndex]);
     PlayerPtr black = AIParameters::Instance().getPlayer(Players::Player_Two, _players[blackIndex]);
 
     TournamentGame game(state, _players[whiteIndex], white, _players[blackIndex], black);
     game.setPlayerSlots((int)whiteIndex, (int)blackIndex);   // H3: credit results by slot, not name
+    game.setRoundIndex(roundIndex);                          // A4: round == shared-card-set id
     // One shared id per game keeps game_NNNN.json.gz and selfplay_NNNN.jsonl
     // index-paired even at Threads>1 (replay-audit O1).
     if (!_saveReplaysDir.empty() || !_exportTrainingV2Dir.empty())
@@ -446,6 +450,13 @@ void Tournament::parseTournamentGameResult(const TournamentGame & game)
         _wins[winnerIndex][loserIndex]++;
         _seatWins[winnerID][winnerIndex]++;   // H2: winnerID IS the winning seat (0 = first, 1 = second)
     }
+
+    // A4: per-game record for the paired per-card-set analysis (round == set id).
+    // Only ever appended here (single collector thread at Threads>1; serial otherwise).
+    _gameRecords.push_back(GameRecord{
+        game.getRoundIndex(), playerIndex[0], playerIndex[1],
+        (winnerID == Players::Player_None) ? -1 : winnerID,
+        (int)game.getFinalGameState().getTurnNumber() });
 }
 
 #include "HTMLTable.h"
@@ -561,6 +572,36 @@ void Tournament::writeHTMLResults()
     stats.appendHTMLTableToFile(filename, "statsTable");
     tableWinPerc.appendHTMLTableToFile(filename, "winPercentageTable");
     turnTable.appendHTMLTableToFile(filename, "totalScoreTable");
+
+    writeRoundsCSV();
+}
+
+// A4 (2026-06-13): per-game results CSV alongside the HTML — one row per completed
+// game, keyed by round (== shared-card-set id, since both colour-swap games of a
+// round draw one set). This is the raw material for the paired per-card-set CI in
+// eval/run_eval.py (wilson.py paired analysis): the aggregate statsTable cannot
+// support pairing. Rewritten whole on every update, like the HTML.
+void Tournament::writeRoundsCSV()
+{
+    const std::string filename = "tests/Tournament_" + _name + "_" + _date + "_rounds.csv";
+    FILE * f = fopen(filename.c_str(), "w");
+    if (!f)
+    {
+        fprintf(stderr, "WARNING: Tournament::writeRoundsCSV: cannot open %s for writing\n", filename.c_str());
+        return;
+    }
+    fprintf(f, "round,white_slot,white_name,black_slot,black_name,winner_seat,turns\n");
+    for (size_t i = 0; i < _gameRecords.size(); ++i)
+    {
+        const GameRecord & g = _gameRecords[i];
+        const char * winner = (g.winnerSeat == 0) ? "0" : (g.winnerSeat == 1) ? "1" : "D";
+        fprintf(f, "%d,%d,%s,%d,%s,%s,%d\n",
+                g.round,
+                g.whiteSlot, (g.whiteSlot >= 0 && g.whiteSlot < (int)_players.size()) ? _players[g.whiteSlot].c_str() : "?",
+                g.blackSlot, (g.blackSlot >= 0 && g.blackSlot < (int)_players.size()) ? _players[g.blackSlot].c_str() : "?",
+                winner, g.turns);
+    }
+    fclose(f);
 }
 
 void Tournament::printResults()

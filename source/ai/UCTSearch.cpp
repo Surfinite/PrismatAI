@@ -102,6 +102,11 @@ void UCTSearch::doSearch(const GameState & initialState, Move & move)
     UCTNode * bestNode = getBestRootNode(true);
     move = bestNode->getMove();
 
+    // B1/A6: record the chosen child's backed-up win rate (maxPlayer perspective).
+    // For eval/deploy players chosen == argmax, so this is the search's best estimate.
+    _lastRootWinRate = (bestNode->numVisits() > 0)
+        ? bestNode->numWins() / (double)bestNode->numVisits() : 0.5;
+
     updateResults(true);
 }
 
@@ -128,34 +133,25 @@ UCTNode * UCTSearch::getBestRootNode(bool allowSampling)
 
     // Self-play-only root sampling. Two regimes:
     //   - Opening (turnNumber < K): tau-temperature + epsilon-uniform mix (unchanged).
-    //   - Late game (turnNumber >= K): ONLY when EpsilonLate > 0 — tau->argmax keeps the bulk
-    //     greedy while a small persistent EpsilonLate gives recurring decisions (e.g. Infusion
-    //     Grid) a chance to be explored all game.
-    // CRITICAL: when EpsilonLate == 0 (default) the late-game case is NOT entered (the
-    // "|| epsilonLate > 0" guard ensures this), so behaviour — including the number of
-    // Random::Real01() draws — is byte-identical to before.
+    //   - Late game (turnNumber >= K): argmax with two layered exploration mechanisms —
+    //     TARGETED IG-count deviation (EpsilonIG, J5 2026-06-13: with that prob, at roots whose
+    //     children span >= 2 distinct Infusion-Grid click counts, play the most-visited child at
+    //     a NON-argmax count — the search's best whole-turn line conditional on a different IG
+    //     count, i.e. an on-axis counterfactual, not a random move) and the legacy uniform
+    //     EpsilonLate. Late argmax ties break UNIFORMLY at random (A1 2026-06-13: the old
+    //     first-wins tie-break composed with the iterator's longest-move-first child ordering
+    //     into a systematic MORE-clicks bias inside the UCB indifference band).
+    // CRITICAL: when EpsilonLate == 0 AND EpsilonIG == 0 (defaults) the late-game case is NOT
+    // entered, so eval/deploy behaviour — including the number of Random::Real01() draws — is
+    // byte-identical to before.
     // Only fires on the real move-selection call (allowSampling); the description/win-rate
     // paths pass false so they don't perturb the seeded RNG stream.
     const bool inOpening = _rootNode.getState().getTurnNumber() < _params.temperatureK();
     if (allowSampling
         && _params.selfPlaySampling()
         && _rootNode.numChildren() > 0
-        && (inOpening || _params.epsilonLate() > 0.0))
+        && (inOpening || _params.epsilonLate() > 0.0 || _params.epsilonIG() > 0.0))
     {
-        // Choose (tau, eps) by phase.
-        double tau;
-        double eps;
-        if (inOpening)
-        {
-            tau = _params.temperatureTau();   // opening regime, unchanged
-            eps = _params.epsilonUniform();
-        }
-        else
-        {
-            tau = 1e-9;                        // argmax-equivalent: bulk stays greedy
-            eps = _params.epsilonLate();       // small persistent uniform-exploration chance
-        }
-
         std::vector<size_t> visits(_rootNode.numChildren());
         for (size_t c = 0; c < _rootNode.numChildren(); ++c)
         {
@@ -163,8 +159,23 @@ UCTNode * UCTSearch::getBestRootNode(bool allowSampling)
         }
         const double u1 = Random::Real01();
         const double u2 = Random::Real01();
-        const size_t idx = MoveSampler::sampleRootIndex(
-            visits, tau, eps, u1, u2);
+        const double u3 = Random::Real01();
+
+        size_t idx;
+        if (inOpening)
+        {
+            idx = MoveSampler::sampleRootIndex(
+                visits, _params.temperatureTau(), _params.epsilonUniform(), u1, u2, u3);
+        }
+        else
+        {
+            const std::vector<int> igCounts = rootChildIGClickCounts();
+            idx = MoveSampler::sampleRootIndexLate(
+                visits, igCounts, _params.epsilonIG(), _params.epsilonLate(), u1, u2, u3);
+            // Stamp the SAME tie-broken argmax the sampler used (same u3), so the exporter's
+            // sampled_idx != argmax_idx reads as a REAL deviation, never a tie artifact.
+            _lastArgmaxIdx = (int)MoveSampler::argmaxIndex(visits, u3);
+        }
         _lastChosenIdx = (int)idx;
         return &_rootNode.getChild(idx);
     }
@@ -193,6 +204,60 @@ UCTNode * UCTSearch::getBestRootNode(bool allowSampling)
     }
 
     return bestNode;
+}
+
+// Per-root-child Infusion-Grid ("Hotel") click counts, for the J5 targeted late-game
+// exploration. Computed WITHOUT walking state clones: a clicked Hotel must already exist
+// at turn start (Hotel has nonzero buildTime, and under-construction units cannot be
+// clicked), so counting USE_ABILITY / UNDO_USE_ABILITY actions whose card id is in the
+// ROOT state's mover-owned Hotel id set is exact. Mirrors the exporter's per-move stamp
+// in TournamentGame.cpp (which walks a clone only because it must also evaluate
+// ig_feasible_max at decision time — not needed here).
+std::vector<int> UCTSearch::rootChildIGClickCounts()
+{
+    std::vector<int> counts(_rootNode.numChildren(), 0);
+
+    const GameState & state = _rootNode.getState();
+    const PlayerID mover = state.getActivePlayer();
+
+    std::vector<CardID> hotelIDs;
+    const CardIDVector & ids = state.getCardIDs(mover);
+    for (size_t i = 0; i < ids.size(); ++i)
+    {
+        if (state.getCardByID(ids[i]).getType().getName() == "Hotel")
+        {
+            hotelIDs.push_back(ids[i]);
+        }
+    }
+    if (hotelIDs.empty())
+    {
+        return counts;   // no IG on the mover's board: every child trivially counts 0
+    }
+
+    for (size_t c = 0; c < _rootNode.numChildren(); ++c)
+    {
+        const Move & move = _rootNode.getChild(c).getMove();
+        int n = 0;
+        for (size_t a = 0; a < move.size(); ++a)
+        {
+            const Action & action = move.getAction(a);
+            if (action.getPlayer() != mover)
+            {
+                continue;
+            }
+            const ActionID type = action.getType();
+            if (type != ActionTypes::USE_ABILITY && type != ActionTypes::UNDO_USE_ABILITY)
+            {
+                continue;
+            }
+            if (std::find(hotelIDs.begin(), hotelIDs.end(), action.getID()) != hotelIDs.end())
+            {
+                n += (type == ActionTypes::USE_ABILITY) ? 1 : -1;
+            }
+        }
+        counts[c] = (n < 0) ? 0 : n;
+    }
+    return counts;
 }
 
 double UCTSearch::getBestRootWinRate()
@@ -371,7 +436,10 @@ double UCTSearch::traverse(UCTNode & node)
     {
         if (_params.evalMethod() == EvaluationMethods::NeuralNet)
         {
-            // Neural net returns value from active player's perspective [-1,1]
+            // Neural net returns value from MAXPLAYER's perspective [-1,1]: evaluateValue
+            // computes the P0-framed scalar and negates it when maxPlayer != Player_One
+            // (NeuralNet.cpp evaluateValue tail). NOT the active player's perspective —
+            // the old comment here was wrong at exactly the A6 orientation seam.
             // Convert to [0,1] win probability from maxPlayer's perspective
             NeuralNet * nnPtr = _params.getNeuralNet();
             NeuralNet & nn = nnPtr ? *nnPtr : NeuralNet::Instance();

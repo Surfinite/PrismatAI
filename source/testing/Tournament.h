@@ -49,13 +49,21 @@ class Tournament
     std::vector< std::vector<int> >     _draws;
     std::vector< std::vector<int> >     _turns;
 
+    // A4 (2026-06-13): per-game records for the paired per-card-set analysis.
+    // round == card-set id (both colour-swap games of a round share one set).
+    // winnerSeat: 0 = Player_One/white won, 1 = Player_Two/black won, -1 = draw.
+    // Appended only from parseTournamentGameResult (single collector thread).
+    struct GameRecord { int round; int whiteSlot; int blackSlot; int winnerSeat; int turns; };
+    std::vector<GameRecord>             _gameRecords;
+    void writeRoundsCSV();
+
     int getPlayerIndex(const std::string & playerName) const;
     std::string getDisplayName(const size_t playerIndex) const;
     void parseResult(std::string & result);
     void parseTournamentGameResult(const TournamentGame & game);
     void discardTournamentGameResult(const TournamentGame & game);
     void playGame(TournamentGame & game, Timer & updateTimer);
-    TournamentGame playGame(const GameState & state, const size_t whiteIndex, const size_t blackIndex) const;
+    TournamentGame playGame(const GameState & state, const size_t whiteIndex, const size_t blackIndex, const int roundIndex) const;
     void writeHTMLResults();
     void printResults();
     std::string getTimeStringFromMS(const size_t ms);

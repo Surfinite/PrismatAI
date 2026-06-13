@@ -66,14 +66,15 @@ namespace
 
         // role===ROLE_ASSIGNED <-> C++ CardStatus::Assigned.
         // inst.blocking (JS / SWF): the blocking-MODE flag = type-level canBlock(assigned)
-        // (assigned ? assignedBlocking : defaultBlocking) AND NOT under construction. The SWF
-        // stores inst.blocking and sets it false while a unit is building (empirically: a
-        // constructing blocker has inst.blocking=0) — so gate construction. Do NOT use the
-        // fully-gated Card::canBlock() (it also drops delayed + ANY-chill units; the SWF keeps
-        // delayed and partially-chilled units blocking, only full-chill clears the flag).
-        // Residual full-chill edge is a noted JS<->C++ engine-parity follow-up.
+        // (assigned ? assignedBlocking : defaultBlocking) AND NOT under construction AND NOT
+        // FROZEN (chill >= current HP; Card::isFrozen, the engine's own rule). The old
+        // "residual full-chill edge ... follow-up" here was a REAL silent feature skew (the
+        // fifth of the v2.2.1 class), proven 2026-06-13 by the B3 fixtures (ke6MK-xlFvv
+        // p21/p28: the faithful JS engine exports is_blocking=0 on frozen blockers while
+        // both C++ legs said 1). Do NOT use the fully-gated Card::canBlock() (it also drops
+        // DELAYED units; the SWF keeps delayed and PARTIALLY-chilled units blocking).
         const bool assigned = (c.getStatus() == CardStatus::Assigned);
-        const bool blocking = ct.canBlock(assigned) && !c.isUnderConstruction();
+        const bool blocking = ct.canBlock(assigned) && !c.isUnderConstruction() && !c.isFrozen();
 
         const bool isConstructing = (constrTime > 0);
         const int  turnsUntilReady = std::max(constrTime, delay);

@@ -33,7 +33,14 @@ import export_weights_v2 as ew  # numpy_forward + load_binary
 PT_PATH  = "C:/libraries/PrismataAI/training/models/deepsets_mixed_35prop/best_model.pt"
 BIN_PATH = "C:/libraries/PrismataAI/docs/scratch/deepsets_mixed_35prop.bin"
 
-VALUE_TOL = 1e-3
+# B2 (2026-06-13): 1e-4, tightened from 1e-3. The measured parity floor is ~1e-6
+# (5.84e-07 on mixed_35prop; 1.09e-06 on v221), so 1e-4 keeps 100x headroom for fp
+# accumulation across ~1000 states while no longer leaving three orders of magnitude
+# for a real low-order bug (truncated mantissas, wrong-epoch weights) to hide in.
+# SCOPE (do not over-read a PASS): the PyTorch reference consumes the C++-EXTRACTED
+# features, so this gate pins weights-export + forward arithmetic ONLY — feature
+# extraction is pinned by training/tests/test_three_way_feature_parity.py.
+VALUE_TOL = 1e-4
 
 
 def sigmoid(x):

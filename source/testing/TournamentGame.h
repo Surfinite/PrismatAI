@@ -25,6 +25,9 @@ class TournamentGame
     // blocks (e.g. RL_SelfPlay vs RL_SelfPlay) onto one slot. -1 = not set.
     int             _playerSlots[2] = { -1, -1 };
 
+    // A4: tournament round (== shared-card-set id) this game belongs to; -1 = not set.
+    int             _roundIndex = -1;
+
     // Optional replay capture. When non-empty, playGame() constructs a
     // ReplaySerializer and drives it entirely from the harness: it captures the
     // initial state, replays each completed Move on a GameState clone (one
@@ -59,6 +62,12 @@ public:
         _playerSlots[1] = blackSlot;
     }
     int getPlayerSlot(const PlayerID player) const { return _playerSlots[player]; }
+
+    // A4 (2026-06-13): the tournament ROUND this game belongs to. Both colour-swap
+    // games of a round share one card set, so round index == card-set id — the key
+    // the paired per-set eval analysis needs. -1 = not set.
+    void setRoundIndex(int r) { _roundIndex = r; }
+    int getRoundIndex() const { return _roundIndex; }
     const GameState & getFinalGameState() const;
     const size_t getTotalTimeMS(const PlayerID player) const;
     const size_t getMaxTimeMS(const PlayerID player) const;

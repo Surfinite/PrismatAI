@@ -35,6 +35,9 @@ class Prismata::UCTSearchParameters
     size_t          _temperatureK       = 6;       // tau=1 for the first K player-turns (getTurnNumber), then argmax
     double          _epsilonUniform     = 0.25;    // epsilon-uniform mix over root candidates
     double          _epsilonLate        = 0.0;     // persistent late-game uniform-exploration eps (turnNumber >= K); 0 => off
+    double          _epsilonIG          = 0.0;     // targeted late-game IG-count exploration (turnNumber >= K): with this prob,
+                                                   // at roots whose children span >=2 distinct IG click counts, play the
+                                                   // most-visited child at a NON-argmax count; 0 => off (J5, 2026-06-13)
 
     PlayerPtr       _playoutPlayers[2];
     MoveIteratorPtr _moveIterators[2];
@@ -65,6 +68,7 @@ public:
     const size_t & temperatureK()                                   const   { return _temperatureK; }
     const double & epsilonUniform()                                 const   { return _epsilonUniform; }
     const double & epsilonLate()                                    const   { return _epsilonLate; }
+    const double & epsilonIG()                                      const   { return _epsilonIG; }
     const std::string & graphVizFilename()                          const   { return _graphVizFilename; }
     const PlayerPtr & getPlayoutPlayer(const PlayerID p)            const   { return _playoutPlayers[p]; }
     const MoveIteratorPtr & getMoveIterator(const PlayerID p)       const   { return _moveIterators[p]; }
@@ -86,6 +90,7 @@ public:
     void setTemperatureK(size_t k)                                        { _temperatureK = k; }
     void setEpsilonUniform(double e)                                      { _epsilonUniform = e; }
     void setEpsilonLate(double e)                                         { _epsilonLate = e; }
+    void setEpsilonIG(double e)                                           { _epsilonIG = e; }
     void setGraphVizFilename(const std::string & filename)                  { _graphVizFilename = filename; }
     void setPlayoutPlayer(const PlayerID p, const PlayerPtr & ptr)          { _playoutPlayers[p] = ptr; }
     void setMoveIterator(const PlayerID p, const MoveIteratorPtr & m)       { _moveIterators[p] = m; }

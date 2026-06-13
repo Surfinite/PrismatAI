@@ -492,16 +492,20 @@ void NeuralNet::extractInstanceFeatures(const Card & card, int unitIdx, float * 
     out[2] = (float)std::max(card.getConstructionTime(), card.getCurrentDelay());
     // is_blocking / ability_used: SWF-faithful, matching the training extractors EXACTLY
     // (js_engine/state_adapter.js inst.blocking + V2Record.cpp instToRichUnit):
-    //   is_blocking  = inst.blocking = ct.canBlock(assigned) = (assigned ? assignedBlocking :
-    //                  defaultBlocking) — the UNGATED type-level blocking-MODE flag (what the
-    //                  SWF stores as inst.blocking / canBlockAtStartOfPhase returns). It is the
-    //                  "contributes to total defense" signal: blocking-mode units absorb attack.
+    //   is_blocking  = inst.blocking = ct.canBlock(assigned) AND NOT under construction AND
+    //                  NOT FROZEN (chill >= current HP; Card::isFrozen) — the blocking-MODE
+    //                  flag the SWF stores as inst.blocking, the "contributes to total
+    //                  defense" signal. (2026-06-13 B3 fixtures: the SWF/JS engine CLEARS
+    //                  inst.blocking on a fully-chilled unit — the old claim here that "the
+    //                  SWF keeps frozen units blocking-mode" was WRONG, a real silent feature
+    //                  skew; partially-chilled and delayed units DO stay blocking-mode.)
     //   ability_used = assigned AND NOT in blocking mode (spent its turn on its ability).
     // Do NOT use abilityUsedThisTurn() (a transient Card::toJSONString never serializes -> defaults
     // false on any JSON-loaded state). Do NOT use the gated Card::canBlock() (it also excludes
-    // frozen/delayed/under-construction; the SWF keeps those blocking-mode, with is_frozen separate).
+    // DELAYED units, which the SWF keeps blocking-mode).
     const bool nnAssigned = (card.getStatus() == CardStatus::Assigned);
-    const bool nnBlocking = card.getType().canBlock(nnAssigned) && !card.isUnderConstruction();
+    const bool nnBlocking = card.getType().canBlock(nnAssigned) && !card.isUnderConstruction()
+                            && !card.isFrozen();
     out[3] = nnBlocking ? 1.0f : 0.0f;                       // is_blocking
     out[4] = (nnAssigned && !nnBlocking) ? 1.0f : 0.0f;      // ability_used
 

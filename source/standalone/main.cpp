@@ -300,37 +300,63 @@ int main(int argc, char *argv[])
     if (argc >= 2 && std::string(argv[1]) == "--test-sampler")
     {
         using Prismata::MoveSampler::sampleRootIndex;
+        using Prismata::MoveSampler::sampleRootIndexLate;
+        using Prismata::MoveSampler::argmaxIndex;
         bool ok = true;
         auto check = [&](bool cond, const char * msg){ if (!cond) { ok = false; printf("  FAIL: %s\n", msg); } };
 
         // (A) Uniform visits, tau=1, eps=0 -> proportional == uniform; u2 picks the bucket.
         std::vector<size_t> uni = {1,1,1,1};
-        check(sampleRootIndex(uni, 1.0, 0.0, 0.5, 0.00) == 0, "uniform u2=0.00 -> idx0");
-        check(sampleRootIndex(uni, 1.0, 0.0, 0.5, 0.99) == 3, "uniform u2=0.99 -> idx3");
+        check(sampleRootIndex(uni, 1.0, 0.0, 0.5, 0.00, 0.0) == 0, "uniform u2=0.00 -> idx0");
+        check(sampleRootIndex(uni, 1.0, 0.0, 0.5, 0.99, 0.0) == 3, "uniform u2=0.99 -> idx3");
 
         // (B) tau->0 => argmax regardless of u2 (eps=0).
         std::vector<size_t> skew = {10,1,1};
-        check(sampleRootIndex(skew, 1e-9, 0.0, 0.5, 0.99) == 0, "tau~0 -> argmax idx0");
+        check(sampleRootIndex(skew, 1e-9, 0.0, 0.5, 0.99, 0.0) == 0, "tau~0 -> argmax idx0");
 
         // (C) eps=1, u1=0 forces uniform branch over eligible.
-        check(sampleRootIndex(skew, 1.0, 1.0, 0.0, 0.99) == 2, "eps=1 uniform u2=0.99 -> idx2");
+        check(sampleRootIndex(skew, 1.0, 1.0, 0.0, 0.99, 0.0) == 2, "eps=1 uniform u2=0.99 -> idx2");
 
         // (D) visits {4,1}, tau=1, eps=0 => p0=0.8 cut at u2=0.8.
         std::vector<size_t> v41 = {4,1};
-        check(sampleRootIndex(v41, 1.0, 0.0, 0.5, 0.79) == 0, "v41 u2=0.79 -> idx0");
-        check(sampleRootIndex(v41, 1.0, 0.0, 0.5, 0.81) == 1, "v41 u2=0.81 -> idx1");
+        check(sampleRootIndex(v41, 1.0, 0.0, 0.5, 0.79, 0.0) == 0, "v41 u2=0.79 -> idx0");
+        check(sampleRootIndex(v41, 1.0, 0.0, 0.5, 0.81, 0.0) == 1, "v41 u2=0.81 -> idx1");
 
         // (E) zero-visit candidates are ineligible.
         std::vector<size_t> z = {0, 5, 0};
-        check(sampleRootIndex(z, 1.0, 0.0, 0.5, 0.50) == 1, "only idx1 eligible");
+        check(sampleRootIndex(z, 1.0, 0.0, 0.5, 0.50, 0.0) == 1, "only idx1 eligible");
 
         // (F) empty input -> 0 (contract fallback).
         std::vector<size_t> empt;
-        check(sampleRootIndex(empt, 1.0, 0.0, 0.5, 0.5) == 0, "empty -> 0");
+        check(sampleRootIndex(empt, 1.0, 0.0, 0.5, 0.5, 0.0) == 0, "empty -> 0");
 
         // (G) tiny tau with large visits must NOT overflow into elig.back(); must pick argmax.
         std::vector<size_t> big = {500, 1, 1};
-        check(sampleRootIndex(big, 0.001, 0.0, 0.5, 0.99) == 0, "tiny-tau large-visits -> argmax idx0");
+        check(sampleRootIndex(big, 0.001, 0.0, 0.5, 0.99, 0.0) == 0, "tiny-tau large-visits -> argmax idx0");
+
+        // (H) A1 uniform tie-break: visits {5,5,1} ties on {0,1}; u3 splits them 50/50.
+        std::vector<size_t> tie = {5,5,1};
+        check(argmaxIndex(tie, 0.25) == 0, "tie u3=0.25 -> idx0");
+        check(argmaxIndex(tie, 0.75) == 1, "tie u3=0.75 -> idx1");
+        check(sampleRootIndex(tie, 1e-9, 0.0, 0.5, 0.5, 0.75) == 1, "tau~0 tie u3=0.75 -> idx1");
+
+        // (I) J5 targeted IG deviation: visits {9,8,7}, igCounts {2,2,1}; argmax idx0 (count 2);
+        //     u1 < epsIG must pick the most-visited DIFFERENT-count child = idx2 (count 1).
+        std::vector<size_t> vIG = {9,8,7};
+        std::vector<int>    cIG = {2,2,1};
+        check(sampleRootIndexLate(vIG, cIG, 0.25, 0.0, 0.10, 0.5, 0.0) == 2, "epsIG fires -> different-count idx2");
+        check(sampleRootIndexLate(vIG, cIG, 0.25, 0.0, 0.90, 0.5, 0.0) == 0, "u1 >= epsIG -> argmax idx0");
+
+        // (J) J5 not-live root (all counts equal): targeted branch cannot fire; argmax even when u1 < epsIG.
+        std::vector<int> cFlat = {1,1,1};
+        check(sampleRootIndexLate(vIG, cFlat, 0.25, 0.0, 0.10, 0.99, 0.0) == 0, "counts flat -> argmax (no random fallback)");
+
+        // (K) layered EpsilonLate band: u1 in [epsIG, epsIG+epsLate) -> uniform over eligible via u2.
+        check(sampleRootIndexLate(vIG, cIG, 0.10, 0.20, 0.15, 0.99, 0.0) == 2, "epsLate band uniform u2=0.99 -> idx2");
+
+        // (L) late argmax tie-break parity with argmaxIndex (same u3).
+        std::vector<int> cTie = {0,1,0};
+        check(sampleRootIndexLate(tie, cTie, 0.0, 0.0, 0.9, 0.5, 0.75) == argmaxIndex(tie, 0.75), "late argmax == argmaxIndex at same u3");
 
         printf("--test-sampler: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;

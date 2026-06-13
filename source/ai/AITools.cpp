@@ -365,6 +365,9 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
                 aistring << "\"aiargmax\": " << uctPlayer->lastArgmaxIdx() << ", ";
                 aistring << "\"aichosen\": " << uctPlayer->lastChosenIdx() << ", ";
                 aistring << "\"aitruncated\": " << (uctPlayer->rootTruncated() ? "true" : "false") << ", ";
+                // B1/A6 (2026-06-13): chosen root child's backed-up win rate, MOVER (maxPlayer)
+                // perspective — the end-to-end orientation signal for a6_orientation_check.py.
+                aistring << "\"airootwinrate\": " << uctPlayer->lastRootWinRate() << ", ";
             }
         }
     }

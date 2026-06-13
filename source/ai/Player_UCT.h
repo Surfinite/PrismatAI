@@ -25,6 +25,7 @@ public:
     int lastChosenIdx() const { return _search.lastChosenIdx(); }
     bool rootTruncated() const { return _search.rootTruncated(); }
     size_t rootChildren() const { return _search.lastRootVisits().size(); }
+    double lastRootWinRate() const { return _search.lastRootWinRate(); }
 
     virtual std::string getDescription() { return m_description + "\n" + _search.getDescription(); };
     PlayerPtr clone();

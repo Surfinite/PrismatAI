@@ -22,18 +22,38 @@ static NeuralNetPtr createPlayerNeuralNet(const rapidjson::Value & playerValue, 
 
     if (!weightsFile.empty())
     {
+        // A3 (2026-06-13 audit impl-unitindex-05): buildCardTypeMapping()'s return was
+        // previously DISCARDED here — with unit_index.json missing/corrupt the net stays
+        // isLoaded()==true and silently evaluates on the 15 globals alone (every token/
+        // supply entry skipped), the "lobotomized net" failure class. mappedTypes == 0 is
+        // never legitimate for a config NeuralNet player: FATAL, mirroring the X5b guard.
+        auto requireMapping = [&](const std::string & loadedFrom)
+        {
+            const int mappedTypes = nn->buildCardTypeMapping();
+            if (mappedTypes <= 0)
+            {
+                fprintf(stderr, "FATAL: AIParameters: NeuralNet for player '%s' (weights %s) mapped 0 card "
+                                "types -- unit_index.json missing/corrupt next to the config? The net would "
+                                "silently evaluate on globals only. Aborting.\n",
+                        playerName.c_str(), loadedFrom.c_str());
+                abort();
+            }
+        };
         std::string configDir = "asset/config/";
         std::string fullPath = configDir + weightsFile;
         if (nn->loadWeights(fullPath))
         {
-            nn->buildCardTypeMapping();
-            fprintf(stderr, "AIParameters: created per-player NeuralNet from %s\n", fullPath.c_str());
+            requireMapping(fullPath);
+            // A2: player name in the success line — run_eval.py matches (player, basename)
+            // pairs for per-anchor load confirmation; the old file-level line could not
+            // distinguish WHICH player loaded a shared parent bin.
+            fprintf(stderr, "AIParameters: created per-player NeuralNet from %s for player '%s'\n", fullPath.c_str(), playerName.c_str());
             return nn;
         }
         if (nn->loadWeights(weightsFile))
         {
-            nn->buildCardTypeMapping();
-            fprintf(stderr, "AIParameters: created per-player NeuralNet from %s\n", weightsFile.c_str());
+            requireMapping(weightsFile);
+            fprintf(stderr, "AIParameters: created per-player NeuralNet from %s for player '%s'\n", weightsFile.c_str(), playerName.c_str());
             return nn;
         }
         // Hard guard (Jun-10 audit): a NeuralNet player whose WeightsFile fails to load previously got only
@@ -916,6 +936,8 @@ PlayerPtr AIParameters::parsePlayer(const PlayerID player, const std::string & p
             params.setEpsilonUniform(args["EpsilonUniform"].GetDouble());
         if (args.HasMember("EpsilonLate") && args["EpsilonLate"].IsNumber())
             params.setEpsilonLate(args["EpsilonLate"].GetDouble());
+        if (args.HasMember("EpsilonIG") && args["EpsilonIG"].IsNumber())
+            params.setEpsilonIG(args["EpsilonIG"].GetDouble());
 
         if (params.evalMethod() == EvaluationMethods::NeuralNet)
         {
