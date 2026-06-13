@@ -98,6 +98,53 @@ def selfplay_ig_rate(jsonl_dir):
     }
 
 
+def ig_contrast_pairs(jsonl_dir):
+    """B6 (2026-06-13): the realized IG-counterfactual watch-stat — the count of colour-swap
+    pairs whose IG-click-count decision sequences DIFFER.
+
+    The exporter's shared per-game id makes selfplay_<2i>.jsonl / selfplay_<2i+1>.jsonl the two
+    seat orderings of round i's card set (O1 pairing), so each pair is a natural matched
+    counterfactual probe: same set, same nets, different realized IG choices = exactly the
+    contrast a value-only net needs in its labels (rl-design-02). Per game we take the ply-
+    ordered list of ig_click_count over records with ig_feasible_max > 0 (the LIVE IG
+    decisions); a pair contrasts when the two lists differ. Expect ~ε_IG x IG-live-roots per
+    game; if this reads ~0, the targeted exploration is not reaching the axis."""
+    def game_id(path):
+        stem = os.path.splitext(os.path.basename(path))[0]
+        try:
+            return int(stem.split("_")[-1])
+        except ValueError:
+            return None
+
+    seqs = {}
+    for f in glob.glob(os.path.join(jsonl_dir, "*.jsonl")):
+        gid = game_id(f)
+        if gid is None:
+            continue
+        seq = []
+        with open(f, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                r = json.loads(line)
+                if int(r.get("ig_feasible_max", 0) or 0) > 0:
+                    seq.append((int(r.get("ply_index", -1)), int(r.get("ig_click_count", 0))))
+        seqs[gid] = [c for _, c in sorted(seq)]
+    pairs = contrasts = with_ig = 0
+    for gid in sorted(seqs):
+        if gid % 2 == 0 and (gid + 1) in seqs:
+            pairs += 1
+            a, b = seqs[gid], seqs[gid + 1]
+            if a or b:
+                with_ig += 1
+                if a != b:
+                    contrasts += 1
+    return {"ig_contrast_pairs": contrasts,
+            "ig_pairs_total": pairs,
+            "ig_pairs_with_live_ig": with_ig}
+
+
 def argmax_ig_rate(dave_exe, weights, battery="eval/ig_battery", player="RL_Eval"):
     """argmax IG-click-COUNT distribution + root entropy over an IG battery.
 
@@ -137,20 +184,71 @@ def argmax_ig_rate(dave_exe, weights, battery="eval/ig_battery", player="RL_Eval
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--selfplay-jsonl-dir", required=True)
+    ap.add_argument("--selfplay-jsonl-dir", required=True, action="append",
+                    help="self-play shard dir; repeatable (C8 2026-06-13: pass BOTH the forced "
+                         "and general export dirs — the old single-dir invocation silently "
+                         "computed 'self-play coverage' on the forced slice only)")
     ap.add_argument("--dave-exe", required=True)
     ap.add_argument("--weights", required=True)
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--battery", default=os.path.join(HERE, "ig_battery"),
                     help="dir of IG-owning query_move request JSONs (default: eval/ig_battery)")
     a = ap.parse_args()
+
+    # C3/ops-toctou-07: contamination guards at TIME OF USE (stage 0's check ran hours ago).
+    assert not os.environ.get("PRISMATA_FORCE_DSNN"), "PRISMATA_FORCE_DSNN set - coverage contamination"
+    sentinel = os.path.join(os.path.dirname(os.path.abspath(a.dave_exe)), "use_dsnn.txt")
+    assert not os.path.exists(sentinel), f"use_dsnn.txt present ({sentinel}) - coverage contamination"
+
     with open(a.manifest) as f:
         m = json.load(f)
-    m["action_coverage"] = {**selfplay_ig_rate(a.selfplay_jsonl_dir),
-                            **argmax_ig_rate(a.dave_exe, a.weights, a.battery)}
+    # Per-slice stats (labelled by dir name) + a COMBINED view at the legacy top-level keys
+    # (dashboard compatibility). NOTE on semantics (coverage-prov-01): the self-play stats
+    # describe the GENERATOR's (= the parent net's) behaviour in this iteration's data, not
+    # the candidate's; the candidate's behaviour is the argmax battery below.
+    slices = {}
+    for d in a.selfplay_jsonl_dir:
+        label = "general" if "general" in os.path.basename(os.path.normpath(d)).lower() else "forced"
+        slices[label] = {**selfplay_ig_rate(d), **ig_contrast_pairs(d)}
+    combined = selfplay_ig_rate_multi(a.selfplay_jsonl_dir)
+    m["action_coverage"] = {
+        **combined,
+        "slices": slices,
+        "selfplay_stats_describe": "the GENERATOR (parent) net's behaviour in this iteration's "
+                                   "self-play data (coverage-prov-01); argmax stats describe the "
+                                   "CANDIDATE",
+        **argmax_ig_rate(a.dave_exe, a.weights, a.battery),
+    }
     with open(a.manifest, "w") as f:
         json.dump(m, f, indent=2)
-    print("action_coverage ->", m["action_coverage"])
+    print("action_coverage ->", json.dumps(m["action_coverage"], indent=1)[:2000])
+
+
+def selfplay_ig_rate_multi(dirs):
+    """Combined selfplay_ig_rate over several shard dirs (sums the underlying records by
+    concatenating per-dir scans — same math as one big dir)."""
+    if len(dirs) == 1:
+        return selfplay_ig_rate(dirs[0])
+    agg = None
+    for d in dirs:
+        s = selfplay_ig_rate(d)
+        if agg is None:
+            agg = s
+            continue
+        # additive merges for counts/dicts; recompute means from merged dists
+        for key in ("ig_present_turns", "ig_feasible_turns", "ig_feasible_positive_turns",
+                    "ig_feasible_missing_records", "ig_feasible_invariant_violations"):
+            agg[key] += s[key]
+        for dkey in ("ig_click_dist_selfplay", "ig_feasible_pair_dist", "ig_click_norm_dist"):
+            for k, v in s[dkey].items():
+                agg[dkey][k] = agg[dkey].get(k, 0) + v
+    total = sum(int(k) * v for k, v in agg["ig_click_dist_selfplay"].items())
+    n = sum(agg["ig_click_dist_selfplay"].values())
+    agg["mean_ig_clicks_selfplay"] = (total / n) if n else None
+    norm_total = sum(float(k) * v for k, v in agg["ig_click_norm_dist"].items())
+    norm_n = sum(agg["ig_click_norm_dist"].values())
+    agg["ig_click_norm_mean"] = (norm_total / norm_n) if norm_n else None
+    return agg
 
 
 if __name__ == "__main__":

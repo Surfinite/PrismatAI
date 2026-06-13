@@ -28,10 +28,15 @@ def test_window_keeps_last_w():
     assert select_replay_window(paths, 3) == ['i3.h5','i4.h5','i5.h5']
     assert select_replay_window(paths, 0) == paths
 
-def test_fraction_decays():
-    assert abs(rehearsal_fraction_for_iter(1) - 0.30) < 1e-9
-    assert rehearsal_fraction_for_iter(3) < rehearsal_fraction_for_iter(1)
+def test_fraction_flat_floor():
+    # J1 re-freeze (2026-06-13): flat 0.10 — the 0.30 start defended a measured-absent risk
+    # at this step size (training-03); raises happen via the tripwire/B8 path, not a schedule.
+    assert abs(rehearsal_fraction_for_iter(1) - 0.10) < 1e-9
+    assert rehearsal_fraction_for_iter(3) == rehearsal_fraction_for_iter(1)
     assert rehearsal_fraction_for_iter(99) == 0.10   # floored
+    # the schedule machinery still works when explicitly parameterized (the raise path)
+    assert abs(rehearsal_fraction_for_iter(1, start=0.30, decay_per_iter=0.07) - 0.30) < 1e-9
+    assert rehearsal_fraction_for_iter(99, start=0.30, decay_per_iter=0.07) == 0.10
 
 def test_colour_weights_nonnegative_and_balanced():
     ap = np.array([0,1,1,1,0,0])

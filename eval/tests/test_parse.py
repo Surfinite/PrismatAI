@@ -69,26 +69,29 @@ REAL_MATCHUP_STDERR = """\
 def test_parse_matchup_seatindep_picks_candidate_identity():
     # candidate label 'RL_Eval' (run_eval CANDIDATE_PLAYER default) must substring-match the
     # white identity 'Player A [DAVEAI[RL_Eval]]' -> 53.9%, NOT the 55.0% White seat tally.
-    p, n = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "RL_Eval", games=200)
+    p, n, extra = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "RL_Eval", games=200)
     assert abs(p - 0.539) < 1e-9
     assert n == 200
+    # steam-07: the seat tally yields the valid-game count + draw convention
+    assert extra["valid_games"] == 200 and extra["draws"] == 4
+    assert "draws count against BOTH" in extra["draw_convention"]
 
 
 def test_parse_matchup_seatindep_picks_steam_identity():
-    p, n = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "STEAMAI[HardestAI]", games=200)
+    p, n, _ = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "STEAMAI[HardestAI]", games=200)
     assert abs(p - 0.461) < 1e-9
     assert n == 200
 
 
 def test_parse_matchup_seatindep_not_the_white_seat():
     # the White seat tally is 55.0% but the candidate's seat-independent rate is 53.9%.
-    p, _ = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "RL_Eval", games=200)
+    p, _, _ = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "RL_Eval", games=200)
     assert p != 0.55
 
 
 def test_parse_matchup_seatindep_label_is_case_sensitive():
     # exact-case contract: the injected difficulty is 'RL_Eval'; a wrong-case label must NOT match.
-    p, _ = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "rl_eval", games=200)
+    p, _, _ = parse_matchup_seatindep(REAL_MATCHUP_STDERR, "rl_eval", games=200)
     assert p is None
 
 
@@ -100,14 +103,32 @@ def test_parse_matchup_seatindep_serial_pair_path():
         "[Pair] Player B [STEAMAI[HardestAI]]: 39.0%\n"
         "[Pair] ================================\n"
     )
-    p, n = parse_matchup_seatindep(txt, "RL_Eval", games=128)
+    p, n, extra = parse_matchup_seatindep(txt, "RL_Eval", games=128)
     assert abs(p - 0.61) < 1e-9 and n == 128
+    assert extra == {}   # no seat tally in this snippet -> no valid-games correction
+
+
+def test_parse_matchup_seatindep_invalid_games_shrink_n():
+    # steam-07: matchup's printed rate is wins/validGames — with invalid games present the
+    # CI's n must be the VALID count (White+Black+Draws), not the requested Games line.
+    txt = (
+        "[Parallel] Games:    200 (4 workers)\n"
+        "[Parallel] White:    100 (54.3%)\n"
+        "[Parallel] Black:    80 (43.5%)\n"
+        "[Parallel] Draws:    4\n"
+        "[Parallel] Invalid:  16\n"
+        "[Parallel] --- Win Rates (seat-independent) ---\n"
+        "[Parallel] Player A [DAVEAI[RL_Eval]]: 54.3%\n"
+    )
+    p, n, extra = parse_matchup_seatindep(txt, "RL_Eval", games=200)
+    assert abs(p - 0.543) < 1e-9
+    assert n == 184 and extra["valid_games"] == 184
 
 
 def test_parse_matchup_seatindep_absent_block_returns_none():
     # no --player-switch -> no seat-independent block -> candidate rate is None.
     txt = "[Parallel] White: 70 (70.0%)\n[Parallel] Games: 100\n"
-    p, n = parse_matchup_seatindep(txt, "RL_Eval", games=100)
+    p, n, _ = parse_matchup_seatindep(txt, "RL_Eval", games=100)
     assert p is None and n == 100
 
 
@@ -124,6 +145,6 @@ OLD_MISWIRED_BOTH_SEATS_STDERR = """\
 
 
 def test_parse_matchup_old_miswired_both_seats_yields_no_candidate():
-    p, n = parse_matchup_seatindep(OLD_MISWIRED_BOTH_SEATS_STDERR, "RL_Eval", games=200)
+    p, n, _ = parse_matchup_seatindep(OLD_MISWIRED_BOTH_SEATS_STDERR, "RL_Eval", games=200)
     assert p is None
     assert n == 200  # no Games line in the block -> falls back to the requested count

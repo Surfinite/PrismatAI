@@ -162,7 +162,16 @@ class TestResolveSwaLr:
 # ---------------------------------------------------------------------------
 
 class TestRunIterationArgv:
-    def test_stage3_passes_explicit_swa_lr(self):
+    def test_stage3_disables_swa_and_pins_seed(self):
+        # J1 re-freeze (2026-06-13): SWA is DISABLED for RL fine-tunes (training-02: 4
+        # near-collinear snapshots diluted the update ~20% for nothing); the candidate is
+        # final_model.pt. The old "--swa-lr 5e-6" pin (N-1) is therefore gone from the
+        # driver — resolve_swa_lr keeps protecting non-RL invocations (tests above).
         with open(RUN_ITERATION_PS1, encoding="utf-8") as f:
             text = f.read()
-        assert "--swa-lr 5e-6" in text
+        assert "--no-swa" in text
+        assert "final_model.pt" in text
+        assert "--swa-lr" not in text
+        # training-06: the training seed is pinned (reproducible candidates)
+        assert "--seed" in text
+        assert "--num-workers 0" in text

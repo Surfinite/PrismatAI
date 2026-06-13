@@ -80,13 +80,17 @@ def build_rl_sampler(selfplay_datasets, human_dataset, human_fraction, batch_siz
                         num_workers=num_workers, drop_last=True)
     return loader, combined
 
-def rehearsal_fraction_for_iter(iteration, start=0.30, floor=0.10, decay_per_iter=0.07):
-    """Named-fraction schedule: ~30% human at iter-1, decaying to ~10-15% by iter-3.
+def rehearsal_fraction_for_iter(iteration, start=0.10, floor=0.10, decay_per_iter=0.0):
+    """Rehearsal fraction (J1 re-freeze 2026-06-13): a flat 0.10 floor.
 
-    Confidence schedule, NOT an accumulation argument: the fixed W=5 sliding window keeps
-    self-play *volume* roughly constant after iteration W, so we are not lowering the human
-    share because self-play data piles up. We lower it because we trust self-play more as it
-    strengthens across iterations and thus need less human anchoring over time.
+    The original 0.30 -> 0.10 confidence schedule defended against catastrophic
+    forgetting -- measured ABSENT at this step size (training-03: a zero-rehearsal
+    fine-tune left held-out human-val accuracy unchanged to two decimals), so 0.30 was
+    a pure 30% tax on the RL gradient. 0.10 is kept as a cheap anchor, not protection.
+    The forgetting INSTRUMENT is the stage-4.5 tripwire (per-iteration, vs parent) plus
+    the checkpoint origin-constant guard (B8, vs v221's fixed val-acc with a wider
+    band); the pre-registered response to drift is RAISING this fraction (with the
+    measurement to point at), not aborting.
     """
     return max(floor, start - decay_per_iter * max(0, iteration - 1))
 

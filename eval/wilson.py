@@ -1,13 +1,17 @@
-"""Win-rate (draw = half a win) and 95% Wilson score interval — iid only.
+"""Win-rate (draw = half a win), 95% Wilson score interval (iid), and the paired
+per-card-set CI (2026-06-13, rl-design-05).
 
-This is the COMPLETE statistics surface of the RL eval harness. The C++ tournament's
-HTML statsTable emits only aggregate Wins/Loss/Draw/Games per player — it does NOT emit
-per-card-set scores, so per-set (clustered / colour-swap-paired) analysis is not possible
-from the data we parse, and no sequential-testing machinery is wired anywhere.
+The pooled iid Wilson interval is the VERDICT statistic. Since the A4 engine change the
+tournament also emits a per-game rounds CSV (Tournament_<name>_<date>_rounds.csv), so the
+eval design's intrinsic pairing — one card set per round, played in both seat orders —
+is finally analyzable: paired_round_ci() computes a normal-approximation CI on the mean
+per-round (= per-set) candidate score, which removes the between-set variance component
+the pooled interval ignores. It is REPORTED alongside the Wilson CI (manifest key
+"paired_ci"), never the verdict input, until validated against real runs.
 
-(The former decisive / decisive_gate / clustered_ci helpers were dead code with zero live
-callers that misled readers into thinking paired/sequential statistics existed — removed
-2026-06-10 per the RL-loop audit.)
+(History: clustered/sequential helpers were removed 2026-06-10 as dead code when no
+per-set scores existed; the A4 CSV re-opened the paired analysis — see the third audit's
+rl-design-05/stats-05.)
 """
 import math
 
@@ -29,3 +33,25 @@ def wilson_ci(p, n, z=Z95):
     center = (p + z * z / (2 * n)) / denom
     half = (z / denom) * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
     return (max(0.0, center - half), min(1.0, center + half))
+
+
+def paired_round_ci(round_scores, z=Z95):
+    """95% normal-approximation CI on the MEAN per-round candidate score.
+
+    round_scores: one score per round/card set in [0,1] (e.g. 0, 0.5, 1 for a
+    colour-swap pair: lost both, split, won both; draws contribute 0.25 per game).
+    Treats rounds (sets) as the iid unit — the correct exchangeable unit under the
+    paired design — so within-pair correlation cannot narrow the interval the way it
+    silently does for the pooled per-game Wilson CI (stats-05).
+
+    Normal approximation (z, not t): at the campaign's n_rounds (>= 64) the difference
+    from a t interval is < 0.4% of the half-width; below ~30 rounds treat the interval
+    as indicative only. Returns (0.0, 1.0) for fewer than 2 rounds.
+    """
+    n = len(round_scores)
+    if n < 2:
+        return (0.0, 1.0)
+    mean = sum(round_scores) / n
+    var = sum((s - mean) ** 2 for s in round_scores) / (n - 1)
+    half = z * math.sqrt(var / n)
+    return (max(0.0, mean - half), min(1.0, mean + half))

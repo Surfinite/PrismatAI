@@ -53,11 +53,25 @@ UNIT_INDEX = os.path.join(TRAINING, "data", "unit_index.json")
 
 # fixed shared states: (replay code, ply). gNUTm is a Base+9 game that exercises blockers,
 # constructing units, and ability-used economy units (the features that bit us).
+# B3 (2026-06-13, threeway-cov-01): the original 4-ply fixture NEVER exercised is_frozen,
+# lifespan_remaining, or damaged-HP units and contained zero Infusion-Grid states — exactly
+# the IG-campaign-relevant features. Added (coverage measured from the gate's own dumps;
+# fixtures MUST come from the exact-match-clean corpus — a first attempt used D9gpY-WeMxe,
+# a 1967-rated game OUTSIDE the 30-field-audited set, and failed the gate on what turned
+# out to be old-unit-stats fixture artifacts, not pipeline skew):
+#   ke6MK-xlFvv ply 21: 2 frozen + 5 damaged + 4 lifespan instances (elite chill game)
+#   ke6MK-xlFvv ply 28: 6 frozen + 13 damaged late battle state
+#   fQ89k-nERXA ply 23: 6 Infusion Grids on board + 2 lifespan (elite IG game) — the axis
+# STILL NOT COVERED: engine-native self-play sidecar states (those have no JS leg by
+# construction; the exporter<->inference legs are pinned per-iteration by stage 5 instead).
 SHARED_STATES = [
     ("gNUTm-TgD@G", 5),
     ("gNUTm-TgD@G", 9),
     ("gNUTm-TgD@G", 13),
     ("gNUTm-TgD@G", 17),
+    ("ke6MK-xlFvv", 21),
+    ("ke6MK-xlFvv", 28),
+    ("fQ89k-nERXA", 23),
 ]
 
 INSTANCE_ORDER = ["owner", "is_constructing", "turns_until_ready", "is_blocking",

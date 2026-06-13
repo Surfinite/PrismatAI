@@ -51,9 +51,9 @@ table is written to the HTML results file (tests/Tournament_<name>_<date>.html, 
 run_cpp_tournament() therefore reads that HTML file and parse_tournament_stdout() parses its
 statsTable rows. A stdout score-matrix fallback is retained for diagnostics.
 """
-import argparse, hashlib, json, os, subprocess, sys, time, re, glob
+import argparse, csv, hashlib, json, os, subprocess, sys, time, re, glob
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from wilson import win_rate, wilson_ci
+from wilson import win_rate, wilson_ci, paired_round_ci
 
 
 def sha256(path):
@@ -71,14 +71,16 @@ def _latest_results_html(dave_bin, block_name):
     return files[-1] if files else None
 
 
-def run_cpp_tournament(dave_bin, block_name, stderr_out=None):
+def run_cpp_tournament(dave_bin, block_name, stderr_out=None, rounds_csv_out=None):
     """Run Prismata_Testing.exe (executes every run:true Benchmarks block) and return the
     per-player {wins,draws,games} for `block_name`, read from that block's HTML statsTable.
     The caller is responsible for having flipped exactly the desired block(s) to run:true.
 
     stderr_out: optional list — receives the subprocess's full stderr text (the engine prints
-    its per-player NeuralNet load confirmations there; see engine_confirmed_load). The HTML/
-    stdout parse path is unchanged."""
+    its per-player NeuralNet load confirmations there; see engine_confirmed_load).
+    rounds_csv_out: optional list — receives the parsed rows of this run's per-game
+    Tournament_<block>_*_rounds.csv (A4, 2026-06-13) if present and fresh; the raw material
+    for the paired per-card-set CI."""
     before_run = time.time()
     p = subprocess.run([os.path.join(dave_bin, "Prismata_Testing.exe")],
                        cwd=dave_bin, capture_output=True, text=True, timeout=36000)
@@ -98,6 +100,11 @@ def run_cpp_tournament(dave_bin, block_name, stderr_out=None):
     else:
         print(f"WARNING: no results HTML found for block '{block_name}' — "
               "falling back to the stdout score-matrix (no W/L/D available)", file=sys.stderr)
+    if rounds_csv_out is not None:
+        csv_path = (html_path or "").replace(".html", "_rounds.csv")
+        if csv_path and os.path.isfile(csv_path) and os.path.getmtime(csv_path) >= before_run:
+            with open(csv_path, encoding="utf-8", errors="replace", newline="") as f:
+                rounds_csv_out.extend(list(csv.DictReader(f)))
     # Prefer the canonical HTML statsTable; fall back to stdout score-matrix if absent.
     return parse_tournament_stdout(html_text or (p.stdout + p.stderr), block_name)
 
@@ -188,8 +195,14 @@ def parse_matchup_seatindep(text, candidate_label, games):
     MUST pass a candidate_label unique enough that it is NOT a substring of the opponent's
     identity label (the match takes the FIRST matching line and stops).
 
-    NOTE: deliberately ignores the '[Parallel] White:/Black:/Draws:' seat tally -- for a switched
-    candidate the seat tally is NOT the candidate's win rate (A7)."""
+    NOTE: deliberately ignores the '[Parallel] White:/Black:' seat WIN tally for the rate — for
+    a switched candidate the seat tally is NOT the candidate's win rate (A7). The seat tally IS
+    used to recover valid_games/draws (steam-07): matchup's printed rate is wins/validGames
+    with draws counting against BOTH players (NOT the C++ anchors' draw=half-win), so the CI's
+    n must be the VALID game count, not the requested one.
+
+    Returns (p, n, extra) — extra = {"draws", "valid_games", "draw_convention"} when the seat
+    tally was parseable, else {}."""
     p = None
     n = games
     block = re.search(r"Win Rates \(seat-independent\)(.*?)(?:={5,}|\Z)", text, re.S)
@@ -202,25 +215,43 @@ def parse_matchup_seatindep(text, candidate_label, games):
     mg = re.search(r"\[(?:Pair|Parallel)\]\s+Games:\s+(\d+)", text)
     if mg:
         n = int(mg.group(1))
-    return (p, n)
+    extra = {}
+    mw = re.search(r"\[(?:Pair|Parallel)\]\s+White:\s+(\d+)", text)
+    mb = re.search(r"\[(?:Pair|Parallel)\]\s+Black:\s+(\d+)", text)
+    md = re.search(r"\[(?:Pair|Parallel)\]\s+Draws:\s+(\d+)", text)
+    if mw and mb and md:
+        draws = int(md.group(1))
+        valid = int(mw.group(1)) + int(mb.group(1)) + draws
+        if valid > 0:
+            extra = {"draws": draws, "valid_games": valid,
+                     "draw_convention": "draws count against BOTH players (matchup_clean.js), "
+                                        "NOT the C++ anchors' draw=half-win"}
+            n = valid
+    return (p, n, extra)
 
 
 # ---------------------------------------------------------------------------
 # Provenance + manifest persistence
 # ---------------------------------------------------------------------------
 
-# AIParameters.cpp prints this to STDERR when it constructs a per-player NeuralNet:
-#   "AIParameters: created per-player NeuralNet from asset/config/<weights file>"
+# AIParameters.cpp prints this to STDERR when it constructs a per-player NeuralNet
+# (PLAYER-LEVEL since A2, 2026-06-13 — the old file-level line could not distinguish WHICH
+# player loaded a shared parent bin, so the N-2 guard structurally could not catch its own
+# documented scenario, prov-06):
+#   "AIParameters: created per-player NeuralNet from asset/config/<file> for player '<name>'"
 ENGINE_LOAD_MARKER = "created per-player NeuralNet from"
 
 
-def engine_confirmed_load(stderr_text, weights_basename):
-    """True iff the engine's stderr confirms it actually constructed a per-player NeuralNet
-    from the candidate weights file (load marker AND the candidate basename on the SAME line —
-    the basename elsewhere in stderr noise is not a confirmation)."""
+def engine_confirmed_load(stderr_text, weights_basename, player=None):
+    """True iff the engine's stderr confirms it constructed a per-player NeuralNet from the
+    given weights file (marker AND basename on the SAME line). When `player` is given, the
+    SAME line must also carry "for player '<player>'" — the (player, basename) PAIR is the
+    confirmation, since many config players share the parent bin (prov-06)."""
+    needle = "for player '%s'" % player if player else None
     for line in (stderr_text or "").splitlines():
         if ENGINE_LOAD_MARKER in line and weights_basename in line:
-            return True
+            if needle is None or needle in line:
+                return True
     return False
 
 
@@ -272,13 +303,29 @@ VERDICT_RULE = ("REJECT iff iter0/general (candidate vs parent, unforced sets) c
                 "iff that anchor is missing/errored. All deltas are information only — "
                 "promotion is a HUMAN call.")
 
-# Anchor C++ tournament blocks (must exist run:false in config.txt; group1=RL_Eval candidate):
-#   iter0  -> vs RL_Eval_iter0 (repointed to the PARENT promoted net, v221):
-#             general pool = the verdict input; forced pool = d_rl information.
-#   narrow -> vs RL_Narrow (iterator-only variable; dave@09c5436) : non-gating trajectory yardstick.
+# Anchor C++ tournament blocks (must exist run:false in config.txt; group1=RL_Eval candidate).
+# A pool maps to a LIST of blocks whose results aggregate into one cell (J3/J4 2026-06-13: the
+# iter0/origin general pools split across two fixed seed panels, 2026/2027, for partial
+# set-generalization without losing cross-iteration comparability).
+#   iter0  -> vs RL_Eval_iter0 (the PARENT promoted net): general = THE verdict input
+#             (192 rounds = 384 games across two panels); forced = d_rl info (192 games).
+#             Run EVERY iteration (the only per-iteration anchor since J3).
+#   narrow -> vs RL_Narrow (iterator-only variable): run at PROMOTION only.
+#   origin -> vs RL_Eval_origin (PERMANENTLY v221, never repointed — drl-03): the campaign's
+#             cumulative-axis measurement; run at CHECKPOINTS (768 general + 192 forced games).
 ANCHOR_BLOCKS = {
-    "iter0":  {"forced": "RL_Eval_iter0_forced",  "general": "RL_Eval_iter0_general"},
-    "narrow": {"forced": "RL_Eval_narrow_forced", "general": "RL_Eval_narrow_general"},
+    "iter0":  {"forced": ["RL_Eval_iter0_forced"],
+               "general": ["RL_Eval_iter0_generalA", "RL_Eval_iter0_generalB"]},
+    "narrow": {"forced": ["RL_Eval_narrow_forced"], "general": ["RL_Eval_narrow_general"]},
+    "origin": {"forced": ["RL_Eval_origin_forced"],
+               "general": ["RL_Eval_origin_generalA", "RL_Eval_origin_generalB"]},
+}
+# The parent-pinned opponent each anchor's stderr must confirm (player-level, prov-06).
+# "parent" resolves to --parent-weights; "origin" to --origin-weights.
+ANCHOR_OPPONENTS = {
+    "iter0":  ("RL_Eval_iter0", "parent"),
+    "narrow": ("RL_Narrow", "parent"),
+    "origin": ("RL_Eval_origin", "origin"),
 }
 
 
@@ -310,28 +357,54 @@ def set_block_run(dave_bin, block_name, run):
         json.load(f)  # strict-JSON sanity
 
 
+def candidate_round_scores(csv_rows, candidate_player):
+    """Per-round candidate scores from the A4 per-game CSV: each round = one shared card set
+    played in both seat orders; score_r = (wins + 0.5*draws)/games_in_round in [0,1]. The raw
+    material for the paired per-card-set CI (rl-design-05): pairing removes the between-set
+    variance component the pooled iid Wilson CI ignores."""
+    rounds = {}
+    for row in csv_rows:
+        try:
+            r = int(row["round"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        won = 0.0
+        if row.get("winner_seat") == "D":
+            won = 0.5
+        elif row.get("winner_seat") == "0" and row.get("white_name") == candidate_player:
+            won = 1.0
+        elif row.get("winner_seat") == "1" and row.get("black_name") == candidate_player:
+            won = 1.0
+        g, w = rounds.get(r, (0, 0.0))
+        rounds[r] = (g + 1, w + won)
+    return [w / g for g, w in rounds.values() if g > 0]
+
+
 def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER, weights_basename=None,
-                     parent_basename=None):
+                     parent_basename=None, opponent_player=None):
     """Flip ONE anchor block run:true, run Prismata_Testing.exe, parse the candidate's W/L/D from its
     HTML statsTable, flip back (in a finally). Returns a FLAT anchor dict
-    {block,candidate,wins,draws,games,win_rate,ci:[lo,hi]} the dashboard can render directly, or an
-    {block,error,...} dict if the candidate row / W/L/D could not be parsed (degraded stdout fallback).
+    {block,candidate,wins,draws,games,win_rate,ci:[lo,hi](,paired_ci,rounds)} the dashboard can render
+    directly, or an {block,error,...} dict if the candidate row / W/L/D could not be parsed.
 
     When weights_basename is given, the engine's stderr is checked for the per-player NeuralNet
-    load confirmation and the result is stamped "engine_confirmed_load" (active provenance;
-    build_manifest hard-fails a completed-but-unconfirmed anchor). When parent_basename is given
-    (N-2), the SAME stderr must also confirm the PARENT net load — the anchor's opponent
-    (RL_Eval_iter0 / RL_Narrow) is parent-pinned — stamped "engine_confirmed_parent_load"."""
+    load confirmation — PLAYER-LEVEL since prov-06: the (candidate_player, weights_basename)
+    pair must appear on one line — stamped "engine_confirmed_load". When parent_basename is
+    given (N-2), the (opponent_player, parent_basename) pair must likewise confirm, stamped
+    "engine_confirmed_parent_load". If the per-game rounds CSV (A4) is present, a paired
+    per-card-set CI is stamped alongside the iid Wilson CI (REPORTED, not the verdict input)."""
     set_block_run(dave_bin, block_name, True)
     stderr_sink = []
+    csv_rows = []
     try:
-        results = run_cpp_tournament(dave_bin, block_name, stderr_out=stderr_sink)
+        results = run_cpp_tournament(dave_bin, block_name, stderr_out=stderr_sink,
+                                     rounds_csv_out=csv_rows)
     finally:
         set_block_run(dave_bin, block_name, False)
     stderr_text = "".join(stderr_sink)
-    confirmed = (engine_confirmed_load(stderr_text, weights_basename)
+    confirmed = (engine_confirmed_load(stderr_text, weights_basename, candidate_player)
                  if weights_basename else None)
-    parent_confirmed = (engine_confirmed_load(stderr_text, parent_basename)
+    parent_confirmed = (engine_confirmed_load(stderr_text, parent_basename, opponent_player)
                         if parent_basename else None)
 
     def _stamp(out):
@@ -349,8 +422,51 @@ def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER, we
     wins, draws, games = cand["wins"], cand["draws"], cand["games"]
     p = win_rate(wins, draws, games)
     lo, hi = wilson_ci(p, games)
-    return _stamp({"block": block_name, "candidate": candidate_player,
-                   "wins": wins, "draws": draws, "games": games, "win_rate": p, "ci": [lo, hi]})
+    cell = {"block": block_name, "candidate": candidate_player,
+            "wins": wins, "draws": draws, "games": games, "win_rate": p, "ci": [lo, hi]}
+    scores = candidate_round_scores(csv_rows, candidate_player)
+    if scores:
+        plo, phi = paired_round_ci(scores)
+        cell["paired_ci"] = [plo, phi]
+        cell["rounds"] = len(scores)
+        cell["round_scores"] = scores   # raw per-set scores (multi-block pools re-pool these)
+    return _stamp(cell)
+
+
+def aggregate_pool_cells(cells):
+    """Combine the per-block cells of one pool (e.g. the generalA/generalB seed panels) into a
+    single cell: counts sum; the Wilson CI is recomputed on the pooled counts; the paired CI is
+    recomputed over the UNION of per-round scores (rounds are independent across panels). Any
+    errored sub-block makes the pool errored (a partial pool must not masquerade as complete).
+    Provenance stamps AND-combine."""
+    cells = list(cells)
+    if len(cells) == 1:
+        c = dict(cells[0])
+        c.pop("round_scores", None)
+        c["blocks"] = [cells[0].get("block")]
+        return c
+    if any("error" in c or "win_rate" not in c for c in cells):
+        return {"blocks": [c.get("block") for c in cells],
+                "error": "one or more sub-blocks errored",
+                "sub_blocks": [{k: v for k, v in c.items() if k != "round_scores"} for c in cells]}
+    wins = sum(c["wins"] for c in cells)
+    draws = sum(c["draws"] for c in cells)
+    games = sum(c["games"] for c in cells)
+    p = win_rate(wins, draws, games)
+    lo, hi = wilson_ci(p, games)
+    out = {"blocks": [c.get("block") for c in cells], "candidate": cells[0].get("candidate"),
+           "wins": wins, "draws": draws, "games": games, "win_rate": p, "ci": [lo, hi],
+           "sub_blocks": [{k: v for k, v in c.items() if k != "round_scores"} for c in cells]}
+    scores = [s for c in cells for s in c.get("round_scores", [])]
+    if scores:
+        plo, phi = paired_round_ci(scores)
+        out["paired_ci"] = [plo, phi]
+        out["rounds"] = len(scores)
+    for key in ("engine_confirmed_load", "engine_confirmed_parent_load"):
+        vals = [c.get(key) for c in cells if key in c]
+        if vals:
+            out[key] = all(vals)
+    return out
 
 
 def compute_verdict(general_cell):
@@ -358,8 +474,11 @@ def compute_verdict(general_cell):
     boolean). general_cell = the iter0/general anchor dict (candidate vs parent, unforced sets):
       REJECT     iff it completed AND its 95% Wilson ci_upper < 0.5 (proven worse than parent);
       REVIEW     iff it completed and ci_upper >= 0.5 (human call on the recorded numbers);
-      INCOMPLETE iff it is missing/errored (no automated verdict possible)."""
+      INCOMPLETE iff it is missing/errored OR completed with ZERO games (edge-08: a 0-game
+                 'completed' anchor certifies nothing)."""
     if not (isinstance(general_cell, dict) and "win_rate" in general_cell and general_cell.get("ci")):
+        return "INCOMPLETE"
+    if not general_cell.get("games"):
         return "INCOMPLETE"
     return "REJECT" if general_cell["ci"][1] < 0.5 else "REVIEW"
 
@@ -406,9 +525,11 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
     if steam_fn is None:
         steam_fn = run_steam
     weights_basename = os.path.basename(args.weights)
-    # N-2: each C++ anchor's opponent (RL_Eval_iter0 = the verdict opponent; RL_Narrow) is
-    # parent-pinned, so the engine stderr must confirm the PARENT net load too.
+    # N-2: each C++ anchor's opponent is pinned (iter0/narrow -> the PARENT bin; origin -> the
+    # PERMANENT origin bin), so the engine stderr must confirm that load too (player-level).
     parent_basename = os.path.basename(args.parent_weights) if args.parent_weights else None
+    origin_basename = (os.path.basename(args.origin_weights)
+                       if getattr(args, "origin_weights", None) else None)
     if parent_basename and parent_basename == weights_basename:
         # One stderr load line would satisfy BOTH stamps -> a candidate-vs-itself eval would
         # pass silently. A deliberate self-match sanity run should omit --parent-weights.
@@ -419,72 +540,98 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
     # candidate net BEFORE any tournament flips on.
     verify_config_weights(args.dave_bin, args.candidate_player, weights_basename)
     wpath = os.path.join(args.dave_bin, "asset/config", args.weights)
+    # A1 + preflight-gaps-06: record the ACTUAL eval budget from the live config, never a
+    # hardcoded claim (the old literal could silently diverge from what actually ran).
+    with open(_config_path(args.dave_bin), encoding="utf-8-sig") as f:
+        _cfg_players = json.load(f).get("Players", {})
+    _cand_cfg = _cfg_players.get(args.candidate_player, {})
+    anchors_requested = list(getattr(args, "anchors", None) or ["iter0"])
+    unknown = [a for a in anchors_requested if a not in ANCHOR_BLOCKS]
+    if unknown:
+        raise RuntimeError(f"unknown anchor(s) {unknown}; known: {sorted(ANCHOR_BLOCKS)}")
     manifest = {
         "iteration": args.iteration,
         "candidate_weights": args.weights,
         "candidate_net_sha256": sha256(wpath),
         "parent_weights": args.parent_weights,
+        "origin_weights": getattr(args, "origin_weights", None),
         "candidate_player": args.candidate_player,
-        "eval_budget": "TimeLimit:7000/MaxTraversals:100000 (deployment-representative, A1)",
+        "anchors_requested": anchors_requested,
+        "eval_budget": {"TimeLimit": _cand_cfg.get("TimeLimit"),
+                        "MaxTraversals": _cand_cfg.get("MaxTraversals"),
+                        "UCTConstant": _cand_cfg.get("UCTConstant"),
+                        "source": "read from config.txt Players.%s at eval time (A1)" % args.candidate_player},
         "effect_size_E": E_EFFECT, "regression_tol_Y": Y_REG,   # recorded metadata; non-gating
         "complete": False,
         "anchors_completed": [],
         "anchors": {}, "pools": {},
         "notes": ("Verdict = detect-proven-harm on iter0/general (candidate vs PARENT promoted net, "
-                  "unforced sets): " + VERDICT_RULE + " narrow + steam are non-gating trajectory "
-                  "yardsticks. CIs are iid Wilson (the tournament HTML emits no per-card-set "
-                  "scores, so no paired/sequential statistics exist). Manifest is written "
+                  "unforced sets): " + VERDICT_RULE + " narrow (promotion-time) + origin/steam "
+                  "(checkpoint-time) are non-gating yardsticks. CIs: pooled iid Wilson is the "
+                  "verdict statistic; where the per-game rounds CSV exists a paired per-card-set "
+                  "CI is REPORTED alongside (it removes between-set variance the pooled CI "
+                  "ignores; conditional on the fixed seed panels). Manifest is written "
                   "incrementally; 'complete': false means the run died mid-eval."),
     }
     _refresh_verdict(manifest)
     write_manifest(manifest, manifest_path)
 
-    # --- C++ tournament anchors (one block per pool), driven by the ANCHOR_BLOCKS registry ---
-    for anchor in ANCHOR_BLOCKS:
+    # --- C++ tournament anchors, driven by the ANCHOR_BLOCKS registry (pool -> block LIST) ---
+    for anchor in anchors_requested:
+        opponent_player, opp_kind = ANCHOR_OPPONENTS.get(anchor, (None, "parent"))
+        opp_basename = parent_basename if opp_kind == "parent" else origin_basename
         per_pool = {}
         for pool in args.pools:
-            block = ANCHOR_BLOCKS[anchor].get(pool)
-            if not block:
-                continue
-            print(f"[{anchor}/{pool}] running block {block} ...", file=sys.stderr)
-            cell = run_anchor(args.dave_bin, block, args.candidate_player, weights_basename,
-                              parent_basename)
-            per_pool[pool] = cell
-            # Headline cell = forced (the IG-widened d_rl axis); full breakdown under 'pools'.
-            head = per_pool.get(HEADLINE_POOL) or next(iter(per_pool.values()), {})
-            manifest["anchors"][anchor] = {**{k: v for k, v in head.items() if k != "pools"},
-                                           "pools": per_pool}
-            _refresh_verdict(manifest)
-            write_manifest(manifest, manifest_path)   # incremental: persist after EVERY pool
-            # Provenance hard-fail: a COMPLETED anchor whose engine stderr never confirmed the
-            # candidate-net load is recorded (above) but must not be trusted.
-            if "win_rate" in cell and cell.get("engine_confirmed_load") is False:
-                raise RuntimeError(
-                    f"provenance: block {block} completed but engine stderr never confirmed "
-                    f"loading '{weights_basename}' for {args.candidate_player} "
-                    f"(engine_confirmed_load=false; result recorded in the manifest but NOT "
-                    "trusted — the engine may have evaluated the wrong net)")
-            # N-2 parent-side hard-fail (same record-then-raise pattern): the anchor's opponent
-            # must have loaded the frozen PARENT net or the comparison itself is wrong.
-            if "win_rate" in cell and cell.get("engine_confirmed_parent_load") is False:
-                raise RuntimeError(
-                    f"provenance: block {block} completed but engine stderr never confirmed "
-                    f"loading the PARENT net '{parent_basename}' for the anchor opponent "
-                    f"(engine_confirmed_parent_load=false; result recorded in the manifest but "
-                    "NOT trusted — the verdict would compare the candidate vs the WRONG parent)")
+            blocks = ANCHOR_BLOCKS[anchor].get(pool) or []
+            cells = []
+            for block in blocks:
+                print(f"[{anchor}/{pool}] running block {block} ...", file=sys.stderr)
+                cell = run_anchor(args.dave_bin, block, args.candidate_player, weights_basename,
+                                  opp_basename, opponent_player)
+                cells.append(cell)
+                # Record-then-raise: persist the partial pool BEFORE any provenance hard-fail.
+                per_pool[pool] = aggregate_pool_cells(cells)
+                head = per_pool.get(HEADLINE_POOL) or next(iter(per_pool.values()), {})
+                manifest["anchors"][anchor] = {**{k: v for k, v in head.items() if k != "pools"},
+                                               "pools": per_pool}
+                _refresh_verdict(manifest)
+                write_manifest(manifest, manifest_path)   # incremental: persist after EVERY block
+                # Provenance hard-fail: a COMPLETED block whose engine stderr never confirmed the
+                # candidate-net load is recorded (above) but must not be trusted.
+                if "win_rate" in cell and cell.get("engine_confirmed_load") is False:
+                    raise RuntimeError(
+                        f"provenance: block {block} completed but engine stderr never confirmed "
+                        f"loading '{weights_basename}' for player {args.candidate_player} "
+                        f"(engine_confirmed_load=false; result recorded in the manifest but NOT "
+                        "trusted — the engine may have evaluated the wrong net)")
+                # N-2/prov-06 opponent-side hard-fail (player-level): the anchor's opponent must
+                # have loaded the pinned net or the comparison itself is wrong.
+                if "win_rate" in cell and cell.get("engine_confirmed_parent_load") is False:
+                    raise RuntimeError(
+                        f"provenance: block {block} completed but engine stderr never confirmed "
+                        f"loading '{opp_basename}' for the anchor opponent {opponent_player} "
+                        f"(engine_confirmed_parent_load=false; result recorded in the manifest but "
+                        "NOT trusted — the verdict would compare the candidate vs the WRONG net)")
         manifest["anchors_completed"].append(anchor)
         write_manifest(manifest, manifest_path)
 
     # --- steam anchor: matchup_clean.js fixed-N (A8), A7 seat-independent, GENERAL pool only ---
-    # Non-gating yardstick. (forced-pool STEAMAI is unwired: matchup_clean.js ForcedCards
-    # support is unverified.) Earlier anchors are already on disk, so a steam crash can no
-    # longer erase them.
+    # Non-gating CHECKPOINT yardstick since J3 (opt-in via --run-steam). (forced-pool STEAMAI is
+    # unwired: matchup_clean.js ForcedCards support is unverified.) Earlier anchors are already
+    # on disk, so a steam crash can no longer erase them.
+    if steam_available and not getattr(args, "run_steam", False):
+        manifest["anchors"]["steam"] = {
+            "status": "SKIPPED — steam is a checkpoint-time yardstick (J3); pass --run-steam "
+                      "(run_checkpoint.ps1 does) to run it"}
+        steam_available = False
     if steam_available:
         print(f"[steam] matchup_clean.js candidate(DaveAI/RL_Eval) vs 2016 MasterBot "
               f"({args.steam_games} games) ...", file=sys.stderr)
-        p, n = steam_fn(args.orig_exe, args.candidate_label, args.steam_games,
-                        ["--candidate-weights", weights_basename], 7000,
-                        os.path.join(args.dave_bin, "PrismataAI.exe"))
+        res = steam_fn(args.orig_exe, args.candidate_label, args.steam_games,
+                       ["--candidate-weights", weights_basename], 7000,
+                       os.path.join(args.dave_bin, "PrismataAI.exe"))
+        p, n = res[0], res[1]
+        extra = res[2] if len(res) > 2 and isinstance(res[2], dict) else {}
         if p is None:
             manifest["anchors"]["steam"] = {
                 "error": "no seat-independent result parsed (check --player-switch / candidate label)",
@@ -492,8 +639,9 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
         else:
             lo, hi = wilson_ci(p, n)
             manifest["anchors"]["steam"] = {"win_rate": p, "games": n, "ci": [lo, hi],
-                                            "pool": "general",
-                                            "note": "A7 seat-independent, A8 fixed-N, non-gating"}
+                                            "pool": "general", **extra,
+                                            "note": "A7 seat-independent, A8 fixed-N, non-gating; "
+                                                    "n = valid games where parseable (steam-07)"}
         manifest["anchors_completed"].append("steam")
     else:
         manifest["anchors"]["steam"] = {
@@ -511,7 +659,9 @@ def main():
     ap = argparse.ArgumentParser(
         description="Per-iteration RL eval: 3 anchors (iter0/narrow/steam), Wilson CIs, "
                     "REJECT/REVIEW/INCOMPLETE verdict, incremental manifest.")
-    ap.add_argument("--iteration", type=int, required=True)
+    ap.add_argument("--iteration", required=True,
+                    help="iteration index (int) or checkpoint label (e.g. ckpt_20260613) — "
+                         "used for the manifest filename + stamp only")
     ap.add_argument("--weights", required=True, help="candidate .bin filename (in dave bin/asset/config)")
     ap.add_argument("--parent-weights", default=None,
                     help="current promoted .bin (frozen parent_bin). When given, each C++ anchor's "
@@ -527,6 +677,15 @@ def main():
     ap.add_argument("--candidate-label", default=CANDIDATE_PLAYER,
                     help="candidate identity label as it appears in matchup_clean.js output (A7)")
     ap.add_argument("--pools", nargs="+", default=["forced", "general"])
+    ap.add_argument("--anchors", nargs="+", default=["iter0"],
+                    help="which C++ anchors to run (J3 cadence: per-iteration = iter0 only; "
+                         "narrow at promotion; origin at checkpoints). Known: %s"
+                         % sorted(ANCHOR_BLOCKS))
+    ap.add_argument("--origin-weights", default=None,
+                    help="the PERMANENT origin .bin (frozen origin_bin, v221) — required for the "
+                         "origin anchor's opponent-load provenance check")
+    ap.add_argument("--run-steam", action="store_true",
+                    help="run the STEAMAI yardstick (checkpoint-time only since J3)")
     ap.add_argument("--out", default="eval/manifests")
     args = ap.parse_args()
 

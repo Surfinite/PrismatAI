@@ -1,39 +1,38 @@
 # =============================================================================
-# RL Self-Play — one-iteration driver (Task 14)
+# RL Self-Play — one-iteration driver (regime v3, re-frozen 2026-06-13)
 #
-# DEFERRED — do not run until the "Run prerequisites" in eval/rl_campaign.md are
-# satisfied (FROZEN tuple in eval/campaign_frozen.json must match dave config.txt's
-# RL_SelfPlay — asserted below, never rewritten; eval/calib_states/ +
-# eval/ig_battery/ populated). iter-0 anchor = v221 on RL_Eval_iter0 (per the
-# 2026-06-07 decision — NOT a random wide-untrained net); the 2016 MasterBot
-# baseline lives at its permanent home c:/libraries/prismata_baselines/masterbot2016/.
+# Stages (display numbers kept stable):
+#   0   structural preflight (eval/preflight_config.py — 15 checks, hard gate)
+#   1   self-play export: TWO blocks, one engine launch, Seeds derived base+K (J4)
+#   1.5 archive sidecars + replays -> training/data/rl_iter_<K>/
+#   2   concat shards -> vectorize -> H5 (provenance-stamped, C5)
+#   3   RL fine-tune: warm-start, NO SWA, rehearsal 0.10 on the ELITE corpus (J1)
+#   4   export candidate .bin
+#   4.5 val-acc tripwire (candidate vs parent on the capped held-out val)
+#   4.6 prediction-movement probe (B5 — the null-update detector; informational)
+#   5   export-parity GATE (PyTorch <-> C++)
+#   6   tactical suite — TELEMETRY ONLY since J6 (recorded, never aborts)
+#   7   per-iteration eval: iter0 anchor ONLY (forced 192 + generalA/B 384 games);
+#       narrow runs at PROMOTION (promote_candidate.ps1), origin+steam at
+#       CHECKPOINTS (run_checkpoint.ps1, every 3-5 iterations) — J2/J3
+#   8   action coverage (both slices + IG-contrast watch-stat) + dashboard
 #
-# The gate (promote / reject / inconclusive) is a HUMAN decision on the eval
-# manifest + dashboard — this driver only PRODUCES the manifest + dashboard and
-# prints the §12 decision inputs. It does NOT auto-promote.
+# PROMOTION POLICY (J2, frozen): promote-unless-harm — promote every candidate
+# UNLESS verdict==REJECT OR the 4.5 tripwire fired OR a REPRODUCED tactical
+# regression. Promotion = eval/promote_candidate.ps1 (sha-pinned, atomic-ish).
+# The campaign's answer comes from the CHECKPOINT origin eval, not per-iteration
+# numbers. Per-iteration human record -> eval/campaign_log.md.
 #
-# This orchestrates already-built tools (it does NOT rebuild them):
-#   preflight  : eval/preflight_config.py            (stage 0 — config integrity + frozen tuple + parent re-pin)
-#   self-play  : Prismata_Testing.exe over TWO run:true blocks in dave's config.txt
-#                (regime-v2 mix: RL_SelfPlay_General 2/3 unforced + RL_Step2_Smoke 1/3 forced-Hotel;
-#                 both blocks also saveReplays — stage 1.5 archives replays + parity
-#                 sidecars into training/data/rl_iter_<K>/ as the per-iteration
-#                 forensic record + future-schema re-extraction source)
-#   vectorize  : training/vectorize_v2.py
-#   train      : training/train.py --rl-mode (Task 6)
-#   export     : training/export_weights_v2.py
-#   tripwire   : eval/eval_deepsets_h5.py            (held-out val-acc, candidate vs parent; abort < parent-3pp)
-#   parity GATE: tools/parity/dump_value_batch.py   (abort on worst |Δ| >= 1e-3)
-#   tactical   : eval/tactical_suite.py             (O7 leading indicator)
-#   eval (3 anchors) : eval/run_eval.py
-#   coverage   : eval/action_coverage.py
-#   dashboard  : eval/render_dashboard.py
+# -ResumeFrom <stage>: restart at a later stage after a downstream failure
+# (stages 2+ reuse this K's already-archived artifacts; stage-1 re-runs are the
+# expensive thing this exists to avoid). Each stage validates its prerequisites.
 # =============================================================================
 param(
     [int]$K = 1,        # RL iteration index
-    [int]$N = 0,        # informational only; the tuple is FROZEN in eval/campaign_frozen.json — a nonzero -N that differs from frozen_N throws
-    [int]$Window = 5,   # replay-buffer window W
-    [string]$ParentPt = ''  # parent checkpoint (.pt) to warm-start from; empty => the FROZEN parent_pt from eval/campaign_frozen.json (promotion-gated lineage, N-3)
+    [int]$N = 0,        # informational only; a nonzero -N differing from frozen_N throws
+    [int]$Window = 0,   # replay-buffer window W; 0 => the FROZEN replay_window (a nonzero mismatch throws)
+    [string]$ParentPt = '',  # parent checkpoint override (lineage bypass — printed loudly)
+    [int]$ResumeFrom = 0     # 0 = full run; 2..8 = skip earlier stages (this K's artifacts must exist)
 )
 $ErrorActionPreference = 'Stop'
 
@@ -46,50 +45,46 @@ $train   = "$repo/training"
 $eval    = "$repo/eval"
 $tools   = "$repo/tools"
 
-# Self-play export dirs (exportTrainingV2 targets in config.txt). Regime v2 runs TWO blocks:
-# RL_SelfPlay_General (2/3, unforced) + RL_Step2_Smoke (1/3, ForcedCards Hotel). Separate dirs
-# are REQUIRED -- the export counter is per-Tournament-instance; one dir would clobber filenames.
 $selfplayDir    = "$bin/asset/training/rl_step2_v2"    # forced-Hotel slice (RL_Step2_Smoke)
 $selfplayDirGen = "$bin/asset/training/rl_general_v2"  # general slice (RL_SelfPlay_General)
-# Where this iteration's H5 + concatenated JSONL land.
 $workDir     = "$train/data/rl_iter_$K"
 $catJsonl    = "$workDir/selfplay_iter_$K.jsonl"
 $h5          = "$workDir/selfplay_iter_$K.h5"
 $modelDir    = "$train/models/rl_iter_$K"
-# SWA model (since --swa-start-epoch 3 < --epochs 6, train.py writes swa_model.pt).
-$bestPt      = "$modelDir/swa_model.pt"
-$candBin     = "neural_weights_rl_iter$K.bin"          # filename only — resolved under bin/asset/config
+$bestPt      = "$modelDir/final_model.pt"              # J1: NO SWA — final-epoch weights are the candidate
+$candBin     = "neural_weights_rl_iter$K.bin"
 $candBinPath = "$bin/asset/config/$candBin"
-# Current promoted net (gating parent / manifest label / stage-7 finally-restore target)
-# AND its .pt checkpoint (the warm-start parent). Both read from campaign_frozen.json so a
-# promotion (which edits the frozen file) propagates here automatically — a stale literal
-# would make the F-07 restore re-pin the OLD parent. ($frozen proper is loaded at stage 0;
-# this early read only needs parent_bin/parent_pt for path wiring.)
-$frozenEarly = Get-Content -Raw "$eval/campaign_frozen.json" | ConvertFrom-Json
+$frozenPath  = "$eval/campaign_frozen.json"
+$frozenEarly = Get-Content -Raw $frozenPath | ConvertFrom-Json
 $parentBin   = $frozenEarly.parent_bin
 if (-not $parentBin) { throw "campaign_frozen.json has no parent_bin" }
-$origExe     = 'c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe'  # genuine 2016 MasterBot at its permanent home (steam anchor baseline)
-# LIVE sidecar dirs (sp_*.json.gz), PER export dir (<exportTrainingV2>_parity since the
-# 2026-06-12 review: a shared sibling dir let the two same-launch blocks overwrite each
-# other's sp_0000_* files — per-Tournament gameIds both start at 0). Stage 1.5 archives
-# both into $workDir/parity_states with a slice prefix.
+$origExe     = $frozenEarly.masterbot2016_exe
 $parityLiveForced = "${selfplayDir}_parity"
 $parityLiveGen    = "${selfplayDirGen}_parity"
 $parityStatesLegacy = "$bin/asset/training/parity_states"  # pre-2026-06-12 shared dir — wiped only
 $schema      = "$train/schema_v2.json"
 $propTable   = "$train/property_table.json"
-$humanH5     = "$train/data/human_1800_v2.h5"           # rehearsal data (--human-file) ONLY — never the val set
-$humanValH5  = "$train/data/human_val_1700_v2.h5"        # HELD-OUT human val set (M-03: validate on this, not the rehearsal file)
+# J1/C6: rehearsal = the ELITE corpus; tripwire val = the capped held-out set.
+# Both are FROZEN HP-tier knobs — read from campaign_frozen.json, never hardcoded.
+$humanH5     = "$repo/$($frozenEarly.rehearsal_file)"
+$humanValH5  = "$repo/$($frozenEarly.tripwire_val_file)"
 $manifest    = "$eval/manifests/eval_iter_$K.json"
+$ledger      = "$eval/campaign_log.jsonl"
+$lockFile    = "$eval/.iteration.lock"
 
-# --- Resolve the parent checkpoint (E1 + N-3: promotion-gated lineage) ---
-# Default = the FROZEN parent_pt from campaign_frozen.json — the same provenance source as
-# $parentBin. Promotion = updating campaign_frozen.json's parent_pt/parent_bin (documented in
-# eval/rl_runbook.md "Between iterations"), so running K>1 WITHOUT a promotion warm-starts
-# from the SAME frozen parent again — correct: an unpromoted candidate must never enter the
-# lineage (N-3). The old K-based auto-resolve (iter K-1's SWA) could silently absorb a
-# REJECTED candidate. -ParentPt stays as an explicit override (printed loudly).
-# Fail fast — train.py --rl-mode hard-fails without --init-weights.
+# --- Input validation (C4) ----------------------------------------------------
+if ($K -lt 1) { throw "-K must be >= 1 (got $K)" }
+if ($K -gt 1 -and -not (Test-Path "$train/data/rl_iter_$($K-1)")) {
+    Write-Host "*** WARNING: rl_iter_$($K-1) does not exist — running K=$K with a gap in the window. Deliberate? ***"
+}
+$frozenW = [int]$frozenEarly.replay_window
+if ($Window -eq 0) { $Window = $frozenW }
+elseif ($Window -ne $frozenW) {
+    throw "-Window $Window conflicts with frozen replay_window $frozenW — W is campaign identity (scale tier); change campaign_frozen.json deliberately instead."
+}
+if ($ResumeFrom -lt 0 -or $ResumeFrom -gt 8) { throw "-ResumeFrom must be 0..8" }
+
+# --- Resolve the parent checkpoint (E1 + N-3: promotion-gated lineage) ---------
 if (-not $ParentPt) {
     $ParentPt = $frozenEarly.parent_pt
     if (-not $ParentPt) { throw "campaign_frozen.json has no parent_pt" }
@@ -98,33 +93,51 @@ if (-not $ParentPt) {
     Write-Host "*** -ParentPt OVERRIDE: warm-starting from $ParentPt (NOT the frozen parent_pt — lineage bypass; make sure this is deliberate) ***"
 }
 if (-not (Test-Path $ParentPt)) {
-    throw "parent checkpoint not found: $ParentPt — the RL fine-tune must warm-start from its parent net (E1). Promote (update campaign_frozen.json) or pass -ParentPt explicitly."
+    throw "parent checkpoint not found: $ParentPt — the RL fine-tune must warm-start from its parent net (E1). Promote (eval/promote_candidate.ps1) or pass -ParentPt explicitly."
+}
+# ops-promote-01: the candidate bin name must never equal the frozen parent bin —
+# stage 4's unconditional export would clobber the promoted parent's weights.
+if ($candBin -eq $parentBin) {
+    throw "candidate bin '$candBin' == frozen parent_bin — stage 4 would OVERWRITE the promoted parent. Wrong -K (re-running the iteration that was just promoted)?"
 }
 
 New-Item -ItemType Directory -Force -Path $workDir | Out-Null
 
-# --- Surgical in-place config.txt edit -------------------------------------
-# Mirrors calibrate_n.set_block_run: a LINE-LEVEL regex rewrite of the single matching line
-# (NOT a json.load->json.dump reserialize, which would reformat every block and produce a huge
-# spurious diff). Re-parses the whole file as strict JSON afterwards so a bad edit fails loudly.
+# --- Append-only machine ledger (C4) ------------------------------------------
+function Write-Ledger {
+    param([hashtable]$Entry)
+    $Entry['ts'] = (Get-Date -Format 'yyyy-MM-ddTHH:mm:ss')
+    $Entry['K'] = $K
+    ($Entry | ConvertTo-Json -Compress) | Add-Content -LiteralPath $ledger
+}
+
+# --- Surgical in-place config.txt edit (atomic: temp + os.replace, C9) --------
 #   Edit-Config run        <Tournament-block> <true|false>
 #   Edit-Config traversals <PlayerName>       <int>
 #   Edit-Config weights    <PlayerName>       <file.bin>
+#   Edit-Config seed       <Tournament-block> <int>          (J4 seed-from-K)
 function Edit-Config {
     param([string]$Op, [string]$Name, [string]$Value)
     $py = @'
-import json, re, sys
+import json, os, re, sys, tempfile
 path, op, name, value = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 with open(path, "r", encoding="utf-8-sig") as f:
     lines = f.readlines()
 found = False
-if op == "run":
+if op in ("run", "seed"):
     target = re.compile(r'"name"\s*:\s*"' + re.escape(name) + r'"')
-    run_re = re.compile(r'("run"\s*:\s*)(true|false)')
-    nv = "true" if value.lower() in ("true", "1", "yes") else "false"
+    if op == "run":
+        field = re.compile(r'("run"\s*:\s*)(true|false)')
+        nv = "true" if value.lower() in ("true", "1", "yes") else "false"
+        repl = lambda m: m.group(1) + nv
+    else:
+        field = re.compile(r'("Seed"\s*:\s*)\d+')
+        repl = lambda m: m.group(1) + str(int(value))
     for i, ln in enumerate(lines):
         if target.search(ln) and '"Tournament"' in ln:
-            lines[i] = run_re.sub(lambda m: m.group(1) + nv, ln, count=1); found = True
+            new_ln, n = field.subn(repl, ln, count=1)
+            if n == 0: sys.exit("no %s field on block '%s'" % (op, name))
+            lines[i] = new_ln; found = True
 else:
     key = re.compile(r'^\s*"' + re.escape(name) + r'"\s*:\s*\{')
     if op == "traversals":
@@ -140,18 +153,19 @@ else:
             lines[i] = new_ln; found = True; break
 if not found:
     sys.exit("target '%s' (%s) not found in %s" % (name, op, path))
-with open(path, "w", encoding="utf-8", newline="") as f:
-    f.writelines(lines)
-with open(path, "r", encoding="utf-8-sig") as f:
-    json.load(f)  # strict-JSON sanity
+text = "".join(lines)
+json.loads(text)  # strict-JSON sanity BEFORE touching the live file
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".cfgtmp")
+with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+    f.write(text)
+os.replace(tmp, path)  # atomic on NTFS — a crash mid-edit cannot half-write the live config
 print("cfg %s %s -> %s" % (op, name, value))
 '@
     python -c $py $config $Op $Name $Value
     if ($LASTEXITCODE -ne 0) { throw "Edit-Config $Op $Name failed" }
 }
 
-# --- Held-out val-acc of a .pt checkpoint (stage 4.5 tripwire) ---------------
-# Runs eval/eval_deepsets_h5.py and parses its "  val_acc  = NN.N%" stdout line.
+# --- Held-out val-acc of a .pt checkpoint (stage 4.5 tripwire) -----------------
 function Get-ValAcc {
     param([string]$Pt)
     $env:PYTHONIOENCODING = 'utf-8'
@@ -163,57 +177,54 @@ function Get-ValAcc {
     [double]::Parse($Matches[1], [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
+# --- Driver lockfile (C3: no concurrent drivers/tools on the live config) -----
+if (Test-Path $lockFile) {
+    $age = (Get-Date) - (Get-Item $lockFile).LastWriteTime
+    $content = Get-Content -Raw $lockFile -ErrorAction SilentlyContinue
+    throw ("another iteration appears to be running (lock $lockFile, age {0:N0} min, contents: {1}). " -f $age.TotalMinutes, $content) +
+          "If that run is dead, delete the lock and re-run. NEVER run two drivers (or calibrate_n/matchup tools) against the live config at once."
+}
+"K=$K pid=$PID started=$(Get-Date -Format o)" | Set-Content -LiteralPath $lockFile
+
+$stageReached = 0
+$transcript = "$workDir/iteration_${K}_$(Get-Date -Format yyyyMMdd_HHmmss).log"
+Start-Transcript -Path $transcript | Out-Null
+Write-Ledger @{ event = 'start'; resume_from = $ResumeFrom; parent_bin = $parentBin; parent_pt = $ParentPt }
+
+try {
+
 # -----------------------------------------------------------------------------
 # 0) Structural preflight — single source of truth: eval/preflight_config.py.
-#    Subsumes the former inline frozen-tuple assert and adds: config JSON/BOM
-#    integrity, zero run:true Benchmarks blocks, RL iterator shape (the
-#    crippled-iterator guard), opening-book sizes, the full declared reference
-#    graph (incl. WeightsFile existence), EpsilonLate key-absent convention,
-#    all-four parent re-pins (F-07/N-2), and parent_pt / data-H5 existences.
-#    The tuple stays FROZEN by owner decision: nothing here rewrites config.txt;
-#    reconcile drift deliberately (edit campaign_frozen.json AND config.txt
-#    together) — the script must never silently mutate the campaign identity.
 # -----------------------------------------------------------------------------
 Write-Host "`n[0/8] structural preflight (eval/preflight_config.py)"
-$frozenPath = "$eval/campaign_frozen.json"
 python "$eval/preflight_config.py" --config $config --frozen $frozenPath
 if ($LASTEXITCODE -ne 0) {
     throw "structural preflight FAILED (eval/preflight_config.py exit $LASTEXITCODE) — fix every FAIL line above before running an iteration."
 }
-
-# -N is informational; the tuple itself was verified by the preflight above.
 $frozen = Get-Content -Raw $frozenPath | ConvertFrom-Json
 if ($N -gt 0 -and $N -ne [int]$frozen.frozen_N) {
     throw "-N $N conflicts with frozen_N $($frozen.frozen_N) in campaign_frozen.json — the tuple is frozen; reconcile deliberately instead of overriding."
 }
 $N = [int]$frozen.frozen_N
 
-Write-Host "=== RL iteration $K  (N=$N, W=$Window) ==="
+Write-Host "=== RL iteration $K  (N=$N, W=$Window, resume_from=$ResumeFrom) ==="
 
 # -----------------------------------------------------------------------------
-# 1) Self-play: run BOTH self-play blocks (regime-v2 data mix, one engine launch):
-#      RL_SelfPlay_General (rounds:43 -> ~86 games, NO forcing, 2/3 slice)
-#      RL_Step2_Smoke      (rounds:21 -> ~42 games, ForcedCards Hotel, 1/3 slice)
-#    RL_SelfPlay vs RL_SelfPlay, fixed N, exportTrainingV2 on -> selfplay_*.jsonl
-#    shards in TWO export dirs. RL_SelfPlay's sampling tuple (K=12 tau=0.7
-#    EpsilonLate=0.05) is NOT rewritten here — the stage-0 preflight already
-#    verified config.txt matches campaign_frozen.json (incl. the selfplay_mix).
+# 1) Self-play: BOTH blocks (regime-v3 mix: 344 general + 172 forced rounds),
+#    one engine launch, Seeds derived base+K (J4: fresh card sets every iteration,
+#    reproducible per iteration; bases restored in the finally so the config rests
+#    at the preflight-asserted values). Engine output teed to selfplay.log (C9).
 # -----------------------------------------------------------------------------
-Write-Host "`n[1/8] self-play (2/3 general -> $selfplayDirGen ; 1/3 forced-Hotel -> $selfplayDir)"
-# Clear stale shards (BOTH dirs) + parity sidecar from any prior iteration: the C++ export
-# game counter resets to 0 each run, so a shorter run would otherwise leave higher-numbered
-# selfplay_*.jsonl that Stage 2's glob would wrongly concatenate into this iter's data.
-# (Sidecars are sp_*.json.gz since the 2026-06-12 replay-audit fixes; clear both patterns.
-# A successful prior iteration leaves these dirs empty — its artifacts were ARCHIVED into
-# its own training/data/rl_iter_<k>/; anything still here is a crashed run's residue.)
+if ($ResumeFrom -le 1) {
+$stageReached = 1
+$seedForced  = [int]$frozen.selfplay_seed_base.forced  + $K
+$seedGeneral = [int]$frozen.selfplay_seed_base.general + $K
+Write-Host "`n[1/8] self-play (general Seed=$seedGeneral -> $selfplayDirGen ; forced Seed=$seedForced -> $selfplayDir)"
 if (Test-Path $selfplayDir)    { Remove-Item "$selfplayDir/selfplay_*.jsonl"    -ErrorAction SilentlyContinue }
 if (Test-Path $selfplayDirGen) { Remove-Item "$selfplayDirGen/selfplay_*.jsonl" -ErrorAction SilentlyContinue }
 foreach ($pd in @($parityLiveForced, $parityLiveGen, $parityStatesLegacy)) {
     if (Test-Path $pd) { Remove-Item "$pd/sp_*.json","$pd/sp_*.json.gz" -ErrorAction SilentlyContinue }
 }
-# Replays are the iteration's forensic record — NEVER delete. Any leftovers from a
-# crashed/aborted run are moved aside (timestamped) instead of wiped, so the C++ counter
-# restart cannot silently overwrite them and they remain inspectable.
 $replayLiveGen    = "$bin/asset/replays/rl_selfplay_general"
 $replayLiveForced = "$bin/asset/replays/rl_selfplay_forced"
 foreach ($rl in @($replayLiveGen, $replayLiveForced)) {
@@ -224,16 +235,16 @@ foreach ($rl in @($replayLiveGen, $replayLiveForced)) {
         Write-Host "moved leftover replays from $rl -> $orphanDir (crashed prior run?)"
     }
 }
-# BOTH run:true flips live INSIDE the try (V-C): a throw between/during the flips must still
-# reach the finally that restores BOTH blocks (setting run:false on an already-false block is
-# an idempotent no-op), otherwise a half-flipped config stays run:true until the next preflight.
+$selfplayLog = "$workDir/selfplay_$(Get-Date -Format yyyyMMdd_HHmmss).log"
 try {
+    Edit-Config -Op seed -Name RL_SelfPlay_General -Value $seedGeneral
+    Edit-Config -Op seed -Name RL_Step2_Smoke -Value $seedForced
     Edit-Config -Op run -Name RL_SelfPlay_General -Value true
     Edit-Config -Op run -Name RL_Step2_Smoke -Value true
-    Push-Location $bin   # the exe resolves asset/config/* (cardLibrary.jso, config.txt) CWD-relative
+    Push-Location $bin
     try {
-        & "$bin/Prismata_Testing.exe"   # runs every run:true Benchmarks block in one launch
-        if ($LASTEXITCODE -ne 0) { throw "Prismata_Testing.exe (self-play) exited $LASTEXITCODE" }
+        & "$bin/Prismata_Testing.exe" 2>&1 | Tee-Object -FilePath $selfplayLog
+        if ($LASTEXITCODE -ne 0) { throw "Prismata_Testing.exe (self-play) exited $LASTEXITCODE (log: $selfplayLog)" }
     }
     finally {
         Pop-Location
@@ -242,26 +253,20 @@ try {
 finally {
     Edit-Config -Op run -Name RL_Step2_Smoke -Value false
     Edit-Config -Op run -Name RL_SelfPlay_General -Value false
+    Edit-Config -Op seed -Name RL_Step2_Smoke -Value ([int]$frozen.selfplay_seed_base.forced)
+    Edit-Config -Op seed -Name RL_SelfPlay_General -Value ([int]$frozen.selfplay_seed_base.general)
+}
+$warnings = @(Select-String -Path $selfplayLog -Pattern 'WARNING:' -ErrorAction SilentlyContinue)
+if ($warnings) {
+    Write-Host "*** $($warnings.Count) engine WARNING line(s) during self-play (see $selfplayLog): ***"
+    $warnings | Select-Object -First 5 | ForEach-Object { Write-Host "  $($_.Line)" }
 }
 
 # -----------------------------------------------------------------------------
-# 1.5) Archive this iteration's state artifacts (2026-06-12 replay-audit fixes).
-#      - parity sidecars (sp_*.json.gz, engine-native turn-start states): the
-#        FUTURE-SCHEMA re-extraction source — any future C++ exporter can rebuild
-#        training data from these via --dump-v2-record. Previously DELETED each
-#        iteration (replay-audit S1, High).
-#      - replays (game_*.json.gz, per-action snapshots + outcome + meta): human-
-#        viewable forensic record; turn-start states recoverable via
-#        states[p==0 ? 0 : turnBoundaries[p]-1]. Same shared per-game id as the
-#        selfplay_NNNN.jsonl shards (O1 fix), so game_0007 == selfplay_0007.
-#      Stage 5's parity gate reads the ARCHIVED sidecars (this run's own states).
+# 1.5) Archive this iteration's state artifacts.
 # -----------------------------------------------------------------------------
 Write-Host "`n[1.5/8] archive sidecars + replays -> $workDir"
 $parityArchive = "$workDir/parity_states"
-# Same-K re-run guard: a prior attempt of THIS iteration may have archived already
-# (e.g. it failed later, at train/parity). Names restart at sp_0000/game_0000 every
-# run, so archiving into a non-empty dest would either throw mid-move or silently mix
-# two generations. Move any existing archive aside (timestamped, never deleted).
 $staleArchives = @()
 if ((Test-Path $parityArchive) -and (Get-ChildItem -Path "$parityArchive/*" -Include 'sp_*.json','sp_*.json.gz' -ErrorAction SilentlyContinue)) { $staleArchives += $parityArchive }
 foreach ($slice in @('general', 'forced')) {
@@ -278,9 +283,6 @@ if ($staleArchives) {
     Write-Host "prior attempt's archive for iteration $K moved aside -> $aside"
 }
 New-Item -ItemType Directory -Force -Path $parityArchive | Out-Null
-# Archive FLAT with a slice prefix (general_sp_* / forced_sp_*): keeps stage 5's
-# non-recursive glob working, makes slice attribution explicit, and the prefixed
-# names cannot collide across the two blocks.
 $sidecarCount = 0
 foreach ($pair in @(@($parityLiveGen, 'general'), @($parityLiveForced, 'forced'))) {
     $src = $pair[0]; $slice = $pair[1]
@@ -296,149 +298,199 @@ foreach ($pair in @(@($replayLiveGen, 'general'), @($replayLiveForced, 'forced')
     if ((Test-Path $src) -and (Get-ChildItem -Path $src -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) {
         Move-Item "$src/game_*.json.gz" $dst
     } else {
-        # The replays are part of the iteration contract (forensic record + future-schema
-        # source) — a missing slice means saveReplays drifted out of the config block or
-        # the serializer failed wholesale. Fail loudly rather than complete a "successful"
-        # iteration with no record.
-        throw "no replays in $src ($slice slice) — saveReplays missing from the config block, or serializer failure (check stderr for [ReplaySerializer] lines)"
+        throw "no replays in $src ($slice slice) — saveReplays missing from the config block, or serializer failure (check $selfplayLog for [ReplaySerializer] lines)"
     }
 }
 Write-Host ("archived: {0} sidecars; replays general={1} forced={2}" -f `
     $sidecarCount, `
     @(Get-ChildItem -Path "$workDir/replays/general" -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue).Count, `
     @(Get-ChildItem -Path "$workDir/replays/forced"  -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue).Count)
+} else {
+    $parityArchive = "$workDir/parity_states"
+    Write-Host "`n[1/8 + 1.5/8] SKIPPED (resume_from=$ResumeFrom) — reusing this K's archived artifacts"
+    if (-not (Test-Path $parityArchive)) { throw "-ResumeFrom $ResumeFrom but $parityArchive does not exist — this K was never generated; run without -ResumeFrom" }
+}
 
 # -----------------------------------------------------------------------------
 # 2) Concat V2 shards (BOTH export dirs) -> one JSONL -> vectorize -> H5.
-#    Shard names restart at selfplay_0000 in EACH dir (per-Tournament counter),
-#    so concat dir-by-dir; game boundaries are detected downstream via ply_index==0.
+#    The H5 carries provenance stamps (C5): parent sha, tuple hash, slice counts.
 # -----------------------------------------------------------------------------
+if ($ResumeFrom -le 2) {
+$stageReached = 2
 Write-Host "`n[2/8] concat shards + vectorize -> $h5"
-$shardsGen    = @(Get-ChildItem -Path $selfplayDirGen -Filter 'selfplay_*.jsonl' | Sort-Object Name)
-$shardsForced = @(Get-ChildItem -Path $selfplayDir    -Filter 'selfplay_*.jsonl' | Sort-Object Name)
-if (-not $shardsGen)    { throw "no selfplay_*.jsonl shards in $selfplayDirGen (general slice missing)" }
-if (-not $shardsForced) { throw "no selfplay_*.jsonl shards in $selfplayDir (forced slice missing)" }
-$shards = $shardsGen + $shardsForced
-if (Test-Path $catJsonl) { Remove-Item $catJsonl }
-foreach ($s in $shards) { Get-Content -LiteralPath $s.FullName | Add-Content -LiteralPath $catJsonl }
-python "$train/vectorize_v2.py" --input $catJsonl --output $h5 --schema $schema
+if ($ResumeFrom -le 1) {
+    $shardsGen    = @(Get-ChildItem -Path $selfplayDirGen -Filter 'selfplay_*.jsonl' | Sort-Object Name)
+    $shardsForced = @(Get-ChildItem -Path $selfplayDir    -Filter 'selfplay_*.jsonl' | Sort-Object Name)
+    if (-not $shardsGen)    { throw "no selfplay_*.jsonl shards in $selfplayDirGen (general slice missing)" }
+    if (-not $shardsForced) { throw "no selfplay_*.jsonl shards in $selfplayDir (forced slice missing)" }
+    $shards = $shardsGen + $shardsForced
+    if (Test-Path $catJsonl) { Remove-Item $catJsonl }
+    foreach ($s in $shards) { Get-Content -LiteralPath $s.FullName | Add-Content -LiteralPath $catJsonl }
+} elseif (-not (Test-Path $catJsonl)) {
+    throw "-ResumeFrom 2 but $catJsonl does not exist and the live shards may belong to a NEWER run — re-run without -ResumeFrom"
+}
+python "$train/vectorize_v2.py" --input $catJsonl --output $h5 --schema $schema `
+    --stamp-parent "$bin/asset/config/$parentBin" --stamp-frozen $frozenPath
 if ($LASTEXITCODE -ne 0) { throw "vectorize_v2.py exited $LASTEXITCODE" }
+} else {
+    if (-not (Test-Path $h5)) { throw "-ResumeFrom $ResumeFrom but $h5 does not exist" }
+    Write-Host "`n[2/8] SKIPPED (resume_from=$ResumeFrom)"
+}
 
 # -----------------------------------------------------------------------------
-# 3) Low-LR few-epoch SWA fine-tune over the sliding window + human rehearsal.
-#    WARM-STARTS from the parent checkpoint via --init-weights (E1 fix — train.py
-#    --rl-mode hard-fails without it; the parent = the FROZEN parent_pt, v221 until
-#    a promotion updates campaign_frozen.json — N-3) and validates on the HELD-OUT
-#    human val set (M-03 fix — never the rehearsal file).
-#    --rl-mode wires the replay buffer (window W), human rehearsal, colour
-#    balance, and SWA (Task 6). Pass prior iterations' H5 too if present so the
-#    sliding window has its W shards.
-#    --swa-lr 5e-6 (N-1 fix): the train.py default (lr*0.1 = 1e-6 at lr=1e-5)
-#    equals the min-lr floor, freezing the SWA phase (epochs 3-6, HALF the run).
-#    5e-6 = half the fine-tune LR — keeps SWA-phase learning alive without
-#    overshooting the cosine tail. (train.py also auto-rescales the 1000-step
-#    warmup default down to ~10% of this run's ~78 total steps.)
+# 3) RL fine-tune (J1 re-freeze): warm-start from the frozen parent, NO SWA
+#    (final-epoch weights are the candidate), rehearsal 0.10 from the ELITE
+#    corpus, lr 1e-5, 6 epochs, seeded (training-06), num_workers 0.
+#    Window membership is stamp-checked by train.py (C5).
 # -----------------------------------------------------------------------------
-Write-Host "`n[3/8] RL fine-tune (rl-mode, W=$Window) -> $modelDir"
+if ($ResumeFrom -le 3) {
+$stageReached = 3
+Write-Host "`n[3/8] RL fine-tune (rl-mode, W=$Window, no-SWA) -> $modelDir"
 $spFiles = @()
 for ($i = [math]::Max(1, $K - $Window + 1); $i -le $K; $i++) {
     $cand = "$train/data/rl_iter_$i/selfplay_iter_$i.h5"
     if (Test-Path $cand) { $spFiles += $cand }
 }
-# train.py declares --train-file/--val-file as required=True with NO --rl-mode bypass
-# (the deepsets loader builds val_ds from --val-file before the rl-mode block, and
-# run_metadata dereferences args.train_file/args.val_file unconditionally), so they
-# MUST be passed even in --rl-mode: --val-file = the HELD-OUT human val H5 (M-03 —
-# validating on the rehearsal file leaked training data into the val signal),
-# --train-file = the newest window H5 (this iteration's vectorized self-play, $spFiles[-1]).
+$ts = [int]$frozen.train_schedule.epochs
 python "$train/train.py" --model deepsets --property-table $propTable `
     --train-file $spFiles[-1] --val-file $humanValH5 `
     --rl-mode --init-weights $ParentPt --selfplay-files @spFiles --human-file $humanH5 `
     --replay-window $Window --rl-iteration $K `
-    --epochs 6 --lr 1e-5 --swa-start-epoch 3 --swa-lr 5e-6 --device xpu `
+    --epochs $ts --lr $frozen.train_schedule.lr --no-swa `
+    --seed (2026000 + $K) --num-workers 0 --device xpu `
     --output-dir $modelDir
 if ($LASTEXITCODE -ne 0) { throw "train.py exited $LASTEXITCODE" }
-if (-not (Test-Path $bestPt)) { throw "expected SWA model not found: $bestPt" }
+if (-not (Test-Path $bestPt)) { throw "expected final-epoch model not found: $bestPt" }
+} else {
+    if (-not (Test-Path $bestPt)) { throw "-ResumeFrom $ResumeFrom but $bestPt does not exist" }
+    Write-Host "`n[3/8] SKIPPED (resume_from=$ResumeFrom)"
+}
 
 # -----------------------------------------------------------------------------
 # 4) Export the trained net to the C++ binary.
 # -----------------------------------------------------------------------------
+if ($ResumeFrom -le 4) {
+$stageReached = 4
 Write-Host "`n[4/8] export weights -> $candBinPath"
 python "$train/export_weights_v2.py" $bestPt $candBinPath --property-table $propTable
 if ($LASTEXITCODE -ne 0) { throw "export_weights_v2.py exited $LASTEXITCODE" }
 
-# -----------------------------------------------------------------------------
-# 4.5) Val-acc tripwire: candidate vs parent on the HELD-OUT human val set.
-#      Catches an E1-class failure (candidate trained badly / from the wrong init)
-#      cheaply, BEFORE the expensive eval stages. Abort if the candidate fell
-#      more than 3.0pp below its parent.
-# -----------------------------------------------------------------------------
+# --- 4.5) Val-acc tripwire (E1-class canary) ---
 Write-Host "`n[4.5/8] val-acc tripwire (held-out $humanValH5)"
-$candAcc   = Get-ValAcc $bestPt
-$parentAcc = Get-ValAcc $ParentPt
+$candAcc = Get-ValAcc $bestPt
+if ($frozen.PSObject.Properties.Name -contains 'parent_val_acc_pct' -and $frozen.parent_val_acc_pct) {
+    $parentAcc = [double]$frozen.parent_val_acc_pct   # cached at promotion time (C6) — saves a full val pass
+    Write-Host "parent val_acc = $parentAcc% (cached in campaign_frozen.json)"
+} else {
+    $parentAcc = Get-ValAcc $ParentPt
+    Write-Host "HINT: add `"parent_val_acc_pct`": $parentAcc to campaign_frozen.json (promote_candidate.ps1 does this) to skip recomputing it every iteration."
+}
 Write-Host "val_acc: candidate = $candAcc%  parent = $parentAcc%"
 if ($candAcc -lt ($parentAcc - 3.0)) {
     throw "val-acc tripwire: candidate $candAcc% is more than 3.0pp below parent $parentAcc% — candidate trained badly (E1-class failure); aborting iteration."
 }
 
+# --- 4.6) Prediction-movement probe (B5 — informational, never gates) ---
+Write-Host "`n[4.6/8] prediction-movement probe (candidate vs parent)"
+python "$eval/prediction_movement.py" --candidate-pt $bestPt --parent-pt $ParentPt `
+    --fixed-h5 $humanH5 --selfplay-h5 $h5 --out "$workDir/prediction_movement.json"
+if ($LASTEXITCODE -ne 0) { throw "prediction_movement.py exited $LASTEXITCODE" }
+Write-Host "RECORD the mean|dP| values in eval/campaign_log.md — a near-zero fixed-probe value means stage 3 produced a NULL update (rl-design-01)."
+} else {
+    if (-not (Test-Path $candBinPath)) { throw "-ResumeFrom $ResumeFrom but $candBinPath does not exist" }
+    Write-Host "`n[4/8 + 4.5 + 4.6] SKIPPED (resume_from=$ResumeFrom)"
+}
+
 # -----------------------------------------------------------------------------
-# 5) Export-parity GATE (PyTorch <-> C++ forward value). Aborts on worst |Δ| >= 1e-3.
+# 5) Export-parity GATE (PyTorch <-> C++ forward value).
 # -----------------------------------------------------------------------------
+if ($ResumeFrom -le 5) {
+$stageReached = 5
 Write-Host "`n[5/8] export-parity GATE"
-# Pass --pt/--bin so the parity check is candidate.pt vs candidate.bin (this iteration's own
-# PyTorch<->C++ round-trip). Without them, dump_value_batch.py defaults --pt/--bin to None and
-# compare_parity_deepsets.py falls back to its HARDCODED interim (ep30) reference — which would
-# compare C++(candidate) vs PyTorch(ep30) and fail for the wrong reason on any real iteration.
-# Reads the ARCHIVED sidecars (stage 1.5) — guaranteed to be THIS run's own states,
-# not whatever a shared live dir happens to hold (replay-audit A-1/M-08).
 python "$tools/parity/dump_value_batch.py" `
     --states-dir $parityArchive --weights $candBinPath --dave-bin $bin `
     --pt $bestPt --bin $candBinPath
-if ($LASTEXITCODE -ne 0) { throw "export-parity GATE FAILED (worst |Δ| >= 1e-3) — aborting iteration" }
+if ($LASTEXITCODE -ne 0) { throw "export-parity GATE FAILED — aborting iteration" }
+} else { Write-Host "`n[5/8] SKIPPED (resume_from=$ResumeFrom)" }
 
 # -----------------------------------------------------------------------------
-# 6) O7 tactical leading indicator (IG-click-COUNT regression). Exits nonzero
-#    only on a regression vs eval/tactical_baseline.json.
+# 6) O7 tactical suite — TELEMETRY ONLY (J6, 2026-06-13): single 3s UCT samples
+#    measured 18-33% false-fail on sibling cases; a one-shot mismatch must not
+#    abort a multi-hour iteration. The result is RECORDED; a regression is acted
+#    on by the HUMAN (re-run the case 3-5x — only a REPRODUCED regression blocks
+#    promotion under the promote-unless-harm policy).
 # -----------------------------------------------------------------------------
-Write-Host "`n[6/8] O7 tactical suite (IG-click-count regression)"
+if ($ResumeFrom -le 6) {
+$stageReached = 6
+Write-Host "`n[6/8] O7 tactical suite (TELEMETRY — never aborts since J6)"
 python "$eval/tactical_suite.py" --weights $candBin --dave-exe "$bin/PrismataAI.exe"
-if ($LASTEXITCODE -ne 0) { throw "tactical_suite regression — aborting iteration" }
+$tacticalExit = $LASTEXITCODE
+if ($tacticalExit -ne 0) {
+    Write-Host "*** tactical suite reported a REGRESSION (exit $tacticalExit) — telemetry only. ***"
+    Write-Host "*** Before promoting: re-run the failing case 3-5x; a REPRODUCED regression = harm (do not promote). ***"
+} else {
+    Write-Host "tactical suite: no regression"
+}
+Write-Ledger @{ event = 'tactical'; exit_code = $tacticalExit }
+} else { Write-Host "`n[6/8] SKIPPED (resume_from=$ResumeFrom)" }
 
 # -----------------------------------------------------------------------------
-# 7) Repoint RL_Eval.WeightsFile -> the new candidate .bin (json-safe in-place
-#    config rewrite), then run the 3-anchor eval (iter0 / narrow / steam).
-#    F-07: try/finally so RL_Eval is ALWAYS restored to the promoted parent net
-#    on any exit path after the repoint (a killed/failed run must not leave
-#    config.txt pointing at an unpromoted candidate). Stage 8 does NOT need the
-#    repoint — action_coverage.py passes --weights explicitly to query_move.js,
-#    which overrides the player's WeightsFile — so restore happens right here.
+# 7) Per-iteration eval (J3): the iter0 anchor ONLY — forced (192 games) +
+#    generalA/generalB (384 games, two fixed seed panels). Narrow runs at
+#    promotion; origin + steam at checkpoints (run_checkpoint.ps1).
 # -----------------------------------------------------------------------------
-Write-Host "`n[7/8] repoint RL_Eval -> $candBin + 3-anchor eval"
+if ($ResumeFrom -le 7) {
+$stageReached = 7
+Write-Host "`n[7/8] repoint RL_Eval -> $candBin + iter0 anchor eval"
 try {
     Edit-Config -Op weights -Name RL_Eval -Value $candBin
     python "$eval/run_eval.py" --iteration $K `
         --weights $candBin --parent-weights $parentBin `
         --dave-bin $bin --orig-exe $origExe `
-        --pools forced general --out "$eval/manifests"
+        --anchors iter0 --pools forced general --out "$eval/manifests"
     if ($LASTEXITCODE -ne 0) { throw "run_eval.py exited $LASTEXITCODE" }
 }
 finally {
     Edit-Config -Op weights -Name RL_Eval -Value $parentBin
     Write-Host "RL_Eval.WeightsFile restored -> $parentBin (F-07 guard)"
 }
+} else { Write-Host "`n[7/8] SKIPPED (resume_from=$ResumeFrom)" }
 
 # -----------------------------------------------------------------------------
-# 8) Action coverage (IG-click-count distribution -> manifest) + render dashboard.
+# 8) Action coverage (BOTH slices + the B6 IG-contrast watch-stat) + dashboard.
 # -----------------------------------------------------------------------------
+$stageReached = 8
 Write-Host "`n[8/8] action coverage + dashboard"
 python "$eval/action_coverage.py" `
-    --selfplay-jsonl-dir $selfplayDir --dave-exe "$bin/PrismataAI.exe" `
+    --selfplay-jsonl-dir $selfplayDir --selfplay-jsonl-dir $selfplayDirGen `
+    --dave-exe "$bin/PrismataAI.exe" `
     --weights $candBin --battery "$eval/ig_battery" --manifest $manifest
 if ($LASTEXITCODE -ne 0) { throw "action_coverage.py exited $LASTEXITCODE" }
 python "$eval/render_dashboard.py"
+if ($LASTEXITCODE -ne 0) { throw "render_dashboard.py exited $LASTEXITCODE" }
+
+$verdict = ''
+if (Test-Path $manifest) {
+    $verdict = (Get-Content -Raw $manifest | ConvertFrom-Json).verdict
+}
+Write-Ledger @{ event = 'complete'; stage_reached = $stageReached; verdict = "$verdict"; candidate_bin = $candBin }
 
 Write-Host "`n=== iteration $K complete ==="
-Write-Host "Manifest : $manifest"
-Write-Host "DECISION  : HUMAN call on the manifest + dashboard (eval/rl_campaign.md §3 decision rule)."
-Write-Host "          verdict REJECT = proven worse on the general pool (Wilson95 ci_upper < 0.5);"
-Write-Host "          verdict REVIEW = human decision. See eval/run_eval.py VERDICT_RULE for exact semantics."
+Write-Host "Manifest : $manifest   (verdict: $verdict)"
+Write-Host "PROMOTION POLICY (J2, frozen): promote-unless-harm."
+Write-Host "  PROMOTE  : verdict != REJECT, tripwire ok, no REPRODUCED tactical regression"
+Write-Host "             -> eval/promote_candidate.ps1 -K $K"
+Write-Host "  REJECT   : keep the parent; record the decision in eval/campaign_log.md"
+Write-Host "  CHECKPOINT (every 3-5 iterations): eval/run_checkpoint.ps1 — the powered origin eval"
+Write-Host "             is where the campaign's actual answer comes from."
+Write-Host "Record this iteration in eval/campaign_log.md (template at the top of that file)."
+
+}
+catch {
+    Write-Ledger @{ event = 'abort'; stage_reached = $stageReached; error = "$($_.Exception.Message)" }
+    throw
+}
+finally {
+    Remove-Item $lockFile -ErrorAction SilentlyContinue
+    Stop-Transcript | Out-Null
+}

@@ -9,8 +9,11 @@ parent, unforced sets): REJECT iff Wilson ci_upper < 0.5 (proven worse), REVIEW 
 information only.
 
 build_manifest takes injectable runners (run_anchor / steam_fn) so all of this is verifiable
-WITHOUT the C++ engine. run_anchor signature:
-(dave_bin, block, player, weights_basename, parent_basename).
+WITHOUT the C++ engine. run_anchor signature (2026-06-13, +opponent_player for the prov-06
+player-level load check):
+(dave_bin, block, player, weights_basename, parent_basename, opponent_player).
+Pools map to block LISTS since J3/J4 (the iter0 general pool = two fixed seed panels,
+generalA/generalB, aggregated into one cell).
 """
 import json
 import os
@@ -34,12 +37,17 @@ def _write_config(tmp_path, weights_file="cand.bin", player="RL_Eval"):
     cfgdir.mkdir(parents=True, exist_ok=True)
     lines = [
         '{',
-        f'"Players" : {{ "{player}" : {{ "WeightsFile":"{weights_file}" }} }},',
+        f'"Players" : {{ "{player}" : {{ "WeightsFile":"{weights_file}", "TimeLimit":7000, "MaxTraversals":100000, "UCTConstant":0.3 }} }},',
         '"Benchmarks" : [',
         '{"run":false, "type":"Tournament", "name":"RL_Eval_iter0_forced",  "players":[]},',
         '{"run":false, "type":"Tournament", "name":"RL_Eval_iter0_general", "players":[]},',
+        '{"run":false, "type":"Tournament", "name":"RL_Eval_iter0_generalA", "players":[]},',
+        '{"run":false, "type":"Tournament", "name":"RL_Eval_iter0_generalB", "players":[]},',
         '{"run":false, "type":"Tournament", "name":"RL_Eval_narrow_forced",  "players":[]},',
-        '{"run":false, "type":"Tournament", "name":"RL_Eval_narrow_general", "players":[]}',
+        '{"run":false, "type":"Tournament", "name":"RL_Eval_narrow_general", "players":[]},',
+        '{"run":false, "type":"Tournament", "name":"RL_Eval_origin_forced",  "players":[]},',
+        '{"run":false, "type":"Tournament", "name":"RL_Eval_origin_generalA", "players":[]},',
+        '{"run":false, "type":"Tournament", "name":"RL_Eval_origin_generalB", "players":[]}',
         ']',
         '}',
     ]
@@ -58,7 +66,8 @@ def _args(tmp_path, pools=("forced", "general"), orig_present=False,
     return types.SimpleNamespace(
         iteration=3, weights="cand.bin", parent_weights="parent.bin",
         candidate_player="RL_Eval", candidate_label="RL_Eval",
-        dave_bin=str(tmp_path), orig_exe=str(orig), steam_games=200, pools=list(pools))
+        dave_bin=str(tmp_path), orig_exe=str(orig), steam_games=200, pools=list(pools),
+        anchors=["iter0", "narrow"], origin_weights=None, run_steam=True)
 
 
 def _anchor(block, wins, n=128, draws=0, confirmed=True, parent_confirmed=True):
@@ -71,14 +80,15 @@ def _anchor(block, wins, n=128, draws=0, confirmed=True, parent_confirmed=True):
             "engine_confirmed_parent_load": parent_confirmed}
 
 
-ALL_BLOCKS = ("RL_Eval_iter0_forced", "RL_Eval_iter0_general",
+ALL_BLOCKS = ("RL_Eval_iter0_forced", "RL_Eval_iter0_generalA", "RL_Eval_iter0_generalB",
               "RL_Eval_narrow_forced", "RL_Eval_narrow_general")
 
 
 def _table_runner(table, calls=None):
-    """run_anchor(dave_bin, block, player, weights_basename, parent_basename) -> pre-canned
-    anchor dict."""
-    def run_anchor(dave_bin, block, player, weights_basename, parent_basename):
+    """run_anchor(dave_bin, block, player, weights_basename, parent_basename, opponent_player)
+    -> pre-canned anchor dict."""
+    def run_anchor(dave_bin, block, player, weights_basename, parent_basename,
+                   opponent_player=None):
         if calls is not None:
             calls.append(block)
         assert block in table, f"unexpected block {block}"
@@ -90,9 +100,13 @@ def _table_runner(table, calls=None):
 
 
 def _full_table(general_anchor):
-    """All four blocks at parity except the iter0/general gate cell."""
+    """All blocks at parity except the iter0/general gate cells (BOTH seed panels get the
+    given cell, so the pooled rate equals the cell's rate; only the CI tightens)."""
     t = {b: _anchor(b, 64) for b in ALL_BLOCKS}
-    t["RL_Eval_iter0_general"] = general_anchor
+    for b in ("RL_Eval_iter0_generalA", "RL_Eval_iter0_generalB"):
+        cell = dict(general_anchor)
+        cell["block"] = b
+        t[b] = cell
     return t
 
 
@@ -143,7 +157,7 @@ def test_observed_plus5pp_is_review_not_reject(tmp_path):
 
 
 def test_incomplete_when_general_anchor_errored(tmp_path):
-    err = {"block": "RL_Eval_iter0_general",
+    err = {"block": "RL_Eval_iter0_generalA",
            "error": "no W/L/D for candidate 'RL_Eval' (degraded score-matrix fallback?)",
            "raw_players": []}
     table = _full_table(err)
@@ -154,19 +168,22 @@ def test_incomplete_when_general_anchor_errored(tmp_path):
 
 def test_incomplete_when_general_pool_not_run(tmp_path):
     table = {"RL_Eval_iter0_forced":  _anchor("RL_Eval_iter0_forced", 70),
-             "RL_Eval_narrow_forced": _anchor("RL_Eval_narrow_forced", 64)}
+             "RL_Eval_narrow_forced": _anchor("RL_Eval_narrow_forced", 64)}  # no general blocks
     m = run_eval.build_manifest(_args(tmp_path, pools=("forced",)), steam_available=False,
                                 run_anchor=_table_runner(table))
     assert m["verdict"] == "INCOMPLETE"
 
 
 def test_general_only_pool_is_headline_and_verdict_pool(tmp_path):
-    table = {"RL_Eval_iter0_general":  _anchor("RL_Eval_iter0_general", 68),
+    table = {"RL_Eval_iter0_generalA": _anchor("RL_Eval_iter0_generalA", 68),
+             "RL_Eval_iter0_generalB": _anchor("RL_Eval_iter0_generalB", 68),
              "RL_Eval_narrow_general": _anchor("RL_Eval_narrow_general", 64)}
     m = run_eval.build_manifest(_args(tmp_path, pools=("general",)), steam_available=False,
                                 run_anchor=_table_runner(table))
     # No forced pool requested -> headline falls back to general; verdict still computable.
-    assert m["anchors"]["iter0"]["block"] == "RL_Eval_iter0_general"
+    # The general pool aggregates the two seed panels (J4) -> "blocks" lists both.
+    assert set(m["anchors"]["iter0"]["blocks"]) == {"RL_Eval_iter0_generalA",
+                                                    "RL_Eval_iter0_generalB"}
     assert m["verdict"] == "REVIEW"
 
 
@@ -295,6 +312,20 @@ def test_engine_confirmed_load_parses_stderr():
     assert run_eval.engine_confirmed_load("loading cand.bin somehow\n", "cand.bin") is False
 
 
+def test_engine_confirmed_load_player_level():
+    """prov-06 (2026-06-13): with `player` given, the (player, basename) PAIR must share a
+    line — many config players load the SAME parent bin, so a file-level match cannot tell
+    WHICH player loaded it (the N-2 stale-RL_Eval_iter0 scenario)."""
+    stderr = ("AIParameters: created per-player NeuralNet from asset/config/parent.bin for player 'RL_SelfPlay'\n"
+              "AIParameters: created per-player NeuralNet from asset/config/cand.bin for player 'RL_Eval'\n")
+    assert run_eval.engine_confirmed_load(stderr, "cand.bin", "RL_Eval") is True
+    # parent.bin loaded — but NOT by the verdict opponent: player-level says NO
+    assert run_eval.engine_confirmed_load(stderr, "parent.bin", "RL_Eval_iter0") is False
+    assert run_eval.engine_confirmed_load(stderr, "parent.bin", "RL_SelfPlay") is True
+    # pair must be on the SAME line (a name from one line + a file from another is no match)
+    assert run_eval.engine_confirmed_load(stderr, "cand.bin", "RL_SelfPlay") is False
+
+
 def test_unconfirmed_load_hard_fails_and_is_recorded(tmp_path):
     # the iter0/general tournament COMPLETED but its stderr never confirmed the candidate net
     bad = _anchor("RL_Eval_iter0_general", 64, confirmed=False)
@@ -314,10 +345,10 @@ def test_run_anchor_block_stamps_engine_confirmed_load(tmp_path, monkeypatch):
     """End-to-end through run_anchor_block: stderr plumbing from run_cpp_tournament -> stamp."""
     _write_config(tmp_path)
 
-    def fake_tournament(dave_bin, block_name, stderr_out=None):
+    def fake_tournament(dave_bin, block_name, stderr_out=None, rounds_csv_out=None):
         if stderr_out is not None:
             stderr_out.append(
-                "AIParameters: created per-player NeuralNet from asset/config/cand.bin\n")
+                "AIParameters: created per-player NeuralNet from asset/config/cand.bin for player 'RL_Eval'\n")
         return {"RL_Eval": {"wins": 70, "draws": 2, "games": 128}}
 
     monkeypatch.setattr(run_eval, "run_cpp_tournament", fake_tournament)
@@ -327,7 +358,7 @@ def test_run_anchor_block_stamps_engine_confirmed_load(tmp_path, monkeypatch):
     assert a["wins"] == 70 and a["draws"] == 2 and a["games"] == 128
     assert a["win_rate"] == pytest.approx((70 + 0.5 * 2) / 128)   # draw = half a win
 
-    def silent_tournament(dave_bin, block_name, stderr_out=None):
+    def silent_tournament(dave_bin, block_name, stderr_out=None, rounds_csv_out=None):
         if stderr_out is not None:
             stderr_out.append("no load line here\n")
         return {"RL_Eval": {"wins": 70, "draws": 2, "games": 128}}
@@ -346,14 +377,20 @@ def test_runner_receives_parent_basename(tmp_path):
     """build_manifest threads basename(--parent-weights) to the anchor runner (N-2)."""
     seen = []
 
-    def run_anchor(dave_bin, block, player, weights_basename, parent_basename):
-        seen.append((block, weights_basename, parent_basename))
+    def run_anchor(dave_bin, block, player, weights_basename, parent_basename,
+                   opponent_player=None):
+        seen.append((block, weights_basename, parent_basename, opponent_player))
         return _anchor(block, 64)
 
     run_eval.build_manifest(_args(tmp_path), steam_available=False, run_anchor=run_anchor)
-    assert {b for b, _, _ in seen} == set(ALL_BLOCKS)
-    assert all(w == "cand.bin" for _, w, _ in seen)
-    assert all(p == "parent.bin" for _, _, p in seen)   # iter0 AND narrow opponents
+    assert {b for b, _, _, _ in seen} == set(ALL_BLOCKS)
+    assert all(w == "cand.bin" for _, w, _, _ in seen)
+    assert all(p == "parent.bin" for _, _, p, _ in seen)   # iter0 AND narrow opponents
+    # prov-06: each anchor names its opponent PLAYER for the player-level load check
+    opp = {b: o for b, _, _, o in seen}
+    assert opp["RL_Eval_iter0_forced"] == "RL_Eval_iter0"
+    assert opp["RL_Eval_iter0_generalA"] == "RL_Eval_iter0"
+    assert opp["RL_Eval_narrow_general"] == "RL_Narrow"
 
 
 def test_unconfirmed_parent_load_hard_fails_and_is_recorded(tmp_path):
@@ -395,28 +432,30 @@ def test_run_anchor_block_stamps_engine_confirmed_parent_load(tmp_path, monkeypa
     """End-to-end through run_anchor_block: parent stderr line -> parent stamp."""
     _write_config(tmp_path)
 
-    def both_loads(dave_bin, block_name, stderr_out=None):
+    def both_loads(dave_bin, block_name, stderr_out=None, rounds_csv_out=None):
         if stderr_out is not None:
             stderr_out.append(
-                "AIParameters: created per-player NeuralNet from asset/config/cand.bin\n"
-                "AIParameters: created per-player NeuralNet from asset/config/parent.bin\n")
+                "AIParameters: created per-player NeuralNet from asset/config/cand.bin for player 'RL_Eval'\n"
+                "AIParameters: created per-player NeuralNet from asset/config/parent.bin for player 'RL_Eval_iter0'\n")
         return {"RL_Eval": {"wins": 70, "draws": 2, "games": 128}}
 
     monkeypatch.setattr(run_eval, "run_cpp_tournament", both_loads)
     a = run_eval.run_anchor_block(str(tmp_path), "RL_Eval_iter0_general", "RL_Eval",
-                                  weights_basename="cand.bin", parent_basename="parent.bin")
+                                  weights_basename="cand.bin", parent_basename="parent.bin",
+                                  opponent_player="RL_Eval_iter0")
     assert a["engine_confirmed_load"] is True
     assert a["engine_confirmed_parent_load"] is True
 
-    def candidate_only(dave_bin, block_name, stderr_out=None):
+    def candidate_only(dave_bin, block_name, stderr_out=None, rounds_csv_out=None):
         if stderr_out is not None:
             stderr_out.append(
-                "AIParameters: created per-player NeuralNet from asset/config/cand.bin\n")
+                "AIParameters: created per-player NeuralNet from asset/config/cand.bin for player 'RL_Eval'\n")
         return {"RL_Eval": {"wins": 70, "draws": 2, "games": 128}}
 
     monkeypatch.setattr(run_eval, "run_cpp_tournament", candidate_only)
     a = run_eval.run_anchor_block(str(tmp_path), "RL_Eval_iter0_general", "RL_Eval",
-                                  weights_basename="cand.bin", parent_basename="parent.bin")
+                                  weights_basename="cand.bin", parent_basename="parent.bin",
+                                  opponent_player="RL_Eval_iter0")
     assert a["engine_confirmed_load"] is True
     assert a["engine_confirmed_parent_load"] is False
 

@@ -325,6 +325,12 @@ def main():
                     help="write current known_move results to tactical_baseline.json and exit 0")
     args = ap.parse_args()
 
+    # C3/ops-toctou-07: contamination guards at TIME OF USE — stage 6 runs hours after the
+    # stage-0 sentinel check, and this protocol path is exactly what use_dsnn.txt hijacks.
+    assert not os.environ.get("PRISMATA_FORCE_DSNN"), "PRISMATA_FORCE_DSNN set - tactical contamination"
+    _sentinel = os.path.join(os.path.dirname(os.path.abspath(args.dave_exe)), "use_dsnn.txt")
+    assert not os.path.exists(_sentinel), f"use_dsnn.txt present ({_sentinel}) - tactical contamination"
+
     cases = load_cases()
     known = [c for c in cases if c.get("bucket") == "known_move"]
     forced = [c for c in cases if c.get("bucket") == "looks_forced"]

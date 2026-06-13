@@ -2,7 +2,10 @@
 
 Runs PrismataAI.exe --dump-features on each sampled self-play state JSON, then compares
 against the matched PyTorch reference via compare_parity_deepsets.py. Exits nonzero if the
-worst |value_cpp - value_torch| >= 1e-3.
+worst |value_cpp - value_torch| >= VALUE_TOL (1e-4 since 2026-06-13; measured floor ~1e-6).
+SCOPE: pins weights-export + forward arithmetic only — the PyTorch reference consumes the
+C++-extracted features, so extraction bugs pass BOTH sides identically; feature extraction
+is pinned by training/tests/test_three_way_feature_parity.py (B2).
 
 The 5-state harness (tools/parity/compare_parity_deepsets.py with the 5 final35_state_*.json
 fixtures) only covers a handful of hand-picked positions. This driver fans the same
@@ -61,14 +64,27 @@ def main():
 
     # The sidecar exporter writes sp_*.json.gz since the 2026-06-12 replay-audit fixes
     # (gzipped, archived per iteration); accept legacy raw .json too. Dedupe by stem
-    # (prefer .gz) so a dir holding both forms of one state never double-counts it,
-    # then sort so the sample stays deterministic across mixed dirs.
+    # (prefer .gz) so a dir holding both forms of one state never double-counts it.
     by_stem = {}
     for f in sorted(glob.glob(os.path.join(args.states_dir, "*.json"))):
         by_stem[f] = f
     for f in sorted(glob.glob(os.path.join(args.states_dir, "*.json.gz"))):
         by_stem[f[:-3]] = f   # stem 'x.json' -> prefer the .gz form
-    states = sorted(by_stem.values())[:args.limit]
+    all_states = sorted(by_stem.values())
+    # B2 stratified sample (2026-06-13): the archive prefixes sidecars by slice
+    # (general_sp_* / forced_sp_*) and the old sorted-prefix [:limit] took a ~100%
+    # forced_ sample (alphabetical). Round-robin interleave the slices so the sample
+    # covers BOTH data distributions; deterministic given the same dir contents.
+    buckets = {}
+    for f in all_states:
+        prefix = os.path.basename(f).split("_sp_")[0] if "_sp_" in os.path.basename(f) else ""
+        buckets.setdefault(prefix, []).append(f)
+    states = []
+    queues = [list(v) for _, v in sorted(buckets.items())]
+    while len(states) < args.limit and any(queues):
+        for q in queues:
+            if q and len(states) < args.limit:
+                states.append(q.pop(0))
     if not states:
         print(f"no state JSONs (.json / .json.gz) in {args.states_dir}", file=sys.stderr)
         sys.exit(2)

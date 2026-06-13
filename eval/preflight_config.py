@@ -52,6 +52,7 @@ checked -- Dave's legacy run:false blocks reference long-dead player names
 check 2 already requires zero of those.
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -70,9 +71,15 @@ RL_ABILITY_VARIANTS = {"V5_CS2_NoIG", "V5_CS_NoIG", "V5_CSNF_NoIG",
 RL_OB_VARIANT       = "V5_CS2_NoIG"
 RL_OB_BOOK          = "LiveOpeningBook2"
 BOOK_SIZES          = {"LiveOpeningBook2": 50, "DefaultOpeningBook": 4}
-# repo-root-relative data files the iteration driver depends on
+# repo-root-relative data files the iteration driver depends on. Fallback for older
+# frozen files only — a tuple_version >= 2 frozen file names its own rehearsal_file /
+# tripwire_val_file and those are checked instead (check_existences).
 DATA_FILES = ("training/data/human_val_1700_v2.h5",
               "training/data/human_1800_v2.h5")
+
+# Players that must run the frozen DEPLOYMENT eval budget (preflight-gaps-06): the
+# eval budget is campaign identity but lived only as config literals before 2026-06-13.
+EVAL_BUDGET_PLAYERS = ("RL_Eval", "RL_Eval_iter0", "RL_Eval_origin", "RL_Narrow")
 
 # config keys (by section) that reference a Move Iterator by name
 PLAYER_ITERATOR_KEYS = ("RootMoveIterator", "MoveIterator", "ResponseMoveIterator",
@@ -348,10 +355,9 @@ def check_frozen_tuple(cfg, frozen):
                 failures.append("%s.Threads is %s but campaign_frozen.json freezes "
                                 "selfplay_threads at %s" % (bname, sp_block.get("Threads", 1),
                                                             frozen["selfplay_threads"]))
-    # EpsilonLate (regime v2, 2026-06-11): the frozen tuple now freezes a NONZERO late-epsilon
-    # (argmax + eps-uniform for turns >= TemperatureK), so config must EQUAL frozen exactly.
-    # An ABSENT config key means 0.0 to the engine -- frozen 0.05 + absent key FAILS (the
-    # campaign would silently run pure-argmax past the opening window).
+    # EpsilonLate: regime v3 (2026-06-13) freezes it at 0 (retired in favour of the targeted
+    # EpsilonIG); config must EQUAL frozen exactly. An ABSENT config key means 0.0 to the
+    # engine, which only matches a frozen 0.0.
     # Guarded for OLDER frozen files: if frozen lacks the key, the original absent-or-0
     # convention applies (a present nonzero key would silently re-enable the late sampler).
     if "EpsilonLate" in frozen:
@@ -365,6 +371,31 @@ def check_frozen_tuple(cfg, frozen):
     elif "EpsilonLate" in sp and float(sp["EpsilonLate"]) != 0.0:
         failures.append("RL_SelfPlay.EpsilonLate is %s -- must be ABSENT (or 0): this frozen "
                         "tuple (no EpsilonLate key) has late-epsilon disabled" % sp["EpsilonLate"])
+    # EpsilonIG (regime v3, 2026-06-13 — the J5 targeted IG-count exploration): same exact-match
+    # convention as EpsilonLate (absent config key = 0.0 to the engine = the sampler silently off).
+    if "EpsilonIG" in frozen:
+        got = float(sp.get("EpsilonIG", 0.0))
+        want = float(frozen["EpsilonIG"])
+        if got != want:
+            failures.append("RL_SelfPlay.EpsilonIG is %s but campaign_frozen.json freezes it at %s "
+                            "-- config drifted; reconcile deliberately (an absent config key means "
+                            "0.0 = targeted IG exploration OFF)"
+                            % (sp.get("EpsilonIG", "ABSENT (= 0.0)"), frozen["EpsilonIG"]))
+    elif "EpsilonIG" in sp and float(sp["EpsilonIG"]) != 0.0:
+        failures.append("RL_SelfPlay.EpsilonIG is %s -- must be ABSENT (or 0): this frozen tuple "
+                        "(no EpsilonIG key) has targeted IG exploration disabled" % sp["EpsilonIG"])
+    # Self-play seed bases (J4, 2026-06-13): the driver sets Seed = base + K transiently for
+    # stage 1 (fresh card sets every iteration) and restores the base in a finally; the config
+    # must REST at the base so the per-iteration derivation stays deterministic and a killed
+    # run cannot leave a drifted seed.
+    sb = frozen.get("selfplay_seed_base")
+    if isinstance(sb, dict):
+        for bname, key in (("RL_Step2_Smoke", "forced"), ("RL_SelfPlay_General", "general")):
+            blk = blocks.get(bname)
+            if blk is not None and key in sb and int(blk.get("Seed", -1)) != int(sb[key]):
+                failures.append("%s.Seed is %s at rest but frozen selfplay_seed_base.%s is %s "
+                                "(the driver sets base+K transiently and must restore the base)"
+                                % (bname, blk.get("Seed"), key, sb[key]))
     # Self-play data mix (regime v2): 2/3 general + 1/3 forced-Hotel across TWO export blocks
     # (separate export dirs are REQUIRED -- the export counter is per-Tournament-instance, so
     # two blocks into one dir would clobber filenames). Guarded on frozen carrying the key.
@@ -446,6 +477,129 @@ def check_parent_repin(cfg, frozen):
 
 
 # ---------------------------------------------------------------------------
+# Check: origin pin (drl-03, 2026-06-13) — RL_Eval_origin is PERMANENTLY v221
+# ---------------------------------------------------------------------------
+
+def check_origin_pin(cfg, frozen):
+    origin = frozen.get("origin_bin")
+    if not origin:
+        return []
+    node = cfg.get("Players", {}).get("RL_Eval_origin")
+    if not isinstance(node, dict):
+        return ["Player 'RL_Eval_origin' not found (must be PERMANENTLY pinned to origin_bin "
+                "'%s' -- it carries the campaign's cumulative-axis measurement, drl-03)" % origin]
+    if node.get("WeightsFile") != origin:
+        return ["RL_Eval_origin.WeightsFile is '%s' but frozen origin_bin is '%s' -- the origin "
+                "anchor is NEVER repointed (promotion repoints the four parent pins ONLY); "
+                "without it 'd_rl vs the fixed v221 origin' silently becomes marginal-vs-parent"
+                % (node.get("WeightsFile"), origin)]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Check: anchor blocks (preflight-gaps-06, 2026-06-13) — rounds/Seed/Threads pinned
+# ---------------------------------------------------------------------------
+
+def check_anchor_blocks(cfg, frozen):
+    spec = frozen.get("anchor_blocks")
+    if not isinstance(spec, dict):
+        return []
+    blocks = {b.get("name"): b for b in cfg.get("Benchmarks", []) if isinstance(b, dict)}
+    failures = []
+    for name, want in sorted(spec.items()):
+        blk = blocks.get(name)
+        if blk is None:
+            failures.append("anchor block '%s' not found in Benchmarks (frozen anchor_blocks)" % name)
+            continue
+        for key in ("rounds", "Seed", "Threads"):
+            if key in want and int(blk.get(key, -1)) != int(want[key]):
+                failures.append("%s.%s is %s but frozen anchor_blocks pins %s"
+                                % (name, key, blk.get(key), want[key]))
+        if blk.get("run") is True:
+            failures.append("anchor block '%s' has \"run\": true -- must rest run:false" % name)
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# Check: eval budget (preflight-gaps-06 / A1) — deployment budget on the eval players
+# ---------------------------------------------------------------------------
+
+def check_eval_budget(cfg, frozen):
+    budget = frozen.get("eval_budget")
+    if not isinstance(budget, dict):
+        return []
+    players = cfg.get("Players", {})
+    failures = []
+    for pname in EVAL_BUDGET_PLAYERS:
+        node = players.get(pname)
+        if not isinstance(node, dict):
+            failures.append("Player '%s' not found (must run the frozen eval budget)" % pname)
+            continue
+        for cfg_key in ("TimeLimit", "MaxTraversals", "UCTConstant"):
+            if cfg_key not in budget:
+                continue
+            if float(node.get(cfg_key, -1)) != float(budget[cfg_key]):
+                failures.append("%s.%s is %s but frozen eval_budget pins %s -- the eval budget "
+                                "IS campaign identity (A1); drift makes iterations incomparable"
+                                % (pname, cfg_key, node.get(cfg_key), budget[cfg_key]))
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# Check: parent bin CONTENT (ops-promote-01, 2026-06-13) — sha256 pin, not just name
+# ---------------------------------------------------------------------------
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def check_parent_sha(frozen, config_dir):
+    want = frozen.get("parent_bin_sha256")
+    parent = frozen.get("parent_bin")
+    if not want or not parent:
+        return []
+    path = os.path.join(config_dir, parent)
+    if not os.path.isfile(path):
+        return ["parent bin not found for sha check: %s" % path]
+    got = _sha256(path)
+    if got.lower() != str(want).lower():
+        return ["parent bin CONTENT mismatch: sha256(%s) = %s but frozen parent_bin_sha256 = %s "
+                "-- a name-consistent-but-content-wrong parent (botched promotion, or a same-K "
+                "re-export clobbered a promoted bin). Re-export from parent_pt or re-pin via "
+                "eval/promote_candidate.ps1." % (parent, got, want)]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Check: unit_index.json (impl-unitindex-05, 2026-06-13) — the lobotomized-net guard
+# ---------------------------------------------------------------------------
+
+def check_unit_index(config_path):
+    config_dir = os.path.dirname(os.path.abspath(config_path))
+    path = os.path.join(config_dir, "unit_index.json")
+    if not os.path.isfile(path):
+        return ["unit_index.json not found at %s -- without it a NeuralNet player maps 0 card "
+                "types and silently evaluates on the 15 globals alone (the engine now FATALs on "
+                "mappedTypes==0; this catches it before any launch)" % path]
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            idx = json.load(f)
+    except ValueError as e:
+        return ["unit_index.json is not valid JSON: %s" % e]
+    count = idx.get("count") if isinstance(idx, dict) else None
+    units = idx.get("units") if isinstance(idx, dict) else idx
+    n = len(units) if isinstance(units, (list, dict)) else None
+    if count != 116 and n != 116:
+        return ["unit_index.json does not carry the canonical 116 units (count=%s, |units|=%s)"
+                % (count, n)]
+    return []
+
+
+# ---------------------------------------------------------------------------
 # Check 7b: saveReplays on both self-play blocks (2026-06-12 replay-audit fixes).
 # The per-iteration replay archive (forensic record + future-schema source) is
 # part of the iteration contract; a drifted/removed saveReplays key would make
@@ -488,8 +642,13 @@ def check_existences(frozen, repo_root):
         pt_path = pt if os.path.isabs(pt) else os.path.join(repo_root, pt)
         if not os.path.isfile(pt_path):
             failures.append("frozen parent_pt not found: %s" % pt_path)
-    for rel in DATA_FILES:
-        path = os.path.join(repo_root, rel)
+    # tuple_version >= 2 frozen files name their own data dependencies (the elite
+    # rehearsal slice + the capped tripwire val set); older files use the constant pair.
+    data_files = [frozen[k] for k in ("rehearsal_file", "tripwire_val_file") if frozen.get(k)]
+    if not data_files:
+        data_files = list(DATA_FILES)
+    for rel in data_files:
+        path = rel if os.path.isabs(rel) else os.path.join(repo_root, rel)
         if not os.path.isfile(path):
             failures.append("required data file not found: %s" % path)
     # Steam-anchor baseline (F-08 rewire): for a campaign run the 2016 MasterBot must exist at
@@ -550,8 +709,15 @@ def run_checks(config_path, frozen_path, repo_root):
         if frozen is not None:
             results.append(("frozen_tuple", check_frozen_tuple(cfg, frozen)))
             results.append(("parent_repin", check_parent_repin(cfg, frozen)))
+            results.append(("origin_pin", check_origin_pin(cfg, frozen)))
+            results.append(("anchor_blocks", check_anchor_blocks(cfg, frozen)))
+            results.append(("eval_budget", check_eval_budget(cfg, frozen)))
+    results.append(("unit_index", check_unit_index(config_path)))
     if frozen is not None:
         results.append(("existences", check_existences(frozen, repo_root)))
+        results.append(("parent_sha",
+                        check_parent_sha(frozen,
+                                         os.path.dirname(os.path.abspath(config_path)))))
     return results
 
 

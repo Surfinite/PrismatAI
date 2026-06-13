@@ -1,0 +1,9 @@
+{
+  "comment": "A6 end-to-end orientation fixtures (B1, 2026-06-13). Near-final turn-start states from two decided elite human games (provenance: human_elite_2000_45s_v2), covering winner-to-move and loser-to-move from BOTH seats. expected='high' means the MOVER is the eventual winner (engine airootwinrate should read decisively > threshold); 'low' means the mover lost. A maxPlayer sign flip at the NeuralNet.cpp evaluateValue seam inverts all four.",
+  "fixtures": {
+    "a6_g1_p23.json": { "replay": "++olh-wraRD", "ply": 23, "mover_seat": 1, "winner_seat": 1, "expected": "high" },
+    "a6_g1_p24.json": { "replay": "++olh-wraRD", "ply": 24, "mover_seat": 0, "winner_seat": 1, "expected": "low" },
+    "a6_g2_p22.json": { "replay": "+3@i+-0pBRr", "ply": 22, "mover_seat": 0, "winner_seat": 0, "expected": "high" },
+    "a6_g2_p23.json": { "replay": "+3@i+-0pBRr", "ply": 23, "mover_seat": 1, "winner_seat": 0, "expected": "low" }
+  }
+}

@@ -150,6 +150,10 @@ def env(tmp_path):
     (repo / "training" / "data" / "human_val_1700_v2.h5").write_bytes(b"h5")
     (repo / "training" / "data" / "human_1800_v2.h5").write_bytes(b"h5")
     (cfg_dir / "neural_weights_mixed_v221.bin").write_bytes(b"DSN2")
+    # 2026-06-13: the unit_index check (impl-unitindex-05) requires the canonical 116-unit
+    # index next to the config.
+    (cfg_dir / "unit_index.json").write_text(json.dumps({"count": 116, "units": {}}),
+                                             encoding="utf-8")
     return {
         "config_path": cfg_dir / "config.txt",
         "frozen_path": tmp_path / "campaign_frozen.json",

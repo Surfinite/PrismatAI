@@ -775,6 +775,14 @@ def main():
                              "wrong schema_version, missing outcome_p0, unknown unit, "
                              "board truncation) fails the run with no output H5 "
                              "(drops are legitimate at extraction, never here).")
+    parser.add_argument("--stamp-parent", default=None,
+                        help="C5 lineage stamp: path to the GENERATOR net (.bin) this data was "
+                             "self-played by — its sha256 + basename are written as H5 attrs "
+                             "(rl_parent_bin / rl_parent_sha256); train.py's window check refuses "
+                             "H5s whose stamps mismatch the current campaign identity")
+    parser.add_argument("--stamp-frozen", default=None,
+                        help="C5 lineage stamp: path to campaign_frozen.json — its sha256 is "
+                             "written as H5 attr rl_frozen_sha256")
     args = parser.parse_args()
 
     # Resolve schema path
@@ -810,6 +818,27 @@ def main():
     print(f"\nProcessing {args.input}...")
     process_file(args.input, unit_index, args.output, schema,
                  chunk_size=args.chunk_size, allow_drops=args.allow_drops)
+
+    # C5 lineage stamps (2026-06-13): written only on a SURVIVING run (strict failures
+    # sys.exit(1) inside process_file with no output H5), so a stamped H5 is by
+    # construction a clean one.
+    if args.stamp_parent or args.stamp_frozen:
+        import h5py
+
+        def _sha256(path):
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+
+        with h5py.File(args.output, "a") as hf:
+            if args.stamp_parent:
+                hf.attrs["rl_parent_bin"] = os.path.basename(args.stamp_parent)
+                hf.attrs["rl_parent_sha256"] = _sha256(args.stamp_parent)
+            if args.stamp_frozen:
+                hf.attrs["rl_frozen_sha256"] = _sha256(args.stamp_frozen)
+        print("lineage stamps written (rl_parent_bin/rl_parent_sha256/rl_frozen_sha256)")
 
     print("\nDone.")
 
