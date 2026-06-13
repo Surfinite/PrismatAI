@@ -30,18 +30,19 @@ Run the tests:
 cd c:/libraries/PrismataAI/eval && python -m pytest tests/ -v
 ```
 
-## The three anchors (one path each)
+## The four anchors and WHEN they run (J3 cadence, 2026-06-13)
 
-| Anchor   | What                                                         | Path                                  | Role |
-|----------|--------------------------------------------------------------|---------------------------------------|------|
-| `iter0`  | candidate vs **PARENT promoted net** (`RL_Eval_iter0` = v221, SAME IG-optional config + budget) | C++ tournament (`Prismata_Testing.exe`) | **verdict input** (general pool); forced pool = `d_rl` info |
-| `narrow` | `RL_Narrow` = v221 on `HardIterator_5var_Root` (**iterator-only variable** vs the candidate) | C++ tournament                        | trajectory yardstick (non-gating) |
-| `steam`  | candidate (DaveAI + injected `RL_Eval` block + `--candidate-weights`) vs the **genuine 2016 MasterBot** at `c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe` | `matchup_clean.js`, `--player-switch`, `--steam-exe-b` | trajectory yardstick (non-gating; **live 2-game verified** post F-08 rewire) |
+| Anchor   | What                                                         | Path | Cadence + role |
+|----------|--------------------------------------------------------------|------|----------------|
+| `iter0`  | candidate vs **PARENT promoted net** (`RL_Eval_iter0`, repointed at every promotion) | C++ tournament | **EVERY iteration** — the only per-iteration anchor: general pool = verdict input (**two fixed seed panels** `generalA`/`generalB`, Seeds 2026/2027, rounds 96 each = 384 games, aggregated); forced pool = marginal d_rl info (192 games) |
+| `narrow` | `RL_Narrow` (narrow iterator, same net as the lineage head — **iterator-only variable**) | C++ tournament | **at PROMOTION** (`promote_candidate.ps1`; it measures a near-constant — per-iteration repetition bought nothing) |
+| `origin` | lineage head vs **`RL_Eval_origin` — PERMANENTLY v221, never repointed** (drl-03) | C++ tournament | **at CHECKPOINTS** (`run_checkpoint.ps1`, every 3–5 iterations): general 768 games (~±3.5pp, ~80% power at +5pp) + forced 192 — **the campaign's answer-producing measurement**; d_rl-vs-origin keeps its CUMULATIVE meaning across promotions |
+| `steam`  | lineage head (DaveAI + injected `RL_Eval` + `--candidate-weights`) vs the **genuine 2016 MasterBot** | `matchup_clean.js`, `--player-switch`, `--steam-exe-b` | **at CHECKPOINTS** (100 games; `--run-steam` opt-in); trend yardstick only — the cross-path delta is effectively unbounded below ~±20pp until the deferred 128-game cross-path check is run |
 
-The earlier narrow anchor (`DSNN_Mixed35_5var`) was replaced by `RL_Narrow` so the narrow
-comparison isolates the iterator (same v221 net, same budget, same c=0.3). The earlier steam
-anchor was mis-wired (the candidate never played); the F-08 rewire injects an `RL_Eval` player
-block into the DaveAI side and threads the candidate `.bin` via `--candidate-weights`.
+`run_eval.py --anchors <names>` selects; pools map to block LISTS (`ANCHOR_BLOCKS`) whose results
+aggregate into one cell. Engine-load provenance is PLAYER-level since prov-06 (the load line names
+the player, and the (player, basename) pair must match for BOTH the candidate and the anchor's
+pinned opponent).
 
 ## Verdict (replaces the old GO / sequential gate — 2026-06-10)
 
@@ -56,13 +57,18 @@ statistically incoherent at 128 games (P(GO | true +5pp) ≈ 13%). Now (`run_eva
 `d_rl` (forced) and `d_reg` (general) are recorded as **information only**, each with a Wilson CI
 on the win rate (`forced_wr_ci` / `general_wr_ci`). Nothing auto-promotes.
 
-## Statistics: iid Wilson ONLY
+## Statistics: pooled iid Wilson (the verdict) + paired per-card-set CI (reported)
 
-`wilson.py` (`win_rate`, `wilson_ci`) is the **complete** statistics surface. The former
-`decisive` / `decisive_gate` (A3 Pocock sequential) / `clustered_ci` (A4 per-card-set) helpers
-were **dead code with zero live callers** and were removed 2026-06-10 per the RL-loop audit:
-the C++ tournament HTML emits only aggregate W/L/D/Games per player — **no per-card-set scores
-exist to cluster on, and no sequential-testing machinery is wired anywhere**.
+`wilson.py`: `win_rate` + `wilson_ci` (the VERDICT statistic) + **`paired_round_ci`**
+(2026-06-13, rl-design-05): the engine now emits a per-game rounds CSV
+(`Tournament_<name>_<date>_rounds.csv`, round == shared-card-set id played in both seat orders),
+so the eval design's intrinsic pairing is finally analyzable — the paired CI on per-round scores
+removes the between-set variance the pooled per-game Wilson ignores (and is immune to the
+within-pair correlation that makes the pooled CI slightly anti-conservative, stats-05). It is
+REPORTED in every manifest cell (`paired_ci`) alongside the Wilson CI; the verdict stays on the
+pooled Wilson until the paired form is validated on real runs. (History: the old clustered/
+sequential helpers were removed 2026-06-10 as dead code when no per-set scores existed; the A4
+CSV re-opened the paired analysis.)
 
 ## Incremental manifest + active provenance
 

@@ -56,18 +56,32 @@ the 2026-06-12 audit recommends pre-iter-1 changes that would re-freeze parts of
 | 2026-06-12 | **J4 DECIDED (a + split-seed eval)**: self-play Seeds derived from K (e.g. 5500+K / 5600+K, stamped in meta+manifest); eval general pool split 2×rounds:96 at fixed Seeds 2026/2027 (192+192 games) | coverage grows each iteration; fixed two-seed eval panel keeps comparability + partial set-generalization | audit §2 |
 | 2026-06-13 | **J5 DECIDED**: targeted IG-ε — at roots whose children span ≥2 IG click counts, with prob ε_IG=0.25 play the most-visited child at a NON-argmax count; `EpsilonLate` → 0; τ/K unchanged; verified per-iteration by the IG-contrast watch-stat (worklist B6) | on-axis counterfactuals (~0.4/forced game vs εlate's ~1-in-32-games) at lower off-axis label-corruption cost; deviation = searched whole-turn sibling, not a random click | audit §1.2/§1.3; owner confirmed 06-13 |
 | 2026-06-12 | **J6 DECIDED (b)**: tactical suite → telemetry-only while local (remove the stage-6 hard abort; keep running + recording vs baseline) | consistent with detect-harm philosophy; the axis may not even be IG at AWS scale | audit §5 |
+| 2026-06-13 | **REGIME v3 RE-FREEZE IMPLEMENTED** (all J1–J7 + worklist; tuple_version 2, two-tier): rounds 344+172, seeds base+K, EpsilonIG 0.25 / EpsilonLate 0, NO SWA, rehearsal 0.10 elite, iter0-only per-iteration eval (192+384, 2 panels), origin/narrow/steam re-cadenced, promote-unless-harm, sha-pinned parent | third-audit remediation; campaign is run-ready | this file (pre-campaign state); commits main 461f58dc / dave 1eba023c |
+| 2026-06-13 | **is_blocking frozen-unit feature skew FIXED** (caught by the new B3 gate fixtures; engine-side, both exporter + inference) | the fifth v2.2.1-class silent skew; frozen blockers must read is_blocking=0 like the training data | dave 1eba023c; three-way gate 7 states green |
 | 2026-06-13 | **Rehearsal corpus → ELITE cut (owner proposal)**: SLICE of `human_1800_v2.h5` (provenance inherited — no DB eligibility, no re-extraction): per-game min(H5 rating stamps) ≥2000 + replay-JSON `timeInfo` increment ≥45s, random-sampled ~5k games/~150k records. Measured pool: 23,303 games at 2000+ (1,558 of them absent from replays.db — ladder-DB codes; tc read from `replays_archive/` JSONs, present for every H5 code by construction); ≥19,365 confirmed at 45s+ (~530k records). Val set/tripwire UNCHANGED (human_val_1700) | removes anchor-pulls-toward-weaker-play (same logic as the MB-fleet exclusion); fewer clock blunders = cleaner labels; doubles as the C6 RAM fix; HP-tier → in the pre-K1 re-freeze | worklist C6 |
 | 2026-06-12 | **J7 DECIDED (a)**: two-tier tuple — HP knobs (N, τ, K, ε, c, schedule) = new-campaign tier; scale knobs (rounds, seed policy, eval n) = re-anchor-only tier; encode in campaign_frozen.json | future volume tuning stays cheap and legal | audit §6, selfplay-06 |
 
 ---
 
-## Pre-campaign state (2026-06-12)
+## Pre-campaign state (2026-06-13 — REGIME v3 IMPLEMENTED, run-ready)
 
-Mechanics ALL GREEN (216/216 tests, preflight 10/10, parent bit-identical both repos, baselines
-sha-verified). The 2026-06-12 audit's §1.5/§11 list the pre-`-K 1` decisions the owner has not yet
-made: promotion policy pre-registration, eval-budget re-allocation, training-dose increase
-(SWA/rehearsal/rounds), per-iteration self-play seeds, promotion script + sha-pinned parent, the A6
-orientation test, and a full-size stage-3 dry run. Record each decision in the table above when made.
+All J1–J7 decisions + the 29-item mechanical worklist are IMPLEMENTED (main `461f58dc..`, dave
+`1eba023c..`): 218/218 tests, preflight **15/15**, A6 orientation check live-validated
+(0.998/0.001/1.000/0.001), C7 stage-3 dry run green (2.7 min, no-SWA, elite corpus), A4 rounds-CSV
++ J5 sampler live-smoked (2-round self-play). **First real run: `eval/run_iteration.ps1 -K 1`**,
+then promote-unless-harm per the §3 policy, checkpoint at K=3–5.
+
+**Discovery during implementation (B3):** extending the three-way gate's fixtures to
+frozen/damaged/lifespan/IG states immediately caught a REAL silent feature skew — `is_blocking`
+was 1 on FROZEN units in both C++ legs while the faithful JS engine (= training data) says 0; the
+old code comment claiming "the SWF keeps frozen units blocking-mode" was wrong. Fixed engine-side
+(V2Record + NeuralNet inference gated on `Card::isFrozen()`); the fifth skew of the v2.2.1 class.
+Inference on frozen states changes marginally vs all pre-fix numbers (same precedent as v2.2.1).
+
+**Deferred one-off measurements (owner to schedule):** B4 (the 128-game cross-path bound for the
+steam yardstick — until then steam is trend-only, README documents the delta as unbounded) and B7
+(the (N,c) discrimination re-probe at c=0.15/N=4000 — §1f names it the first experiment if
+checkpoint trends look exploration-starved).
 
 ---
 
@@ -81,14 +95,14 @@ limitation whose preconditions changed is a bug. One line each; details at the p
 |---|---|---|
 | Counterfactual blindness of value-only RL (no signal on unplayed branches); εlate=0.05 ≈ 0.69 dev/game is the chosen compromise | ACCEPTED with watch-stats (d_rl, late sampled fraction) — but see audit §1.2: quantified on the IG axis this is ~single-digit counterfactuals/iter | rl_campaign §1b; audit 06-12 §1.2 |
 | Outcome reproducibility at Threads:8 does not exist (card-set sequence only) | ACCEPTED — per-iteration replay/sidecar archive is the forensic substitute | rl_campaign §1d |
-| Self-play + eval card sets FIXED across iterations (Seeds 55/56/2026) | **UNDECIDED — surfaced 2026-06-12**; either derive seeds from K or document fixed-panel rationale | audit 06-12 §2 |
-| iid Wilson on colour-swap-paired games; no per-set scores emitted; draws=half-win | ACCEPTED Jun-10 ("no per-set scores exist") — rationale challenged: per-seat columns proved the HTML is editable; paired CI is the free power upgrade | audit 06-12 §7, rl-design-05 |
-| Automated verdict is detect-harm only (P(REJECT|parity)=2.1%, |−5pp|=18%); all real decisions human | ACCEPTED by design — but no promotion policy is pre-registered (open) | rl_campaign §3; audit 06-12 §1.4 |
+| Self-play seeds | DECIDED 06-13 (J4): derive from base+K (fresh sets per iteration); eval panels stay FIXED 2-seed (2026/2027) — comparability + partial generalization | preflight frozen_tuple/anchor_blocks |
+| iid Wilson pooled CI is the verdict statistic | paired per-card-set CI now BUILT (A4 rounds CSV + wilson.paired_round_ci, reported in every manifest cell); verdict switches to it only after validation on real runs | eval/README.md stats section |
+| Automated verdict is detect-harm only | promotion policy NOW PRE-REGISTERED (J2 promote-unless-harm via promote_candidate.ps1; checkpoint origin evals carry the evidence) | rl_campaign §3 |
 | ktink_t9 tactical case permanently un-armed (11 PASS / 3 FAIL knife-edge @3s) | ACCEPTED — budget-dependent; never gates | verification doc N-5; rl_runbook stage 6 |
-| Tactical armed-case stability screened only under the parent, single-shot @3s | OPEN — majority re-run / deployment-budget re-baseline recommended | audit 06-12 §5 |
-| Stage-5 parity gate pins export+forward arithmetic ONLY (not feature extraction), tol 1e-3 vs 1e-6 floor | OPEN — docs overstate scope; tighten + stratify recommended | audit 06-12 §5 |
-| A6 maxPlayer-negation seam has no end-to-end orientation test | OPEN (~2h fix recommended pre-iter-1); wrong comment at UCTSearch.cpp:374 | rl_campaign A6; audit 06-12 §5 |
-| Three-way feature gate fixture: no is_frozen / lifespan / damaged-HP / IG states | OPEN — add 3–5 fixture states | audit 06-12 §5 |
+| Tactical suite | DECIDED 06-13 (J6): telemetry-only while local (never aborts); a regression counts as harm only when REPRODUCED 3-5x | rl_runbook stage 6 |
+| Stage-5 parity gate pins export+forward arithmetic ONLY (not feature extraction) | tol now 1e-4 + stratified sample + honest scope docs (B2); extraction pinned by the three-way gate | rl_runbook stage 5 |
+| A6 maxPlayer-negation seam | BUILT 06-13 (B1): eval/a6_orientation_check.py — 4 decided-game states, both seats, engine airootwinrate must side with the outcome; live-validated; run after ANY engine change | rl_campaign A6 |
+| Three-way feature gate fixtures | EXTENDED 06-13 (B3): + frozen/damaged/lifespan/IG elite states — which CAUGHT and fixed the frozen-blocker is_blocking skew. Still not covered: engine-native self-play sidecars (no JS leg by construction) | test_three_way_feature_parity.py |
 | unit_index.json missing ⇒ silent globals-only net on config path | ACCEPTED-Low (file git-tracked; loop never touches it); preflight check recommended | audit 06-12 §5 |
 | In-tree IG auto-fire bias (T3-5/T4-9): non-root tree nodes still auto-fire IG | ACCEPTED known limitation | Jun-10 audit |
 | Engine variant-count assert absent (campaign shape policy lives in preflight, not engine) | SKIPPED — owner decision | verification doc T3-6 |
@@ -98,9 +112,9 @@ limitation whose preconditions changed is a bug. One line each; details at the p
 | tau-probe producer script ad-hoc (artifact committed, producer not) | OPEN-Low (N-9) | verification doc |
 | Steam anchor cross-path delta effectively unbounded (16-game check); draw/n conventions differ from C++ anchors | OPEN — trend use only | audit 06-12 §5, steam-07 |
 | Base+8 (RandomCards:8) only, self-play AND eval — real sets span Base+5..11 | ACCEPTED scope limit: conclusions are Base+8-scoped | audit 06-12, rl-design-07 |
-| Manual-rerun export clobber (same-K re-run overwrites the iter bin) | OPEN — promote script + sha pin recommended | audit 06-12 §4, ops-promote-01 |
-| Training seed unpinned (candidate irreproducible) | OPEN-Low | audit 06-12 §3 |
-| Stage-8 coverage reads the FORCED slice only and describes the PARENT's behaviour | OPEN — doc or widen deliberately | audit 06-12 §8, docs-03 |
+| Manual-rerun export clobber | CLOSED 06-13: parent is sha-content-pinned (preflight parent_sha) + driver guards candBin != parent_bin + promote_candidate.ps1 verifies fresh re-export == on-disk bin | preflight check 15 |
+| Training seed | PINNED 06-13 (2026000+K via the driver) | run_iteration stage 3 |
+| Stage-8 coverage | FIXED 06-13 (C8): both slices + combined + explicit generator-vs-candidate semantics note + B6 ig_contrast_pairs watch-stat | action_coverage.py |
 
 ---
 

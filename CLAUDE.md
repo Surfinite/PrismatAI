@@ -9,7 +9,28 @@
 
 **This repo's `source/engine` + `source/ai` are the clean-room `engine_v2`, which is INDICTED** (~33 pts weaker than Dave's original — see *Parity-Gap Experiments* below / `docs/deepsets-training-results.md`). **Do NOT read, build, or modify it for AI or engine work — it is legacy.** The current, strong engine + AI is **engine_v1 in the SEPARATE repo `c:/libraries/PrismataAI-dave-master` (branch `dave-master-jsonclean`, builds x64/v145).** Query/run it via `node js_engine/query_move.js … --dave-exe c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe`. **THIS** repo (`feature/production-vectors`) is for **training (`training/`), the JS engine (`js_engine/`), eval (`eval/`), and docs** — not the C++ engine. ⚠️ The "How to Build and Run" section below builds **engine_v2** and is **legacy**; don't follow it for current work.
 
-## Current Status (June 12, 2026)
+## Current Status (June 13, 2026)
+
+**RL campaign REGIME v3 — third audit implemented, RUN-READY (Jun 12–13).** The third (design-level)
+audit (`docs/superpowers/plans/2026-06-12-rl-loop-design-audit-FINDINGS.md`) found the loop
+mechanically green but structurally unable to resolve its own output (~78 optimizer steps/iter vs
+±8.7pp eval resolution; ~zero IG counterfactuals; no promotion policy). ALL J1–J7 owner decisions +
+the 29-item mechanical worklist are IMPLEMENTED (main `461f58dc`, dave `1eba023c`): rounds 344+172
+(~1032 games/iter), **NO SWA** (candidate = `final_model.pt`), rehearsal flat 0.10 on the **ELITE
+corpus** (`human_elite_2000_45s_v2.h5`), self-play **seeds derive base+K**, **targeted
+`EpsilonIG=0.25`** replaces EpsilonLate (+ seeded argmax tie-breaks — the old first-wins tie-break
+systematically over-clicked inside the ~9pp UCB indifference band), per-iteration eval = **iter0
+only** (192 forced + 384 general across 2 seed panels), **promote-unless-harm** via
+`eval/promote_candidate.ps1` (sha-pinned parent), **checkpoint origin evals** via
+`eval/run_checkpoint.ps1` (768+192 games vs the PERMANENT `RL_Eval_origin`=v221 — the campaign's
+answer-producing measurement), tactical = telemetry-only, preflight **15 checks**, A6 orientation
+check BUILT+validated (`eval/a6_orientation_check.py`), paired per-card-set CI from the new engine
+rounds-CSV. **Bonus catch:** extending the three-way gate's fixtures (frozen/damaged/lifespan/IG
+states) caught + fixed a REAL fifth v2.2.1-class skew (`is_blocking` was 1 on frozen units in both
+C++ legs; the faithful JS engine says 0). Tests 218/218; the campaign logbook + decision ledger is
+**`eval/campaign_log.md`**. First real run: `eval/run_iteration.ps1 -K 1`.
+
+## Status history (superseded)
 
 **RL loop audited, remediated, RUN-READY (Jun 9–12).** Two independent cold-start audits + a verification sweep + three fix batches landed (main `2654e21..1a9788d`, dave `26075fa..eb52fa8`, all pushed to PrismatAlpha). Headlines: `train.py --rl-mode` now **WARM-STARTS** (`--init-weights` required — it previously trained every iteration from RANDOM init, the E1 bug; iter-1 parent = `training/models/deepsets_v221/swa_model.pt`, sha-verified == the deployed v221 bin); the GO gate is replaced by a **REJECT/REVIEW/INCOMPLETE verdict** (detect-proven-harm + human decision; nothing auto-promotes); the engine **hard-fails** on config mistakes (unknown books/filters/iterators/players, NN load failures); the dave config is **SWF-faithful** (buy tree incl. `BuyEconFast`, 4-entry `DefaultOpeningBook`; EconLimits matched=untouched); the campaign tuple is **FROZEN** in `eval/campaign_frozen.json` (**N=1000, τ=0.7, K=12, εlate=0.05 "regime v2"**, ⅔ general + ⅓ forced-Hotel self-play mix, Threads:8) and asserted by `eval/preflight_config.py` (stage 0, 10 checks — never rewrites config); the steam anchor pits the candidate vs the genuine **2016 MasterBot at `c:/libraries/prismata_baselines/masterbot2016/`**; tournament HTML now carries **per-seat P1/P2 W/G columns** with slot-indexed attribution. The infamous "25.8% iter0" was the random-init candidate vs v221 — the harness is sound (identical players = exactly 50%, proven four ways). Operate via **`eval/rl_runbook.md`**; first real run: `eval/run_iteration.ps1 -K 1`. Record: the two FINDINGS docs + `docs/superpowers/plans/2026-06-11-rl-fixes-verification.md` (resolution table added Jun 12).
 
@@ -29,10 +50,19 @@
 
 **DeadGameBot live** — Plays casual games on the Prismata server using the SteamAI bridge. First live replay Mar 31. State-tracker work ongoing.
 
-**Active work items (RL campaign):**
-1. **Run iteration 1**: `eval/run_iteration.ps1 -K 1` (rounds set: 43 general + 21 forced → 128 games); human-review the manifest verdict + dashboard.
-2. **Iter-1 watch-stats** (regime v2): d_rl flatness; late sampled fraction (~3% expected, `eval/n1000_rescreen_k12.json` is the reference); IG-click coverage of the forced slice.
-3. **Next RL axis after IG** (owner): OB / 3rd-Engineer openings — the Engineer:2 cap (`EconLimits` + `BuyGK_Filter` exclusion) is live-faithful, so unlocking it is an RL axis, NOT a fidelity fix.
+**Active work items (RL campaign, regime v3):**
+1. **Run iteration 1**: `eval/run_iteration.ps1 -K 1` (~1032 self-play games + 576 eval games);
+   then promote-unless-harm (`eval/promote_candidate.ps1 -K 1` unless REJECT / tripwire /
+   REPRODUCED tactical regression); record the entry in `eval/campaign_log.md`.
+2. **Iter-1 watch-stats**: the 4.6 prediction-movement probe (fixed-probe mean|dP| ≲1e-4 = null
+   update), stage-8 `ig_contrast_pairs` (~0 = targeted ε not reaching the axis), late sampled
+   fraction, game length.
+3. **Checkpoint at K=3–5**: `eval/run_checkpoint.ps1` — the powered origin eval carries the
+   campaign's evidence; kill criteria read CHECKPOINT trend, not per-iteration cells.
+4. **Deferred one-off measurements**: B4 128-game cross-path bound (steam yardstick is trend-only
+   until then); B7 (N,c) discrimination re-probe at c=0.15/N=4000 (rl_campaign §1f — first lever
+   if checkpoints look exploration-starved).
+5. **Next RL axis after IG** (owner): OB / 3rd-Engineer openings — the Engineer:2 cap (`EconLimits` + `BuyGK_Filter` exclusion) is live-faithful, so unlocking it is an RL axis, NOT a fidelity fix.
 
 **Older / parked:** verify `PrismataAI.exe` compiled-in OBs; DeadGameBot state-tracker divergence after MB turns; `Odin` in the live `Ability_Filter` (SWF has it, local doesn't).
 

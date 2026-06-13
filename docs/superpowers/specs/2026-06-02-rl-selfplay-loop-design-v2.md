@@ -1,5 +1,21 @@
 # RL Self-Play Loop — Design Spec (v2)
 
+> ## ⚠️ PER-SECTION STATUS (added 2026-06-13 — read before citing anything below)
+>
+> This spec is the ORIGINAL design record; the LIVING contract is `eval/rl_campaign.md` +
+> `eval/campaign_frozen.json` (+ `eval/rl_runbook.md` for ops). Section status:
+>
+> | Section | Status |
+> |---|---|
+> | §1, §2, §6.1, §7, §9, §10 | folded into `rl_campaign.md` — read it there (the campaign doc's copies are maintained; these are not) |
+> | §3 sampler values (τ=1, K≈6–8, ε≈0.25, forced-visit) | **SUPERSEDED** — regime v3: τ=0.7/K=12, EpsilonUniform=0, **targeted EpsilonIG=0.25** (EpsilonLate retired), seeded argmax tie-breaks; see `rl_campaign.md` §1/§1b/§1f |
+> | §4 labels/buffer/rehearsal/SWA | values **SUPERSEDED** (rehearsal flat 0.10 on the ELITE corpus; **NO SWA** — `final_model.pt`); mechanisms as described |
+> | §5 sequential testing 128→256→512; promotion gate; wide-untrained iter-0 anchor; `.ORIG` steam exe | **SUPERSEDED/DELETED** — verdict + promote-unless-harm + checkpoint cadence (`rl_campaign.md` §3); iter-0 anchor = v221 parent + the PERMANENT `RL_Eval_origin`; MasterBot at its permanent home |
+> | §5 O7 tactical suite | built; **telemetry-only** since J6 |
+> | §8 go-criterion, §12 GO rule | **DELETED 2026-06-10** (statistically incoherent) — see `rl_campaign.md` §3 |
+> | **§8.5 (O1/O2/O4 diagnostics), §6 axes 2–4 (widening curriculum), §13 pick-list, §14 escalation** | **STILL AUTHORITATIVE** — `rl_campaign.md` §6's "(§8.5)" cross-reference resolves HERE |
+> | §3 M5 N-calibration "smallest passing N" | **SUPERSEDED** — N frozen by judgment post-screen (`rl_campaign.md` §1) |
+>
 > Date: 2026-06-02 · v2 (post external review; see `META-REVIEW-2026-06-02-rl-selfplay-loop-design.md`).
 > Must-do + Should-do changes applied inline, marked `<!-- CHANGED -->`. Consider-tier items are a pick-list in §13.
 > Engine: `dave-master-jsonclean` (engine_v1). Companions: `docs/rl-action-space-partials-map.md`, `docs/plans/2026-05-31-linux-rl-bringup-and-go-no-go.md`.
