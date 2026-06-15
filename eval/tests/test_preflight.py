@@ -102,15 +102,12 @@ def make_config():
             },
         },
         "Benchmarks": [
-            # v4 self-play = ONE general block. RL_Step2_Smoke survives in config (unused
-            # by v4) and still carries its saveReplays dir, so check 7b stays satisfied.
+            # v4 self-play = ONE general block; check 7b validates only it. (The real
+            # config keeps a dead RL_Step2_Smoke block, but 7b no longer requires it, so
+            # the fixture omits it.)
             {"run": False, "type": "Tournament", "name": "RL_SelfPlay_General", "rounds": 516,
              "Seed": 5600, "Threads": 8,
              "saveReplays": "asset/replays/rl_selfplay_general",
-             "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
-            {"run": False, "type": "Tournament", "name": "RL_Step2_Smoke", "rounds": 172,
-             "Seed": 5500, "Threads": 8, "ForcedCards": ["Hotel"],
-             "saveReplays": "asset/replays/rl_selfplay_forced",
              "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
             {"run": False, "type": "Tournament", "name": "RL_PoL_origin", "rounds": 48,
              "Seed": 2026, "Threads": 8,
@@ -254,8 +251,9 @@ def test_malformed_json_fails(env, capsys):
 def test_run_true_block_fails(env, capsys):
     # Mutate the neutral legacy block: the self-play block (frozen_tuple run:false)
     # and the anchor blocks (anchor_blocks run:false) trip a second check, so only
-    # the legacy block isolates run_true.
-    env["cfg"]["Benchmarks"][4]["run"] = True
+    # the legacy block isolates run_true. Index by name to stay robust to reordering.
+    legacy = next(b for b in env["cfg"]["Benchmarks"] if b["name"] == "Legacy_Smoke")
+    legacy["run"] = True
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "run_true")
@@ -508,12 +506,12 @@ def test_missing_save_replays_fails_selfplay_replays(env, capsys):
 
 
 def test_drifted_save_replays_dir_fails_selfplay_replays(env, capsys):
-    # RL_Step2_Smoke is now Benchmarks[1] (v4 leftover, still 7b-checked).
-    env["cfg"]["Benchmarks"][1]["saveReplays"] = "asset/replays/somewhere_else"
+    # A present-but-wrong saveReplays dir on the v4 self-play block must also fail 7b.
+    env["cfg"]["Benchmarks"][0]["saveReplays"] = "asset/replays/somewhere_else"
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "selfplay_replays")
-    assert "RL_Step2_Smoke.saveReplays" in out
+    assert "RL_SelfPlay_General.saveReplays" in out
 
 
 # ---------------------------------------------------------------------------
@@ -550,10 +548,8 @@ def test_rl_selfplay_mispointed_fails_parent_repin(env, capsys):
 def test_missing_parent_pinned_player_fails_parent_repin(env, capsys):
     """A parent-pinned player missing entirely from the config is a parent_repin failure.
 
-    RL_SelfPlay is also interior-checked + frozen-tuple-checked, so deleting it would
-    trip several checks; mutate its WeightsFile reference instead via a stand-in player
-    is not possible (the set is fixed), so assert the multi-check failure includes
-    parent_repin naming RL_SelfPlay when the player is removed."""
+    Deleting RL_SelfPlay also trips the interior + frozen-tuple checks, so assert that
+    parent_repin is among the failures and names RL_SelfPlay (rather than assert_only_fails)."""
     del env["cfg"]["Players"]["RL_SelfPlay"]
     rc, out = run_main(env, capsys)
     assert rc == 1

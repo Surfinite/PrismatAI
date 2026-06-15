@@ -443,7 +443,7 @@ def check_frozen_tuple(cfg, frozen):
 
 
 # ---------------------------------------------------------------------------
-# Check 7: parent re-pin (F-07 + N-2: ALL FOUR parent-side players)
+# Check 7: parent re-pin (F-07 + N-2: the v4 set (RL_Eval + RL_SelfPlay))
 # ---------------------------------------------------------------------------
 
 # Every config player that must carry the frozen parent net, with the concrete
@@ -603,15 +603,15 @@ def check_unit_index(config_path):
 
 
 # ---------------------------------------------------------------------------
-# Check 7b: saveReplays on both self-play blocks (2026-06-12 replay-audit fixes).
+# Check 7b: saveReplays on the self-play block (2026-06-12 replay-audit fixes).
 # The per-iteration replay archive (forensic record + future-schema source) is
 # part of the iteration contract; a drifted/removed saveReplays key would make
 # stage 1.5 throw only AFTER the full self-play run. Structural expectation,
-# hardcoded like iterator_shape.
+# hardcoded like iterator_shape. v4 runs ONE self-play block, so 7b validates
+# only it (the dead forced-Hotel block is no longer required to exist).
 # ---------------------------------------------------------------------------
 
 SELFPLAY_REPLAY_DIRS = (
-    ("RL_Step2_Smoke",      "asset/replays/rl_selfplay_forced"),
     ("RL_SelfPlay_General", "asset/replays/rl_selfplay_general"),
 )
 
