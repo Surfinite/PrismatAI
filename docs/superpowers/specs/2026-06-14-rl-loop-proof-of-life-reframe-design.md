@@ -105,6 +105,12 @@ runner** as the candidate.
 - ⚠️ **VERIFY before building:** that the live MasterBot uses **AB** (Stack Alpha-Beta / HPS), not UCT —
   confirm from the decompiled client (`AIThreadHandler`/`NewIterator_Root` routing). The whole point is
   faithfulness; do not guess. If the SWF actually routes to UCT, use that instead.
+- **Search-parameter / cValue handling (depends on the verification above):** `cValue`/`UCTConstant` is
+  a **UCT-only** parameter (UCB1 exploration); **Alpha-Beta does not use it** — any `UCTConstant` on an
+  AB player is inert. So: **if AB**, cValue is moot. **If the SWF routes to UCT**, `MasterBot_SWF` uses
+  **`UCTConstant = 2.0`** (the engine default the live game inherits) — **NOT** the candidate's
+  DSNN-tuned 0.3 (that 0.3 is *our* NN-eval tuning, not a faithful MasterBot setting). Confirm the SWF
+  doesn't override the default to some other value.
 
 **Anchor set (per iteration; non-gating, small-N):**
 | Anchor | Opponent | Role | N |
@@ -180,7 +186,9 @@ One unambiguous current contract; the IG work preserved as reference without com
 
 ## 12. Open verification items (resolve during planning)
 
-1. **AB vs UCT** for the live MasterBot — confirm from the decompiled client before building `MasterBot_SWF`.
+1. **AB vs UCT** for the live MasterBot — confirm from the decompiled client before building
+   `MasterBot_SWF`. If UCT, also confirm the faithful `UCTConstant` (engine default 2.0 unless the SWF
+   overrides it) — never the candidate's 0.3 (§6).
 2. Whether dave-master already has an AB SWF-faithful player block or one must be assembled (and whether
    AB is wired to drive the SWF iterator chain).
 3. **Interior NoIG iterator** — confirm it assembles cleanly from the existing `_NoIG` partials
