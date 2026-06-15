@@ -1,11 +1,12 @@
 {
-  "tuple_version": 2,
+  "tuple_version": 4,
+  "regime": "proof-of-life (2026-06-14): systems pipeline validation, no axis under test",
   "frozen_N": 1000,
   "TemperatureK": 12,
   "TemperatureTau": 0.7,
   "EpsilonUniform": 0.0,
-  "EpsilonLate": 0.0,
-  "EpsilonIG": 0.25,
+  "EpsilonLate": 0.05,
+  "EpsilonIG": 0.0,
   "UCTConstant": 0.3,
   "parent_bin": "neural_weights_mixed_v221.bin",
   "parent_bin_sha256": "22cc647ee7b7427e79bde539f331979ce5d95eec309d69495a1ba2fc88c57e97",
@@ -13,51 +14,31 @@
   "parent_val_acc_pct": 71.8,
   "origin_bin": "neural_weights_mixed_v221.bin",
   "origin_val_acc_pct": 71.8,
-  "masterbot2016_exe": "c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe",
+  "engine_testing_exe_sha256": "22163bfd06d4a47a24483b3337e9fcd5c53e8eb706fbb13040c489d819d7db75",
+  "engine_prismataai_exe_sha256": "94a727cd1dfc49cb49117fe82b8448257530b5ce2373e875ec433cfc9cab475f",
   "selfplay_threads": 8,
-  "selfplay_mix": {
-    "general_rounds": 344,
-    "forced_rounds": 172,
-    "forced_cards": ["Hotel"]
-  },
-  "selfplay_seed_base": {
-    "general": 5600,
-    "forced": 5500
-  },
-  "eval_budget": {
-    "TimeLimit": 7000,
-    "MaxTraversals": 100000,
-    "UCTConstant": 0.3
-  },
+  "selfplay_block": "RL_SelfPlay_General",
+  "selfplay_rounds": 516,
+  "selfplay_seed_base": 5600,
+  "candidate_interior_iterator": "HardIterator_5var_NoIG",
+  "candidate_root_iterator": "HardIterator_5var_IGsubset_Root",
+  "eval_budget": { "TimeLimit": 7000, "MaxTraversals": 100000, "UCTConstant": 0.3 },
   "anchor_blocks": {
-    "RL_Eval_iter0_forced":    { "rounds": 96,  "Seed": 2026, "Threads": 8 },
-    "RL_Eval_iter0_generalA":  { "rounds": 96,  "Seed": 2026, "Threads": 8 },
-    "RL_Eval_iter0_generalB":  { "rounds": 96,  "Seed": 2027, "Threads": 8 },
-    "RL_Eval_narrow_forced":   { "rounds": 64,  "Seed": 2026, "Threads": 8 },
-    "RL_Eval_narrow_general":  { "rounds": 64,  "Seed": 2026, "Threads": 8 },
-    "RL_Eval_origin_forced":   { "rounds": 96,  "Seed": 2026, "Threads": 8 },
-    "RL_Eval_origin_generalA": { "rounds": 192, "Seed": 2026, "Threads": 8 },
-    "RL_Eval_origin_generalB": { "rounds": 192, "Seed": 2027, "Threads": 8 }
+    "RL_PoL_origin":    { "rounds": 48, "Seed": 2026, "Threads": 8 },
+    "RL_PoL_masterbot": { "rounds": 48, "Seed": 2026, "Threads": 8 }
   },
-  "replay_window": 5,
-  "train_schedule": {
-    "epochs": 6,
-    "lr": 1e-05,
-    "swa": false,
-    "rehearsal_start": 0.10,
-    "rehearsal_floor": 0.10,
-    "rehearsal_decay": 0.0
-  },
+  "abort_winrate_vs_origin": 0.35,
+  "replay_window": 2,
+  "train_schedule": { "epochs": 6, "lr": 1e-05, "swa": false, "rehearsal_start": 0.10, "rehearsal_floor": 0.10, "rehearsal_decay": 0.0 },
   "rehearsal_file": "training/data/human_elite_2000_45s_v2.h5",
   "tripwire_val_file": "training/data/human_val_1700_50k_v2.h5",
-  "promotion_policy": "promote-unless-harm: promote every candidate UNLESS verdict==REJECT OR the 4.5 tripwire fired OR a REPRODUCED tactical regression; judge the lineage at checkpoints (run_checkpoint.ps1, every 3-5 iterations) with the powered origin eval",
+  "prediction_movement_floor": null,
+  "game_length_band": null,
+  "promotion_policy": "promote-unless-collapse: Phase 0 = no promotion (fixed generator). Phase 1 = promote every candidate UNLESS the run aborted (crash / val-acc collapse / winrate-vs-origin < abort_winrate_vs_origin / degenerate self-play).",
   "tiers": {
-    "hp": ["frozen_N", "TemperatureK", "TemperatureTau", "EpsilonUniform", "EpsilonLate", "EpsilonIG",
-           "UCTConstant", "eval_budget", "train_schedule", "rehearsal_file", "tripwire_val_file",
-           "promotion_policy"],
-    "scale": ["selfplay_threads", "selfplay_mix", "selfplay_seed_base", "anchor_blocks", "replay_window"],
-    "rule": "J7 two-tier (2026-06-13): changing an 'hp' key = a NEW campaign (re-anchor AND re-baseline); changing a 'scale' key = re-anchor the iter-0 baseline + a campaign_log entry, same campaign. parent_* keys change ONLY via eval/promote_candidate.ps1."
+    "hp": ["frozen_N","TemperatureK","TemperatureTau","EpsilonUniform","EpsilonLate","EpsilonIG","UCTConstant","eval_budget","train_schedule","rehearsal_file","tripwire_val_file","promotion_policy","candidate_interior_iterator","candidate_root_iterator"],
+    "scale": ["selfplay_threads","selfplay_rounds","selfplay_seed_base","anchor_blocks","replay_window","abort_winrate_vs_origin"],
+    "rule": "changing an 'hp' key = a NEW campaign; a 'scale' key = re-anchor + a campaign_log entry. parent_* via promote_candidate.ps1 only; origin_bin never changes."
   },
-  "frozen_date": "2026-06-13",
-  "rationale": "regime v3 (2026-06-13, third-audit re-freeze; supersedes regime v2 2026-06-11). Exploration: tau=0.7 turns 0-11 (unchanged, probe-driven); turns >=12 are argmax with TARGETED IG-count epsilon (EpsilonIG=0.25: at roots whose children span >=2 distinct IG click counts, play the most-visited child at a NON-argmax count -- the search's best whole-turn line conditional on a different IG count, i.e. an on-axis counterfactual at near-zero label-corruption cost). EpsilonLate retired to 0: measured 0.69 untargeted deviations/game bought ~1 IG-relevant deviation per 32 games while risking late-game label flips; EpsilonIG replaces it as the A2 answer. Late argmax ties now break uniformly at random (A1: the first-wins tie-break composed with longest-move-first child ordering into a systematic over-click bias inside the ~9pp UCB indifference band). Volume: J1 upper -- 344+172 rounds (~1032 games/iter, ~36k records, ~470 optimizer steps) vs the old 43+21 smoke scale; SWA dropped and rehearsal cut to 0.10 (measured: SWA diluted the update ~20% for nothing; zero-rehearsal fine-tune left human-val acc unchanged at this step size; tripwire-gated raise path documented). Self-play seeds derive from K (base+K, J4) so coverage grows per iteration; eval panels stay fixed (2-seed split 2026/2027 for partial set-generalization). Anchors: per-iteration = iter0 only (forced 192 + general 384 games); narrow = per-promotion; steam = checkpoints; RL_Eval_origin (PERMANENTLY v221) carries the cumulative-axis measurement at checkpoints (drl-03). Promotion: promote-unless-harm (J2). Data mix ratio 2/3 general + 1/3 forced-Hotel unchanged. Rehearsal corpus = the ELITE slice (both ratings >=2000, 45s+ controls; provenance inherited from human_1800_v2)."
+  "frozen_date": "2026-06-14"
 }
