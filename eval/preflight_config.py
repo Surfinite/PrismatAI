@@ -15,24 +15,27 @@ Checks
   2. run_true        zero "run": true Benchmarks blocks (no surprise tournaments)
   3. iterator_shape  RL root iterator structure (AbilitySubset/IG_Only wrapping
                      the 5-variant NoIG PPPortfolio, dims [1,5,5,1], exact
-                     variant set, V5_CS2_NoIG transitively reaches LiveOpeningBook2)
+                     variant set, V5_CS2_NoIG transitively reaches LiveOpeningBook2);
+                     v4 also asserts the INTERIOR iterator HardIterator_5var_NoIG
+                     ([[], ['V5_CS_NoIG'], [], []]) and that each candidate-side
+                     player wires its MoveIterator to it (no IG auto-fire below root)
   4. book_sizes      LiveOpeningBook2 == 50 raw entries, DefaultOpeningBook == 4
   5. reference_graph every declared reference resolves (openingBook, filter,
                      subsetFilter, buyLimits, combination, PartialPlayers,
                      include, iterator keys, PlayoutPlayer, WeightsFile file)
-  6. frozen_tuple    RL_SelfPlay tuple == campaign_frozen.json (regime v2:
-                     EpsilonLate must EQUAL frozen -- absent config key = 0.0,
-                     so frozen 0.05 + absent FAILS; older frozen files without
-                     the key keep the absent-or-0 rule); both self-play blocks
-                     (RL_Step2_Smoke forced + RL_SelfPlay_General) match the
-                     frozen selfplay_threads and selfplay_mix (rounds,
-                     ForcedCards on the forced block ONLY, run:false at rest)
-  7b. selfplay_replays  both self-play blocks carry the expected saveReplays dirs
+  6. frozen_tuple    RL_SelfPlay tuple == campaign_frozen.json (EpsilonLate /
+                     EpsilonIG must EQUAL frozen -- absent config key = 0.0, so
+                     frozen 0.05 + absent FAILS; older frozen files without the
+                     key keep the absent-or-0 rule); v4 self-play = ONE block
+                     (frozen selfplay_block) matching frozen selfplay_rounds /
+                     selfplay_seed_base / selfplay_threads, NO ForcedCards,
+                     run:false at rest
+  7b. selfplay_replays  the self-play blocks carry the expected saveReplays dirs
                      (per-iteration replay archive contract, 2026-06-12)
-  7. parent_repin    ALL FOUR parent-side players' WeightsFile == frozen
-                     parent_bin (F-07 recovery + N-2): RL_Eval (eval pin),
-                     RL_Eval_iter0 (the VERDICT OPPONENT), RL_SelfPlay (the
-                     data generator), RL_Narrow (the iterator-only anchor)
+  7. parent_repin    parent-side players' WeightsFile == frozen parent_bin (F-07
+                     recovery + N-2); v4 set = RL_Eval (eval candidate pin) +
+                     RL_SelfPlay (the data generator). RL_Eval_origin is pinned
+                     to origin_bin separately (origin_pin).
   8. existences      frozen parent_pt + the train/val H5s exist on disk
   9. use_dsnn_sentinel  no use_dsnn.txt FORCE_DSNN drop-in sentinel next to
                      the engine exes (M-09): the sentinel silently swaps the
@@ -62,15 +65,16 @@ DEFAULT_CONFIG = "c:/libraries/PrismataAI-dave-master/bin/asset/config/config.tx
 DEFAULT_FROZEN = os.path.join(REPO_ROOT, "eval", "campaign_frozen.json")
 
 # --- Campaign structural expectations (post SWF port / IG-subset rebuild) ----
-RL_ROOT_ITERATOR    = "HardIterator_5var_IGsubset_Root"
-RL_WRAPPED_ITERATOR = "HardIterator_5var_NoIG_Root"
-RL_SUBSET_FILTER    = "IG_Only"
-RL_PORTFOLIO_DIMS   = [1, 5, 5, 1]
-RL_ABILITY_VARIANTS = {"V5_CS2_NoIG", "V5_CS_NoIG", "V5_CSNF_NoIG",
-                       "V5_CSClickNC_NoIG", "V5_CSClickNF_NoIG"}
-RL_OB_VARIANT       = "V5_CS2_NoIG"
-RL_OB_BOOK          = "LiveOpeningBook2"
-BOOK_SIZES          = {"LiveOpeningBook2": 50, "DefaultOpeningBook": 4}
+RL_ROOT_ITERATOR     = "HardIterator_5var_IGsubset_Root"
+RL_WRAPPED_ITERATOR  = "HardIterator_5var_NoIG_Root"
+RL_INTERIOR_ITERATOR = "HardIterator_5var_NoIG"          # v4: interior never auto-fires IG
+RL_SUBSET_FILTER     = "IG_Only"
+RL_PORTFOLIO_DIMS    = [1, 5, 5, 1]
+RL_ABILITY_VARIANTS  = {"V5_CS2_NoIG", "V5_CS_NoIG", "V5_CSNF_NoIG",
+                        "V5_CSClickNC_NoIG", "V5_CSClickNF_NoIG"}
+RL_OB_VARIANT        = "V5_CS2_NoIG"
+RL_OB_BOOK           = "LiveOpeningBook2"
+BOOK_SIZES           = {"LiveOpeningBook2": 50, "DefaultOpeningBook": 4}
 # repo-root-relative data files the iteration driver depends on. Fallback for older
 # frozen files only — a tuple_version >= 2 frozen file names its own rehearsal_file /
 # tripwire_val_file and those are checked instead (check_existences).
@@ -79,7 +83,13 @@ DATA_FILES = ("training/data/human_val_1700_v2.h5",
 
 # Players that must run the frozen DEPLOYMENT eval budget (preflight-gaps-06): the
 # eval budget is campaign identity but lived only as config literals before 2026-06-13.
-EVAL_BUDGET_PLAYERS = ("RL_Eval", "RL_Eval_iter0", "RL_Eval_origin", "RL_Narrow")
+# v4 (proof-of-life): the eval surface shrinks to the candidate pin + the permanent origin.
+EVAL_BUDGET_PLAYERS = ("RL_Eval", "RL_Eval_origin")
+
+# v4: the candidate-side players whose INTERIOR (response/rollout) move iterator must be
+# the NoIG portfolio -- the interior never auto-fires Infusion Grid (the root subset filter
+# owns the IG-count decision; a non-NoIG interior would re-introduce auto-fire below root).
+SELFPLAY_INTERIOR_PLAYERS = ("RL_SelfPlay", "RL_Eval", "RL_Eval_origin")
 
 # config keys (by section) that reference a Move Iterator by name
 PLAYER_ITERATOR_KEYS = ("RootMoveIterator", "MoveIterator", "ResponseMoveIterator",
@@ -210,6 +220,34 @@ def check_iterator_shape(cfg):
         failures.append("'%s' does not transitively reach openingBook '%s' "
                         "(combination chain reaches only %s)"
                         % (RL_OB_VARIANT, RL_OB_BOOK, sorted(reached) or "no books"))
+
+    # v4: the INTERIOR (response/rollout) iterator. The root subset filter owns the
+    # IG-count decision; the interior must never auto-fire IG below root, so it is the
+    # single-variant NoIG portfolio [[], ['V5_CS_NoIG'], [], []]. Each candidate-side
+    # player must wire its MoveIterator to it (a legacy HardIterator_5var re-introduces
+    # the auto-fire the whole v4 reframe removes).
+    interior = iterators.get(RL_INTERIOR_ITERATOR)
+    if not isinstance(interior, dict):
+        failures.append("interior Move Iterator '%s' not found" % RL_INTERIOR_ITERATOR)
+    else:
+        if interior.get("type") != "PPPortfolio":
+            failures.append("%s.type is '%s', expected 'PPPortfolio'"
+                            % (RL_INTERIOR_ITERATOR, interior.get("type")))
+        if interior.get("PartialPlayers") != [[], ["V5_CS_NoIG"], [], []]:
+            failures.append("%s.PartialPlayers is %s, expected [[], ['V5_CS_NoIG'], [], []] "
+                            "(the interior must be single-variant NoIG -- no IG auto-fire "
+                            "below root)" % (RL_INTERIOR_ITERATOR, interior.get("PartialPlayers")))
+    players = cfg.get("Players", {})
+    for pname in SELFPLAY_INTERIOR_PLAYERS:
+        node = players.get(pname)
+        if not isinstance(node, dict):
+            failures.append("Player '%s' not found (its MoveIterator must be '%s')"
+                            % (pname, RL_INTERIOR_ITERATOR))
+            continue
+        if node.get("MoveIterator") != RL_INTERIOR_ITERATOR:
+            failures.append("%s.MoveIterator is '%s', expected '%s' (v4: the interior "
+                            "iterator never auto-fires IG below root)"
+                            % (pname, node.get("MoveIterator"), RL_INTERIOR_ITERATOR))
     return failures
 
 
@@ -339,22 +377,6 @@ def check_frozen_tuple(cfg, frozen):
                             "at %s -- config drifted; reconcile deliberately"
                             % (sp["UCTConstant"], frozen["UCTConstant"]))
     blocks = {b.get("name"): b for b in cfg.get("Benchmarks", []) if isinstance(b, dict)}
-    # Self-play export threading: the campaign runs Threads:8 (X3-validated); drift to 1
-    # silently octuples wall-clock, drift higher is untested. Regime v2: BOTH self-play
-    # blocks (forced + general) must carry the frozen thread count.
-    if "selfplay_threads" in frozen:
-        thread_blocks = ["RL_Step2_Smoke"]
-        if "selfplay_mix" in frozen:
-            thread_blocks.append("RL_SelfPlay_General")
-        for bname in thread_blocks:
-            sp_block = blocks.get(bname)
-            if sp_block is None:
-                failures.append("self-play export block '%s' not found in Benchmarks "
-                                "(frozen selfplay_threads=%s)" % (bname, frozen["selfplay_threads"]))
-            elif int(sp_block.get("Threads", 1)) != int(frozen["selfplay_threads"]):
-                failures.append("%s.Threads is %s but campaign_frozen.json freezes "
-                                "selfplay_threads at %s" % (bname, sp_block.get("Threads", 1),
-                                                            frozen["selfplay_threads"]))
     # EpsilonLate: regime v3 (2026-06-13) freezes it at 0 (retired in favour of the targeted
     # EpsilonIG); config must EQUAL frozen exactly. An ABSENT config key means 0.0 to the
     # engine, which only matches a frozen 0.0.
@@ -384,55 +406,39 @@ def check_frozen_tuple(cfg, frozen):
     elif "EpsilonIG" in sp and float(sp["EpsilonIG"]) != 0.0:
         failures.append("RL_SelfPlay.EpsilonIG is %s -- must be ABSENT (or 0): this frozen tuple "
                         "(no EpsilonIG key) has targeted IG exploration disabled" % sp["EpsilonIG"])
-    # Self-play seed bases (J4, 2026-06-13): the driver sets Seed = base + K transiently for
-    # stage 1 (fresh card sets every iteration) and restores the base in a finally; the config
-    # must REST at the base so the per-iteration derivation stays deterministic and a killed
-    # run cannot leave a drifted seed.
-    sb = frozen.get("selfplay_seed_base")
-    if isinstance(sb, dict):
-        for bname, key in (("RL_Step2_Smoke", "forced"), ("RL_SelfPlay_General", "general")):
-            blk = blocks.get(bname)
-            if blk is not None and key in sb and int(blk.get("Seed", -1)) != int(sb[key]):
-                failures.append("%s.Seed is %s at rest but frozen selfplay_seed_base.%s is %s "
+    # Self-play data block (v4 proof-of-life, 2026-06-14): ONE general block (no forced-Hotel
+    # mix -- IG is no longer the axis under test). The block must carry the frozen rounds,
+    # seed base (the driver sets Seed = base + K transiently in stage 1 and restores the base
+    # in a finally, so the config must REST at the base), and thread count; it must NOT force
+    # cards and must rest run:false (drivers flip it transiently). Guarded on frozen carrying
+    # selfplay_block so older two-block frozen files are not misread.
+    spb_name = frozen.get("selfplay_block")
+    if spb_name:
+        spb = blocks.get(spb_name)
+        if spb is None:
+            failures.append("self-play block '%s' not found in Benchmarks "
+                            "(frozen selfplay_block)" % spb_name)
+        else:
+            if "selfplay_rounds" in frozen and int(spb.get("rounds", -1)) != int(frozen["selfplay_rounds"]):
+                failures.append("%s.rounds is %s but campaign_frozen.json freezes "
+                                "selfplay_rounds at %s"
+                                % (spb_name, spb.get("rounds"), frozen["selfplay_rounds"]))
+            sb = frozen.get("selfplay_seed_base")
+            if sb is not None and int(spb.get("Seed", -1)) != int(sb):
+                failures.append("%s.Seed is %s at rest but frozen selfplay_seed_base is %s "
                                 "(the driver sets base+K transiently and must restore the base)"
-                                % (bname, blk.get("Seed"), key, sb[key]))
-    # Self-play data mix (regime v2): 2/3 general + 1/3 forced-Hotel across TWO export blocks
-    # (separate export dirs are REQUIRED -- the export counter is per-Tournament-instance, so
-    # two blocks into one dir would clobber filenames). Guarded on frozen carrying the key.
-    mix = frozen.get("selfplay_mix")
-    if isinstance(mix, dict):
-        forced = blocks.get("RL_Step2_Smoke")
-        general = blocks.get("RL_SelfPlay_General")
-        if forced is None:
-            failures.append("selfplay_mix: forced block 'RL_Step2_Smoke' not found in Benchmarks")
-        else:
-            if int(forced.get("rounds", -1)) != int(mix.get("forced_rounds", -1)):
-                failures.append("RL_Step2_Smoke.rounds is %s but campaign_frozen.json "
-                                "selfplay_mix.forced_rounds is %s"
-                                % (forced.get("rounds"), mix.get("forced_rounds")))
-            if forced.get("ForcedCards") != mix.get("forced_cards"):
-                failures.append("RL_Step2_Smoke.ForcedCards is %s but campaign_frozen.json "
-                                "selfplay_mix.forced_cards is %s (the forced slice keeps "
-                                "IG-decision density)"
-                                % (forced.get("ForcedCards"), mix.get("forced_cards")))
-            if forced.get("run") is True:
-                failures.append("RL_Step2_Smoke has \"run\": true -- self-play blocks must rest "
-                                "run:false (drivers flip them transiently)")
-        if general is None:
-            failures.append("selfplay_mix: general block 'RL_SelfPlay_General' not found in "
-                            "Benchmarks (the 2/3 unforced slice of the regime-v2 data mix)")
-        else:
-            if int(general.get("rounds", -1)) != int(mix.get("general_rounds", -1)):
-                failures.append("RL_SelfPlay_General.rounds is %s but campaign_frozen.json "
-                                "selfplay_mix.general_rounds is %s"
-                                % (general.get("rounds"), mix.get("general_rounds")))
-            if "ForcedCards" in general:
-                failures.append("RL_SelfPlay_General has ForcedCards %s -- the general block "
-                                "must have NO ForcedCards (it is the unforced 2/3 slice)"
-                                % general.get("ForcedCards"))
-            if general.get("run") is True:
-                failures.append("RL_SelfPlay_General has \"run\": true -- self-play blocks must "
-                                "rest run:false (drivers flip them transiently)")
+                                % (spb_name, spb.get("Seed"), sb))
+            if "selfplay_threads" in frozen and int(spb.get("Threads", 1)) != int(frozen["selfplay_threads"]):
+                failures.append("%s.Threads is %s but campaign_frozen.json freezes "
+                                "selfplay_threads at %s"
+                                % (spb_name, spb.get("Threads", 1), frozen["selfplay_threads"]))
+            if "ForcedCards" in spb:
+                failures.append("%s has ForcedCards %s -- the v4 self-play block must have NO "
+                                "ForcedCards (proof-of-life uses the unforced general mix)"
+                                % (spb_name, spb.get("ForcedCards")))
+            if spb.get("run") is True:
+                failures.append("%s has \"run\": true -- self-play blocks must rest run:false "
+                                "(drivers flip them transiently)" % spb_name)
     return failures
 
 
@@ -443,17 +449,14 @@ def check_frozen_tuple(cfg, frozen):
 # Every config player that must carry the frozen parent net, with the concrete
 # consequence of a mispoint (printed in the FAIL line). N-2: candidate-side
 # provenance is engine-confirmed per anchor; the parent side is only as strong
-# as these pins.
+# as these pins. v4 (proof-of-life) shrinks the set to the eval candidate pin
+# and the self-play data generator (RL_Eval_origin is origin-pinned separately;
+# RL_Eval_iter0 / RL_Narrow are no longer campaign anchors).
 PARENT_PINNED_PLAYERS = (
-    ("RL_Eval", "a killed/failed iteration left the eval pin on an unpromoted "
-                "candidate (F-07); restore it before evaluating"),
-    ("RL_Eval_iter0", "this is the VERDICT OPPONENT -- the verdict would compare "
-                      "candidate vs the WRONG parent (e.g. the grandparent, after a "
-                      "forgotten post-promotion repoint)"),
-    ("RL_SelfPlay", "this is the self-play DATA GENERATOR -- the iteration would "
-                    "train on games played by the wrong net"),
-    ("RL_Narrow", "this is the iterator-only anchor -- with a different net it no "
-                  "longer isolates the iterator variable"),
+    ("RL_Eval", "the eval candidate pin -- a killed/failed iteration left it on an "
+                "unpromoted candidate (F-07); restore it before evaluating"),
+    ("RL_SelfPlay", "the self-play DATA GENERATOR -- the iteration would train on "
+                    "games played by the wrong net"),
 )
 
 

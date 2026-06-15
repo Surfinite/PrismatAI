@@ -68,6 +68,8 @@ def make_config():
                 ],
             },
             "HardIterator_5var_IGsubset_Root": {"type": "AbilitySubset", "include": "HardIterator_5var_NoIG_Root", "subsetFilter": "IG_Only"},
+            # v4: the interior (response/rollout) iterator -- NoIG single-variant portfolio.
+            "HardIterator_5var_NoIG": {"type": "PPPortfolio", "PartialPlayers": [[], ["V5_CS_NoIG"], [], []]},
             "HardIterator_5var": {"type": "PPPortfolio", "PartialPlayers": [["DefenseSolver"], ["V5_CS_NoIG"], [], []]},
             "HardIterator_5var_Root": {"type": "PPPortfolio", "PartialPlayers": [["DefenseSolver"], ["V5_CS_NoIG"], [], []]},
         },
@@ -75,28 +77,24 @@ def make_config():
             "Playout": {"type": "Player_PPSequence", "PartialPlayers": ["DefenseSolver", "V5_CS_NoIG", "BuyEconTech", "BreachGreedyKnapsack"]},
             "RL_SelfPlay": {
                 "type": "Player_UCT", "TimeLimit": 0, "MaxChildren": 40, "MaxTraversals": 1000,
-                "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var",
+                "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var_NoIG",
                 "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_v221.bin", "UCTConstant": 0.3,
                 "SelfPlaySampling": True, "TemperatureTau": 0.7, "TemperatureK": 12, "EpsilonUniform": 0.0,
-                "EpsilonLate": 0.05,
+                "EpsilonLate": 0.05, "EpsilonIG": 0.0,
             },
             "RL_Eval": {
                 "type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000,
-                "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var",
+                "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var_NoIG",
                 "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_v221.bin", "UCTConstant": 0.3,
             },
-            "RL_Eval_iter0": {
+            "RL_Eval_origin": {
                 "type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000,
-                "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var",
+                "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var_NoIG",
                 "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_v221.bin", "UCTConstant": 0.3,
             },
-            "RL_Narrow": {
-                "type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000,
-                "RootMoveIterator": "HardIterator_5var_Root", "MoveIterator": "HardIterator_5var",
-                "Eval": "NeuralNet", "WeightsFile": "neural_weights_mixed_v221.bin", "UCTConstant": 0.3,
-            },
-            # NOT parent-pinned -- the neutral player reference_graph mutations target so
-            # parent_repin stays green (every RL_* player is now under parent_repin / N-2).
+            # NOT parent-pinned / NOT interior-checked -- the neutral player reference_graph
+            # mutations target so parent_repin / iterator_shape stay green (it isolates the
+            # mutated check). v4 parent_repin set = {RL_Eval, RL_SelfPlay}.
             "DSNN_Mixed35": {
                 "type": "Player_UCT", "TimeLimit": 7000, "MaxChildren": 40, "MaxTraversals": 100000,
                 "RootMoveIterator": "HardIterator_5var_IGsubset_Root", "MoveIterator": "HardIterator_5var",
@@ -104,15 +102,25 @@ def make_config():
             },
         },
         "Benchmarks": [
-            {"run": False, "type": "Tournament", "name": "RL_Step2_Smoke", "rounds": 21,
-             "Threads": 8, "ForcedCards": ["Hotel"],
-             "saveReplays": "asset/replays/rl_selfplay_forced",
-             "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
-            {"run": False, "type": "Tournament", "name": "RL_SelfPlay_General", "rounds": 43,
-             "Threads": 8,
+            # v4 self-play = ONE general block. RL_Step2_Smoke survives in config (unused
+            # by v4) and still carries its saveReplays dir, so check 7b stays satisfied.
+            {"run": False, "type": "Tournament", "name": "RL_SelfPlay_General", "rounds": 516,
+             "Seed": 5600, "Threads": 8,
              "saveReplays": "asset/replays/rl_selfplay_general",
              "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
-            {"run": False, "type": "Tournament", "name": "RL_Eval_iter0_general", "rounds": 64,
+            {"run": False, "type": "Tournament", "name": "RL_Step2_Smoke", "rounds": 172,
+             "Seed": 5500, "Threads": 8, "ForcedCards": ["Hotel"],
+             "saveReplays": "asset/replays/rl_selfplay_forced",
+             "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
+            {"run": False, "type": "Tournament", "name": "RL_PoL_origin", "rounds": 48,
+             "Seed": 2026, "Threads": 8,
+             "players": [{"name": "RL_Eval", "group": 1}, {"name": "RL_Eval_origin", "group": 2}]},
+            {"run": False, "type": "Tournament", "name": "RL_PoL_masterbot", "rounds": 48,
+             "Seed": 2026, "Threads": 8,
+             "players": [{"name": "RL_Eval", "group": 1}, {"name": "RL_Eval", "group": 2}]},
+            # A neutral legacy run:false block (not self-play, not an anchor) so the
+            # run_true mutation test can isolate check 2 alone.
+            {"run": False, "type": "Tournament", "name": "Legacy_Smoke", "rounds": 4,
              "players": [{"name": "RL_Eval", "group": 1}, {"name": "RL_Eval", "group": 2}]},
         ],
     }
@@ -120,16 +128,27 @@ def make_config():
 
 def make_frozen():
     return {
+        "tuple_version": 4,
         "frozen_N": 1000,
         "TemperatureK": 12,
         "TemperatureTau": 0.7,
         "EpsilonUniform": 0.0,
         "EpsilonLate": 0.05,
+        "EpsilonIG": 0.0,
         "UCTConstant": 0.3,
         "parent_bin": "neural_weights_mixed_v221.bin",
         "parent_pt": "training/models/deepsets_v221/swa_model.pt",
+        "origin_bin": "neural_weights_mixed_v221.bin",
         "selfplay_threads": 8,
-        "selfplay_mix": {"general_rounds": 43, "forced_rounds": 21, "forced_cards": ["Hotel"]},
+        "selfplay_block": "RL_SelfPlay_General",
+        "selfplay_rounds": 516,
+        "selfplay_seed_base": 5600,
+        "candidate_interior_iterator": "HardIterator_5var_NoIG",
+        "eval_budget": {"TimeLimit": 7000, "MaxTraversals": 100000, "UCTConstant": 0.3},
+        "anchor_blocks": {
+            "RL_PoL_origin": {"rounds": 48, "Seed": 2026, "Threads": 8},
+            "RL_PoL_masterbot": {"rounds": 48, "Seed": 2026, "Threads": 8},
+        },
     }
 
 
@@ -233,17 +252,18 @@ def test_malformed_json_fails(env, capsys):
 # ---------------------------------------------------------------------------
 
 def test_run_true_block_fails(env, capsys):
-    # Mutate the NON-self-play block: the two self-play blocks are also under the
-    # frozen_tuple selfplay_mix run:false assertion, so only this one isolates run_true.
-    env["cfg"]["Benchmarks"][2]["run"] = True
+    # Mutate the neutral legacy block: the self-play block (frozen_tuple run:false)
+    # and the anchor blocks (anchor_blocks run:false) trip a second check, so only
+    # the legacy block isolates run_true.
+    env["cfg"]["Benchmarks"][4]["run"] = True
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "run_true")
-    assert "RL_Eval_iter0_general" in out
+    assert "Legacy_Smoke" in out
 
 
 def test_run_true_selfplay_block_fails_both_checks(env, capsys):
-    """A run:true SELF-PLAY block trips run_true AND the frozen_tuple mix assertion."""
+    """A run:true SELF-PLAY block trips run_true AND the frozen_tuple block assertion."""
     env["cfg"]["Benchmarks"][0]["run"] = True
     rc, out = run_main(env, capsys)
     assert rc == 1
@@ -278,6 +298,27 @@ def test_ob_chain_break_fails_iterator_shape(env, capsys):
     assert rc == 1
     assert_only_fails(out, "iterator_shape")
     assert "LiveOpeningBook2" in out
+
+
+def test_interior_iterator_reverted_fails_iterator_shape(env, capsys):
+    """v4: a candidate's INTERIOR MoveIterator must be HardIterator_5var_NoIG.
+    Flipping RL_Eval back to the legacy HardIterator_5var (which auto-fires IG
+    below root) must fail iterator_shape and name the expected NoIG iterator."""
+    env["cfg"]["Players"]["RL_Eval"]["MoveIterator"] = "HardIterator_5var"
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "iterator_shape")
+    assert "HardIterator_5var_NoIG" in out
+
+
+def test_interior_iterator_wrong_portfolio_fails_iterator_shape(env, capsys):
+    """v4: HardIterator_5var_NoIG must be the [[], ['V5_CS_NoIG'], [], []] portfolio."""
+    env["cfg"]["Move Iterators"]["HardIterator_5var_NoIG"]["PartialPlayers"] = \
+        [["DefenseSolver"], ["V5_CS_NoIG"], [], []]
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "iterator_shape")
+    assert "HardIterator_5var_NoIG" in out
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +370,9 @@ def test_unknown_opening_book_fails_reference_graph(env, capsys):
 
 
 def test_unknown_move_iterator_fails_reference_graph(env, capsys):
-    env["cfg"]["Players"]["RL_SelfPlay"]["MoveIterator"] = "No_Such_Iterator"
+    # mutate the neutral non-RL player: the candidate-side players' MoveIterator is now
+    # also under the v4 iterator_shape interior check, so only DSNN_Mixed35 isolates this.
+    env["cfg"]["Players"]["DSNN_Mixed35"]["MoveIterator"] = "No_Such_Iterator"
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "reference_graph")
@@ -404,10 +447,9 @@ def test_n_drift_fails_frozen_tuple(env, capsys):
     assert "MaxTraversals" in out
 
 
-def test_general_block_missing_fails_frozen_tuple(env, capsys):
-    """selfplay_mix: the 2/3 general (unforced) block must exist. Since the
-    2026-06-12 replay-archive contract, a missing block correctly fails BOTH
-    frozen_tuple (selfplay_mix) and selfplay_replays (7b)."""
+def test_selfplay_block_missing_fails_frozen_tuple(env, capsys):
+    """v4: the ONE self-play block (frozen selfplay_block) must exist. Removing it
+    fails BOTH frozen_tuple (the block lookup) and selfplay_replays (7b)."""
     env["cfg"]["Benchmarks"] = [b for b in env["cfg"]["Benchmarks"]
                                 if b["name"] != "RL_SelfPlay_General"]
     rc, out = run_main(env, capsys)
@@ -417,45 +459,37 @@ def test_general_block_missing_fails_frozen_tuple(env, capsys):
     assert "RL_SelfPlay_General" in out
 
 
-def test_general_block_with_forced_cards_fails_frozen_tuple(env, capsys):
-    """selfplay_mix: ForcedCards on the GENERAL block would silently force 100% Hotel."""
-    env["cfg"]["Benchmarks"][1]["ForcedCards"] = ["Hotel"]
+def test_selfplay_block_with_forced_cards_fails_frozen_tuple(env, capsys):
+    """v4: the self-play block must have NO ForcedCards (proof-of-life is unforced)."""
+    env["cfg"]["Benchmarks"][0]["ForcedCards"] = ["Hotel"]
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "frozen_tuple")
     assert "RL_SelfPlay_General" in out and "ForcedCards" in out
 
 
-def test_forced_rounds_mismatch_fails_frozen_tuple(env, capsys):
-    """selfplay_mix: rounds drift on the forced block breaks the 2/3:1/3 mix."""
+def test_selfplay_rounds_mismatch_fails_frozen_tuple(env, capsys):
+    """v4: rounds drift on the self-play block must fail against frozen selfplay_rounds."""
     env["cfg"]["Benchmarks"][0]["rounds"] = 64
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "frozen_tuple")
-    assert "forced_rounds" in out
+    assert "selfplay_rounds" in out
 
 
-def test_general_rounds_mismatch_fails_frozen_tuple(env, capsys):
-    """selfplay_mix: rounds drift on the general block breaks the 2/3:1/3 mix."""
-    env["cfg"]["Benchmarks"][1]["rounds"] = 10
+def test_selfplay_seed_drift_fails_frozen_tuple(env, capsys):
+    """v4: the self-play block must REST at frozen selfplay_seed_base (the driver
+    sets base+K transiently and restores it; a killed run mustn't leave a drift)."""
+    env["cfg"]["Benchmarks"][0]["Seed"] = 5601
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "frozen_tuple")
-    assert "general_rounds" in out
+    assert "selfplay_seed_base" in out
 
 
-def test_forced_cards_drift_fails_frozen_tuple(env, capsys):
-    """selfplay_mix: the forced block must force exactly the frozen forced_cards."""
-    env["cfg"]["Benchmarks"][0]["ForcedCards"] = ["Drake"]
-    rc, out = run_main(env, capsys)
-    assert rc == 1
-    assert_only_fails(out, "frozen_tuple")
-    assert "forced_cards" in out
-
-
-def test_general_block_threads_drift_fails_frozen_tuple(env, capsys):
-    """selfplay_threads now covers BOTH self-play blocks."""
-    env["cfg"]["Benchmarks"][1]["Threads"] = 1
+def test_selfplay_block_threads_drift_fails_frozen_tuple(env, capsys):
+    """v4: selfplay_threads covers the single self-play block."""
+    env["cfg"]["Benchmarks"][0]["Threads"] = 1
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "frozen_tuple")
@@ -466,7 +500,7 @@ def test_missing_save_replays_fails_selfplay_replays(env, capsys):
     """7b (2026-06-12): the per-iteration replay archive is part of the iteration
     contract — a dropped/drifted saveReplays key must fail at stage 0, not after
     the full self-play run (stage 1.5 would otherwise be the first to notice)."""
-    del env["cfg"]["Benchmarks"][1]["saveReplays"]
+    del env["cfg"]["Benchmarks"][0]["saveReplays"]
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "selfplay_replays")
@@ -474,7 +508,8 @@ def test_missing_save_replays_fails_selfplay_replays(env, capsys):
 
 
 def test_drifted_save_replays_dir_fails_selfplay_replays(env, capsys):
-    env["cfg"]["Benchmarks"][0]["saveReplays"] = "asset/replays/somewhere_else"
+    # RL_Step2_Smoke is now Benchmarks[1] (v4 leftover, still 7b-checked).
+    env["cfg"]["Benchmarks"][1]["saveReplays"] = "asset/replays/somewhere_else"
     rc, out = run_main(env, capsys)
     assert rc == 1
     assert_only_fails(out, "selfplay_replays")
@@ -482,7 +517,7 @@ def test_drifted_save_replays_dir_fails_selfplay_replays(env, capsys):
 
 
 # ---------------------------------------------------------------------------
-# Check 7: parent re-pin (F-07 + N-2: ALL FOUR parent-side players)
+# Check 7: parent re-pin (F-07 + N-2; v4 set = RL_Eval + RL_SelfPlay)
 # ---------------------------------------------------------------------------
 
 def _mispoint(env, player, bin_name="neural_weights_stale_parent.bin"):
@@ -502,17 +537,6 @@ def test_rl_eval_candidate_bin_fails_parent_repin(env, capsys):
     assert "neural_weights_rl_iter1.bin" in out
 
 
-def test_rl_eval_iter0_mispointed_fails_parent_repin(env, capsys):
-    """N-2: the VERDICT OPPONENT left on a grandparent net after a forgotten
-    post-promotion repoint must be caught -- only parent_repin, naming the player."""
-    _mispoint(env, "RL_Eval_iter0")
-    rc, out = run_main(env, capsys)
-    assert rc == 1
-    assert_only_fails(out, "parent_repin")
-    assert "RL_Eval_iter0" in out and "neural_weights_stale_parent.bin" in out
-    assert sum(1 for ln in out.splitlines() if ln.startswith("FAIL:")) == 1
-
-
 def test_rl_selfplay_mispointed_fails_parent_repin(env, capsys):
     """N-2: the self-play DATA GENERATOR must carry the frozen parent net."""
     _mispoint(env, "RL_SelfPlay")
@@ -523,24 +547,18 @@ def test_rl_selfplay_mispointed_fails_parent_repin(env, capsys):
     assert sum(1 for ln in out.splitlines() if ln.startswith("FAIL:")) == 1
 
 
-def test_rl_narrow_mispointed_fails_parent_repin(env, capsys):
-    """N-2: the iterator-only anchor's net must equal the parent's or it stops
-    isolating the iterator variable."""
-    _mispoint(env, "RL_Narrow")
-    rc, out = run_main(env, capsys)
-    assert rc == 1
-    assert_only_fails(out, "parent_repin")
-    assert "RL_Narrow" in out
-    assert sum(1 for ln in out.splitlines() if ln.startswith("FAIL:")) == 1
-
-
 def test_missing_parent_pinned_player_fails_parent_repin(env, capsys):
-    """A parent-pinned player missing entirely from the config is a parent_repin failure."""
-    del env["cfg"]["Players"]["RL_Narrow"]
+    """A parent-pinned player missing entirely from the config is a parent_repin failure.
+
+    RL_SelfPlay is also interior-checked + frozen-tuple-checked, so deleting it would
+    trip several checks; mutate its WeightsFile reference instead via a stand-in player
+    is not possible (the set is fixed), so assert the multi-check failure includes
+    parent_repin naming RL_SelfPlay when the player is removed."""
+    del env["cfg"]["Players"]["RL_SelfPlay"]
     rc, out = run_main(env, capsys)
     assert rc == 1
-    assert_only_fails(out, "parent_repin")
-    assert "RL_Narrow" in out
+    fails = [ln for ln in out.splitlines() if ln.startswith("FAIL:")]
+    assert any(ln.startswith("FAIL: parent_repin:") and "RL_SelfPlay" in ln for ln in fails), out
 
 
 # ---------------------------------------------------------------------------
