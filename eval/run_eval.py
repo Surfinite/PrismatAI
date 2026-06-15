@@ -283,7 +283,7 @@ def candidate_round_scores(csv_rows, candidate_player):
 
 
 def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER, weights_basename=None,
-                     parent_basename=None, opponent_player=None):
+                     opp_basename=None, opponent_player=None):
     """Flip ONE anchor block run:true, run Prismata_Testing.exe, parse the candidate's W/L/D from its
     HTML statsTable, flip back (in a finally). Returns a FLAT anchor dict
     {block,candidate,wins,draws,games,win_rate,ci:[lo,hi](,paired_ci,rounds)} the dashboard can render
@@ -291,10 +291,11 @@ def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER, we
 
     When weights_basename is given, the engine's stderr is checked for the per-player NeuralNet
     load confirmation — PLAYER-LEVEL since prov-06: the (candidate_player, weights_basename)
-    pair must appear on one line — stamped "engine_confirmed_load". When parent_basename is
-    given (N-2), the (opponent_player, parent_basename) pair must likewise confirm, stamped
-    "engine_confirmed_parent_load". If the per-game rounds CSV (A4) is present, a paired
-    per-card-set CI is stamped alongside the iid Wilson CI (REPORTED, not the verdict input)."""
+    pair must appear on one line — stamped "engine_confirmed_load". When opp_basename is given
+    (the anchor's pinned-OPPONENT net — the v221 origin bin for the v4 origin anchor; None for
+    the no-NeuralNet masterbot opponent), the (opponent_player, opp_basename) pair must likewise
+    confirm, stamped "engine_confirmed_parent_load". If the per-game rounds CSV (A4) is present,
+    a paired per-card-set CI is stamped alongside the iid Wilson CI (REPORTED, not a gate input)."""
     set_block_run(dave_bin, block_name, True)
     stderr_sink = []
     csv_rows = []
@@ -306,14 +307,16 @@ def run_anchor_block(dave_bin, block_name, candidate_player=CANDIDATE_PLAYER, we
     stderr_text = "".join(stderr_sink)
     confirmed = (engine_confirmed_load(stderr_text, weights_basename, candidate_player)
                  if weights_basename else None)
-    parent_confirmed = (engine_confirmed_load(stderr_text, parent_basename, opponent_player)
-                        if parent_basename else None)
+    opp_confirmed = (engine_confirmed_load(stderr_text, opp_basename, opponent_player)
+                     if opp_basename else None)
 
     def _stamp(out):
         if confirmed is not None:
             out["engine_confirmed_load"] = confirmed
-        if parent_confirmed is not None:
-            out["engine_confirmed_parent_load"] = parent_confirmed
+        # Stamp KEY kept as "engine_confirmed_parent_load" (stable name; downstream may read it);
+        # in v4 it confirms the anchor's pinned OPPONENT net (the v221 origin), not a "parent".
+        if opp_confirmed is not None:
+            out["engine_confirmed_parent_load"] = opp_confirmed
         return out
 
     cand = results.get(candidate_player)
@@ -551,9 +554,11 @@ def main():
                     help="collapse threshold: collapse=True iff the origin/general win_rate is "
                          "below this (default 0.35). Coarse point-estimate abort, not a gate.")
     ap.add_argument("--out", default="eval/manifests")
-    # Vestigial v3 args: accepted-and-ignored so the existing PowerShell drivers (run_iteration /
-    # run_checkpoint) don't crash on an unrecognized flag. The steam/matchup anchor was removed
-    # with the REJECT/REVIEW verdict — these no longer do anything.
+    # Vestigial v3 args (--orig-exe/--steam-games/--run-steam, plus --parent-weights above):
+    # accepted-and-ignored so callers passing these now-removed flags don't hit an "unrecognized
+    # arguments" error. The steam/matchup anchor was removed with the REJECT/REVIEW verdict — these
+    # no longer do anything. NOTE: this does NOT make the old v3 driver work end-to-end — it also
+    # passes "--anchors iter0", which v4 rejects; the run_iteration.ps1 call is updated in Task 8.
     ap.add_argument("--orig-exe", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--steam-games", type=int, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--run-steam", action="store_true", help=argparse.SUPPRESS)

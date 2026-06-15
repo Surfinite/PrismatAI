@@ -406,7 +406,7 @@ def test_run_anchor_block_stamps_engine_confirmed_parent_load(tmp_path, monkeypa
 
     monkeypatch.setattr(run_eval, "run_cpp_tournament", both_loads)
     a = run_eval.run_anchor_block(str(tmp_path), "RL_PoL_origin", "RL_Eval",
-                                  weights_basename="cand.bin", parent_basename="origin.bin",
+                                  weights_basename="cand.bin", opp_basename="origin.bin",
                                   opponent_player="RL_Eval_origin")
     assert a["engine_confirmed_load"] is True
     assert a["engine_confirmed_parent_load"] is True
@@ -419,12 +419,12 @@ def test_run_anchor_block_stamps_engine_confirmed_parent_load(tmp_path, monkeypa
 
     monkeypatch.setattr(run_eval, "run_cpp_tournament", candidate_only)
     a = run_eval.run_anchor_block(str(tmp_path), "RL_PoL_origin", "RL_Eval",
-                                  weights_basename="cand.bin", parent_basename="origin.bin",
+                                  weights_basename="cand.bin", opp_basename="origin.bin",
                                   opponent_player="RL_Eval_origin")
     assert a["engine_confirmed_load"] is True
     assert a["engine_confirmed_parent_load"] is False
 
-    # no parent_basename (the masterbot anchor: no opponent net) -> no parent stamp
+    # no opp_basename (the masterbot anchor: no opponent net) -> no opponent stamp
     a = run_eval.run_anchor_block(str(tmp_path), "RL_PoL_masterbot", "RL_Eval",
                                   weights_basename="cand.bin")
     assert "engine_confirmed_parent_load" not in a
