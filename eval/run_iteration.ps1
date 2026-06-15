@@ -1,9 +1,9 @@
 # =============================================================================
-# RL Self-Play — one-iteration driver (regime v3, re-frozen 2026-06-13)
+# RL Self-Play — one-iteration driver (regime v4 "proof-of-life", 2026-06-14)
 #
 # Stages (display numbers kept stable):
-#   0   structural preflight (eval/preflight_config.py — 15 checks, hard gate)
-#   1   self-play export: TWO blocks, one engine launch, Seeds derived base+K (J4)
+#   0   structural preflight (eval/preflight_config.py — hard gate)
+#   1   self-play export: ONE general block, one engine launch, Seed = base+K (J4)
 #   1.5 archive sidecars + replays -> training/data/rl_iter_<K>/
 #   2   concat shards -> vectorize -> H5 (provenance-stamped, C5)
 #   3   RL fine-tune: warm-start, NO SWA, rehearsal 0.10 on the ELITE corpus (J1)
@@ -11,17 +11,18 @@
 #   4.5 val-acc tripwire (candidate vs parent on the capped held-out val)
 #   4.6 prediction-movement probe (B5 — the null-update detector; informational)
 #   5   export-parity GATE (PyTorch <-> C++)
-#   6   tactical suite — TELEMETRY ONLY since J6 (recorded, never aborts)
-#   7   per-iteration eval: iter0 anchor ONLY (forced 192 + generalA/B 384 games);
-#       narrow runs at PROMOTION (promote_candidate.ps1), origin+steam at
-#       CHECKPOINTS (run_checkpoint.ps1, every 3-5 iterations) — J2/J3
-#   8   action coverage (both slices + IG-contrast watch-stat) + dashboard
+#   (6  tactical suite REMOVED in v4 — IG-specific; dropped with the IG axis)
+#   7   per-iteration eval: origin + masterbot anchors (general pool). The origin
+#       anchor is the COLLAPSE/abort signal (collapse iff its win-rate vs the
+#       PERMANENT origin reference < abort_winrate_vs_origin). No REJECT/REVIEW.
+#   8   action coverage (general slice; telemetry, non-fatal) + dashboard
 #
-# PROMOTION POLICY (J2, frozen): promote-unless-harm — promote every candidate
-# UNLESS verdict==REJECT OR the 4.5 tripwire fired OR a REPRODUCED tactical
-# regression. Promotion = eval/promote_candidate.ps1 (sha-pinned, atomic-ish).
-# The campaign's answer comes from the CHECKPOINT origin eval, not per-iteration
-# numbers. Per-iteration human record -> eval/campaign_log.md.
+# PROMOTION POLICY (v4, frozen): promote-unless-collapse.
+#   Phase 0 (fixed generator): do NOT promote.
+#   Phase 1: promote every candidate UNLESS the run aborted — collapse (win-rate
+#   vs origin below abort_winrate_vs_origin) OR the 4.5 val-acc tripwire fired.
+# Promotion = eval/promote_candidate.ps1 (a SEPARATE script; the driver never
+# promotes). Per-iteration human record -> eval/campaign_log.md.
 #
 # -ResumeFrom <stage>: restart at a later stage after a downstream failure
 # (stages 2+ reuse this K's already-archived artifacts; stage-1 re-runs are the
@@ -45,8 +46,7 @@ $train   = "$repo/training"
 $eval    = "$repo/eval"
 $tools   = "$repo/tools"
 
-$selfplayDir    = "$bin/asset/training/rl_step2_v2"    # forced-Hotel slice (RL_Step2_Smoke)
-$selfplayDirGen = "$bin/asset/training/rl_general_v2"  # general slice (RL_SelfPlay_General)
+$selfplayDirGen = "$bin/asset/training/rl_general_v2"  # general slice (RL_SelfPlay_General) — v4's only block
 $workDir     = "$train/data/rl_iter_$K"
 $catJsonl    = "$workDir/selfplay_iter_$K.jsonl"
 $h5          = "$workDir/selfplay_iter_$K.h5"
@@ -58,8 +58,6 @@ $frozenPath  = "$eval/campaign_frozen.json"
 $frozenEarly = Get-Content -Raw $frozenPath | ConvertFrom-Json
 $parentBin   = $frozenEarly.parent_bin
 if (-not $parentBin) { throw "campaign_frozen.json has no parent_bin" }
-$origExe     = $frozenEarly.masterbot2016_exe
-$parityLiveForced = "${selfplayDir}_parity"
 $parityLiveGen    = "${selfplayDirGen}_parity"
 $parityStatesLegacy = "$bin/asset/training/parity_states"  # pre-2026-06-12 shared dir — wiped only
 $schema      = "$train/schema_v2.json"
@@ -210,37 +208,33 @@ $N = [int]$frozen.frozen_N
 Write-Host "=== RL iteration $K  (N=$N, W=$Window, resume_from=$ResumeFrom) ==="
 
 # -----------------------------------------------------------------------------
-# 1) Self-play: BOTH blocks (regime-v3 mix: 344 general + 172 forced rounds),
-#    one engine launch, Seeds derived base+K (J4: fresh card sets every iteration,
-#    reproducible per iteration; bases restored in the finally so the config rests
-#    at the preflight-asserted values). Engine output teed to selfplay.log (C9).
+# 1) Self-play: ONE general block (v4 — the forced-Hotel block was dropped with
+#    the IG axis), one engine launch, Seed derived base+K (J4: fresh card sets
+#    every iteration, reproducible per iteration; base restored in the finally so
+#    the config rests at the preflight-asserted value). Engine output teed to
+#    selfplay.log (C9).
 # -----------------------------------------------------------------------------
 if ($ResumeFrom -le 1) {
 $stageReached = 1
-$seedForced  = [int]$frozen.selfplay_seed_base.forced  + $K
-$seedGeneral = [int]$frozen.selfplay_seed_base.general + $K
-Write-Host "`n[1/8] self-play (general Seed=$seedGeneral -> $selfplayDirGen ; forced Seed=$seedForced -> $selfplayDir)"
-if (Test-Path $selfplayDir)    { Remove-Item "$selfplayDir/selfplay_*.jsonl"    -ErrorAction SilentlyContinue }
+$selfplayBlock = $frozen.selfplay_block
+$seedBase    = [int]$frozen.selfplay_seed_base
+$seedGeneral = $seedBase + $K
+Write-Host "`n[1/8] self-play ($selfplayBlock Seed=$seedGeneral -> $selfplayDirGen)"
 if (Test-Path $selfplayDirGen) { Remove-Item "$selfplayDirGen/selfplay_*.jsonl" -ErrorAction SilentlyContinue }
-foreach ($pd in @($parityLiveForced, $parityLiveGen, $parityStatesLegacy)) {
+foreach ($pd in @($parityLiveGen, $parityStatesLegacy)) {
     if (Test-Path $pd) { Remove-Item "$pd/sp_*.json","$pd/sp_*.json.gz" -ErrorAction SilentlyContinue }
 }
-$replayLiveGen    = "$bin/asset/replays/rl_selfplay_general"
-$replayLiveForced = "$bin/asset/replays/rl_selfplay_forced"
-foreach ($rl in @($replayLiveGen, $replayLiveForced)) {
-    if ((Test-Path $rl) -and (Get-ChildItem -Path $rl -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) {
-        $orphanDir = "$train/data/_orphans/replays_$(Get-Date -Format yyyyMMdd_HHmmss)_$(Split-Path $rl -Leaf)"
-        New-Item -ItemType Directory -Force -Path $orphanDir | Out-Null
-        Move-Item "$rl/game_*.json.gz" $orphanDir
-        Write-Host "moved leftover replays from $rl -> $orphanDir (crashed prior run?)"
-    }
+$replayLiveGen = "$bin/asset/replays/rl_selfplay_general"
+if ((Test-Path $replayLiveGen) -and (Get-ChildItem -Path $replayLiveGen -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) {
+    $orphanDir = "$train/data/_orphans/replays_$(Get-Date -Format yyyyMMdd_HHmmss)_$(Split-Path $replayLiveGen -Leaf)"
+    New-Item -ItemType Directory -Force -Path $orphanDir | Out-Null
+    Move-Item "$replayLiveGen/game_*.json.gz" $orphanDir
+    Write-Host "moved leftover replays from $replayLiveGen -> $orphanDir (crashed prior run?)"
 }
 $selfplayLog = "$workDir/selfplay_$(Get-Date -Format yyyyMMdd_HHmmss).log"
 try {
-    Edit-Config -Op seed -Name RL_SelfPlay_General -Value $seedGeneral
-    Edit-Config -Op seed -Name RL_Step2_Smoke -Value $seedForced
-    Edit-Config -Op run -Name RL_SelfPlay_General -Value true
-    Edit-Config -Op run -Name RL_Step2_Smoke -Value true
+    Edit-Config -Op seed -Name $selfplayBlock -Value $seedGeneral
+    Edit-Config -Op run -Name $selfplayBlock -Value true
     Push-Location $bin
     try {
         & "$bin/Prismata_Testing.exe" 2>&1 | Tee-Object -FilePath $selfplayLog
@@ -251,10 +245,8 @@ try {
     }
 }
 finally {
-    Edit-Config -Op run -Name RL_Step2_Smoke -Value false
-    Edit-Config -Op run -Name RL_SelfPlay_General -Value false
-    Edit-Config -Op seed -Name RL_Step2_Smoke -Value ([int]$frozen.selfplay_seed_base.forced)
-    Edit-Config -Op seed -Name RL_SelfPlay_General -Value ([int]$frozen.selfplay_seed_base.general)
+    Edit-Config -Op run -Name $selfplayBlock -Value false
+    Edit-Config -Op seed -Name $selfplayBlock -Value $seedBase
 }
 $warnings = @(Select-String -Path $selfplayLog -Pattern 'WARNING:' -ErrorAction SilentlyContinue)
 if ($warnings) {
@@ -269,10 +261,8 @@ Write-Host "`n[1.5/8] archive sidecars + replays -> $workDir"
 $parityArchive = "$workDir/parity_states"
 $staleArchives = @()
 if ((Test-Path $parityArchive) -and (Get-ChildItem -Path "$parityArchive/*" -Include 'sp_*.json','sp_*.json.gz' -ErrorAction SilentlyContinue)) { $staleArchives += $parityArchive }
-foreach ($slice in @('general', 'forced')) {
-    $d = "$workDir/replays/$slice"
-    if ((Test-Path $d) -and (Get-ChildItem -Path $d -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) { $staleArchives += $d }
-}
+$replayArchiveGen = "$workDir/replays/general"
+if ((Test-Path $replayArchiveGen) -and (Get-ChildItem -Path $replayArchiveGen -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) { $staleArchives += $replayArchiveGen }
 if ($staleArchives) {
     $aside = "$train/data/_orphans/rl_iter_${K}_superseded_$(Get-Date -Format yyyyMMdd_HHmmss)"
     New-Item -ItemType Directory -Force -Path $aside | Out-Null
@@ -283,28 +273,19 @@ if ($staleArchives) {
     Write-Host "prior attempt's archive for iteration $K moved aside -> $aside"
 }
 New-Item -ItemType Directory -Force -Path $parityArchive | Out-Null
-$sidecarCount = 0
-foreach ($pair in @(@($parityLiveGen, 'general'), @($parityLiveForced, 'forced'))) {
-    $src = $pair[0]; $slice = $pair[1]
-    $files = @(Get-ChildItem -Path "$src/*" -Include 'sp_*.json.gz','sp_*.json' -ErrorAction SilentlyContinue)
-    foreach ($f in $files) { Move-Item $f.FullName "$parityArchive/${slice}_$($f.Name)" }
-    $sidecarCount += $files.Count
+$sidecarFiles = @(Get-ChildItem -Path "$parityLiveGen/*" -Include 'sp_*.json.gz','sp_*.json' -ErrorAction SilentlyContinue)
+foreach ($f in $sidecarFiles) { Move-Item $f.FullName "$parityArchive/general_$($f.Name)" }
+$sidecarCount = $sidecarFiles.Count
+if ($sidecarCount -eq 0) { throw "no parity sidecars (sp_*.json.gz) in $parityLiveGen after self-play — exporter regression, or exportTrainingV2 drifted in config.txt?" }
+New-Item -ItemType Directory -Force -Path $replayArchiveGen | Out-Null
+if ((Test-Path $replayLiveGen) -and (Get-ChildItem -Path $replayLiveGen -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) {
+    Move-Item "$replayLiveGen/game_*.json.gz" $replayArchiveGen
+} else {
+    throw "no replays in $replayLiveGen (general slice) — saveReplays missing from the config block, or serializer failure (check $selfplayLog for [ReplaySerializer] lines)"
 }
-if ($sidecarCount -eq 0) { throw "no parity sidecars (sp_*.json.gz) in $parityLiveGen / $parityLiveForced after self-play — exporter regression, or exportTrainingV2 drifted in config.txt?" }
-foreach ($pair in @(@($replayLiveGen, 'general'), @($replayLiveForced, 'forced'))) {
-    $src = $pair[0]; $slice = $pair[1]
-    $dst = "$workDir/replays/$slice"
-    New-Item -ItemType Directory -Force -Path $dst | Out-Null
-    if ((Test-Path $src) -and (Get-ChildItem -Path $src -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) {
-        Move-Item "$src/game_*.json.gz" $dst
-    } else {
-        throw "no replays in $src ($slice slice) — saveReplays missing from the config block, or serializer failure (check $selfplayLog for [ReplaySerializer] lines)"
-    }
-}
-Write-Host ("archived: {0} sidecars; replays general={1} forced={2}" -f `
+Write-Host ("archived: {0} sidecars; replays general={1}" -f `
     $sidecarCount, `
-    @(Get-ChildItem -Path "$workDir/replays/general" -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue).Count, `
-    @(Get-ChildItem -Path "$workDir/replays/forced"  -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue).Count)
+    @(Get-ChildItem -Path $replayArchiveGen -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue).Count)
 } else {
     $parityArchive = "$workDir/parity_states"
     Write-Host "`n[1/8 + 1.5/8] SKIPPED (resume_from=$ResumeFrom) — reusing this K's archived artifacts"
@@ -312,18 +293,15 @@ Write-Host ("archived: {0} sidecars; replays general={1} forced={2}" -f `
 }
 
 # -----------------------------------------------------------------------------
-# 2) Concat V2 shards (BOTH export dirs) -> one JSONL -> vectorize -> H5.
+# 2) Concat V2 shards (the general export dir) -> one JSONL -> vectorize -> H5.
 #    The H5 carries provenance stamps (C5): parent sha, tuple hash, slice counts.
 # -----------------------------------------------------------------------------
 if ($ResumeFrom -le 2) {
 $stageReached = 2
 Write-Host "`n[2/8] concat shards + vectorize -> $h5"
 if ($ResumeFrom -le 1) {
-    $shardsGen    = @(Get-ChildItem -Path $selfplayDirGen -Filter 'selfplay_*.jsonl' | Sort-Object Name)
-    $shardsForced = @(Get-ChildItem -Path $selfplayDir    -Filter 'selfplay_*.jsonl' | Sort-Object Name)
-    if (-not $shardsGen)    { throw "no selfplay_*.jsonl shards in $selfplayDirGen (general slice missing)" }
-    if (-not $shardsForced) { throw "no selfplay_*.jsonl shards in $selfplayDir (forced slice missing)" }
-    $shards = $shardsGen + $shardsForced
+    $shards = @(Get-ChildItem -Path $selfplayDirGen -Filter 'selfplay_*.jsonl' | Sort-Object Name)
+    if (-not $shards) { throw "no selfplay_*.jsonl shards in $selfplayDirGen (general slice missing)" }
     if (Test-Path $catJsonl) { Remove-Item $catJsonl }
     foreach ($s in $shards) { Get-Content -LiteralPath $s.FullName | Add-Content -LiteralPath $catJsonl }
 } elseif (-not (Test-Path $catJsonl)) {
@@ -414,75 +392,74 @@ if ($LASTEXITCODE -ne 0) { throw "export-parity GATE FAILED — aborting iterati
 } else { Write-Host "`n[5/8] SKIPPED (resume_from=$ResumeFrom)" }
 
 # -----------------------------------------------------------------------------
-# 6) O7 tactical suite — TELEMETRY ONLY (J6, 2026-06-13): single 3s UCT samples
-#    measured 18-33% false-fail on sibling cases; a one-shot mismatch must not
-#    abort a multi-hour iteration. The result is RECORDED; a regression is acted
-#    on by the HUMAN (re-run the case 3-5x — only a REPRODUCED regression blocks
-#    promotion under the promote-unless-harm policy).
+# (6 — REMOVED in v4) The O7 tactical suite was IG-specific and dropped with the
+#    IG axis. No stage 6 runs.
 # -----------------------------------------------------------------------------
-if ($ResumeFrom -le 6) {
-$stageReached = 6
-Write-Host "`n[6/8] O7 tactical suite (TELEMETRY — never aborts since J6)"
-python "$eval/tactical_suite.py" --weights $candBin --dave-exe "$bin/PrismataAI.exe"
-$tacticalExit = $LASTEXITCODE
-if ($tacticalExit -ne 0) {
-    Write-Host "*** tactical suite reported a REGRESSION (exit $tacticalExit) — telemetry only. ***"
-    Write-Host "*** Before promoting: re-run the failing case 3-5x; a REPRODUCED regression = harm (do not promote). ***"
-} else {
-    Write-Host "tactical suite: no regression"
-}
-Write-Ledger @{ event = 'tactical'; exit_code = $tacticalExit }
-} else { Write-Host "`n[6/8] SKIPPED (resume_from=$ResumeFrom)" }
 
 # -----------------------------------------------------------------------------
-# 7) Per-iteration eval (J3): the iter0 anchor ONLY — forced (192 games) +
-#    generalA/generalB (384 games, two fixed seed panels). Narrow runs at
-#    promotion; origin + steam at checkpoints (run_checkpoint.ps1).
+# 7) Per-iteration eval (v4 PoL): origin + masterbot anchors on the general pool.
+#    The origin anchor pits the candidate vs the PERMANENT origin reference and
+#    is the COLLAPSE/abort signal (collapse iff its win-rate < abort_winrate).
+#    The masterbot anchor is the absolute-strength trend. No REJECT/REVIEW.
 # -----------------------------------------------------------------------------
+$collapsed = $false
 if ($ResumeFrom -le 7) {
 $stageReached = 7
-Write-Host "`n[7/8] repoint RL_Eval -> $candBin + iter0 anchor eval"
+Write-Host "`n[7/8] repoint RL_Eval -> $candBin + origin+masterbot anchor eval"
 try {
     Edit-Config -Op weights -Name RL_Eval -Value $candBin
     python "$eval/run_eval.py" --iteration $K `
-        --weights $candBin --parent-weights $parentBin `
-        --dave-bin $bin --orig-exe $origExe `
-        --anchors iter0 --pools forced general --out "$eval/manifests"
+        --weights $candBin --origin-weights $($frozen.origin_bin) `
+        --dave-bin $bin `
+        --anchors origin masterbot --pools general --abort-winrate $($frozen.abort_winrate_vs_origin) `
+        --out "$eval/manifests"
     if ($LASTEXITCODE -ne 0) { throw "run_eval.py exited $LASTEXITCODE" }
 }
 finally {
     Edit-Config -Op weights -Name RL_Eval -Value $parentBin
     Write-Host "RL_Eval.WeightsFile restored -> $parentBin (F-07 guard)"
 }
+if (Test-Path $manifest) {
+    $collapsed = [bool]((Get-Content -Raw $manifest | ConvertFrom-Json).collapse)
+}
+if ($collapsed) {
+    Write-Host "`n*** COLLAPSE: win-rate vs origin below abort threshold ($($frozen.abort_winrate_vs_origin)) — candidate is NOT promotable this iteration ***"
+}
 } else { Write-Host "`n[7/8] SKIPPED (resume_from=$ResumeFrom)" }
 
 # -----------------------------------------------------------------------------
-# 8) Action coverage (BOTH slices + the B6 IG-contrast watch-stat) + dashboard.
+# 8) Action coverage (general slice — TELEMETRY, non-fatal) + dashboard.
+#    action_coverage is IG-specific; with the IG axis dropped it is watch-stat
+#    only, so a failure here must NOT abort the iteration.
 # -----------------------------------------------------------------------------
 $stageReached = 8
-Write-Host "`n[8/8] action coverage + dashboard"
-python "$eval/action_coverage.py" `
-    --selfplay-jsonl-dir $selfplayDir --selfplay-jsonl-dir $selfplayDirGen `
-    --dave-exe "$bin/PrismataAI.exe" `
-    --weights $candBin --battery "$eval/ig_battery" --manifest $manifest
-if ($LASTEXITCODE -ne 0) { throw "action_coverage.py exited $LASTEXITCODE" }
+Write-Host "`n[8/8] action coverage (telemetry) + dashboard"
+try {
+    python "$eval/action_coverage.py" `
+        --selfplay-jsonl-dir $selfplayDirGen `
+        --dave-exe "$bin/PrismataAI.exe" `
+        --weights $candBin --battery "$eval/ig_battery" --manifest $manifest
+    if ($LASTEXITCODE -ne 0) { Write-Host "*** action_coverage.py exited $LASTEXITCODE — telemetry only, continuing ***" }
+} catch {
+    Write-Host "*** action_coverage.py threw ($($_.Exception.Message)) — telemetry only, continuing ***"
+}
 python "$eval/render_dashboard.py"
 if ($LASTEXITCODE -ne 0) { throw "render_dashboard.py exited $LASTEXITCODE" }
 
-$verdict = ''
-if (Test-Path $manifest) {
-    $verdict = (Get-Content -Raw $manifest | ConvertFrom-Json).verdict
+if ((-not $collapsed) -and (Test-Path $manifest)) {
+    $collapsed = [bool]((Get-Content -Raw $manifest | ConvertFrom-Json).collapse)
 }
-Write-Ledger @{ event = 'complete'; stage_reached = $stageReached; verdict = "$verdict"; candidate_bin = $candBin }
+Write-Ledger @{ event = 'complete'; stage_reached = $stageReached; collapse = $collapsed; candidate_bin = $candBin }
 
 Write-Host "`n=== iteration $K complete ==="
-Write-Host "Manifest : $manifest   (verdict: $verdict)"
-Write-Host "PROMOTION POLICY (J2, frozen): promote-unless-harm."
-Write-Host "  PROMOTE  : verdict != REJECT, tripwire ok, no REPRODUCED tactical regression"
+Write-Host "Manifest : $manifest   (collapse: $collapsed)"
+Write-Host "PROMOTION POLICY (v4, frozen): promote-unless-collapse."
+Write-Host "  Phase 0 (fixed generator): do NOT promote."
+Write-Host "  Phase 1   : promote unless collapse / val-acc tripwire fired"
 Write-Host "             -> eval/promote_candidate.ps1 -K $K"
-Write-Host "  REJECT   : keep the parent; record the decision in eval/campaign_log.md"
-Write-Host "  CHECKPOINT (every 3-5 iterations): eval/run_checkpoint.ps1 — the powered origin eval"
-Write-Host "             is where the campaign's actual answer comes from."
+if ($collapsed) {
+    Write-Host "  COLLAPSE  : win-rate vs origin below abort threshold — do NOT promote; record in eval/campaign_log.md"
+}
 Write-Host "Record this iteration in eval/campaign_log.md (template at the top of that file)."
 
 }
