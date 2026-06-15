@@ -1,29 +1,23 @@
-"""Per-iteration RL eval. Wilson CIs, REJECT/REVIEW/INCOMPLETE verdict, incremental manifest.
+"""Per-iteration RL "proof-of-life" eval. Wilson CIs, collapse-on-abort, incremental manifest.
 
-Anchors (one path each):
-  1. iter0  : candidate vs the PARENT promoted net (the RL_Eval_iter0 player is repointed to the
-              current parent, v221) on the IG-optional config (C++ tournament). Its GENERAL
-              (unforced-sets) pool is the ONLY automated verdict input; its forced pool informs
-              the human IG judgment but does not gate.
-  2. narrow : candidate vs RL_Narrow (same v221 net + budget + c, NON-IG HardIterator_5var_Root —
-              isolates the iterator variable; C++ tournament)                     [non-gating yardstick]
-  3. steam  : candidate (DaveAI + injected RL_Eval block + --candidate-weights) vs the genuine
-              2016 MasterBot at its permanent home c:/libraries/prismata_baselines/masterbot2016/
-              (matchup_clean.js, --player-switch)                                 [non-gating yardstick]
+Anchors (v4 proof-of-life set, both GENERAL pool only):
+  1. origin    : candidate (RL_Eval) vs RL_Eval_origin — the PERMANENT v221 reference, never
+                 repointed. The relative-drift anchor and the COLLAPSE/abort signal (C++ tournament,
+                 block RL_PoL_origin).
+  2. masterbot : candidate (RL_Eval) vs MasterBot_SWF — an Alpha-Beta Playout player (NO
+                 NeuralNet, no WeightsFile). The absolute-strength trend (C++ tournament,
+                 block RL_PoL_masterbot).
 All eval players run at the DEPLOYMENT budget (TimeLimit:7000/MaxTraversals:100000), NOT the self-play N (A1).
 
-VERDICT (2026-06-10, replaces the old GO gate): the old rule (d_rl >= +5pp AND forced
-ci_lower > 0.5) was statistically incoherent at 128 games — an observed +5pp needed 58.7% to
-fire, so P(GO | true +5pp) ~ 13%. "Prove improvement" is replaced by "detect proven harm" +
-human judgment — REVIEW means the numbers could not prove harm, NOT that safety is certified
-(at n=128, P(REJECT | true -5pp) ~ 18%, P(REJECT | true parity) ~ 2.1%; REJECT reliably fires
-only for ~-10pp-and-worse regressions):
-  REJECT     iff the general-pool anchor completed AND its 95% Wilson ci_upper < 0.5
-             (the candidate is statistically proven worse than the parent);
-  REVIEW     iff it completed and ci_upper >= 0.5 (everything else is a human call);
-  INCOMPLETE iff the general anchor is missing/errored (can't certify not-worse).
-d_rl, d_reg, all WRs and CIs remain recorded as INFORMATION (d_reg now carries a CI); nothing
-auto-promotes.
+COLLAPSE (2026-06-15, replaces the old REJECT/REVIEW/INCOMPLETE verdict): the proof-of-life loop
+no longer pretends to certify improvement OR non-inferiority — it only aborts on a coarse,
+point-estimate COLLAPSE against the permanent origin reference. compute_collapse(origin_general,
+threshold) returns:
+  True   iff the origin/general anchor completed (games>0) AND its win_rate < --abort-winrate
+         (default 0.35) — the candidate has drifted badly enough vs v221 to halt the campaign;
+  False  iff it completed and win_rate >= threshold;
+  None   iff the origin anchor is missing/errored OR completed with ZERO games (can't decide).
+This is an ABORT signal, NOT a powered gate — every WR and CI is still recorded as information.
 
 INCREMENTAL MANIFEST: the manifest is (re)written atomically (temp file + os.replace) after
 EVERY completed pool/anchor, carrying "complete": false and "anchors_completed": [...] until
@@ -34,15 +28,16 @@ config.txt must equal basename(--weights) (hard abort otherwise). Each C++ ancho
 captured and must contain the engine's "AIParameters: created per-player NeuralNet from
 <...candidate.bin>" load line; the result is stamped "engine_confirmed_load" per anchor and a
 completed-but-unconfirmed anchor hard-fails (after being recorded for the post-mortem).
-N-2 (parent side): when --parent-weights is given, the SAME stderr must also confirm a load of
-the PARENT basename — the iter0 anchor's opponent (RL_Eval_iter0, the VERDICT opponent) and the
-narrow anchor's opponent (RL_Narrow) are both pinned to the frozen parent_bin (preflight
-parent_repin), so each completed C++ anchor is stamped "engine_confirmed_parent_load" and
-hard-fails without it: a forgotten post-promotion repoint would otherwise silently turn
-"candidate vs parent" into "candidate vs grandparent".
+Opponent side: the origin anchor's opponent (RL_Eval_origin) is pinned to the PERMANENT origin
+bin (--origin-weights), so the SAME stderr must also confirm that load (player-level,
+engine_confirmed_parent_load) — a forgotten repoint would silently turn "candidate vs origin"
+into "candidate vs something else". The masterbot opponent (MasterBot_SWF) is an AB Playout
+player with NO NeuralNet, so there is NO opponent load line to confirm — its opponent-load check
+is SKIPPED (opp_kind=None), not hard-failed.
 
-STATS NOTE: CIs are iid Wilson only (eval/wilson.py). Per-set / colour-swap-paired analysis
-would require per-card-set scores the tournament HTML does not emit.
+STATS NOTE: CIs are iid Wilson only (eval/wilson.py). Where the per-game rounds CSV exists a
+paired per-card-set CI is REPORTED alongside (it removes between-set variance the pooled CI
+ignores).
 
 PARSE-FORMAT NOTE (validated Step 5, 2026-06-03): the C++ tournament's STDOUT only emits a
 seat-symmetric *score matrix* (player x player score, plus TotalScore) and a "Games completed"
@@ -147,89 +142,6 @@ def parse_tournament_stdout(text, block_name):
     return out
 
 
-# Steam anchor binaries (F-08 rewiring, 2026-06-11):
-#   white = the RL candidate: DaveAI (dave-master engine_v1 Steam-protocol exe) with the
-#           matchup runner's injected RL_Eval player block (5var+IGsubset iterators, c=0.3,
-#           WeightsFile from --candidate-weights);
-#   black = the genuine 2016 MasterBot at its PERMANENT HOME (owner directive) — outside both
-#           repos and the Steam dir, so the use_dsnn.txt contamination guard (which checks the
-#           exe's own directory) passes without modification. sha256
-#           0A70B198342B998650D98CF2F1CF74E9C478D50F4E9918FB49E09286B64A41FC, 721,920 bytes.
-DAVE_MATCHUP_EXE = "c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe"
-MASTERBOT2016_EXE = "c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe"
-
-
-def run_steam(orig_exe, candidate_label, games, pool_args, think_ms=7000,
-              dave_exe=DAVE_MATCHUP_EXE):
-    """matchup_clean.js: RL candidate (white: DaveAI + injected RL_Eval block; candidate
-    weights threaded via pool_args ["--candidate-weights", <bin basename>]) vs the 2016
-    MasterBot (black: SteamAI/HardestAI on orig_exe via --steam-exe-b), --player-switch.
-    Returns (win_rate_p in [0,1], n). A7: parse the SEAT-INDEPENDENT per-identity win-rate.
-    A8: the STEAMAI yardstick uses a FIXED games count (no sequential escalation).
-
-    Verified emitted candidate label (matchup_clean.js labelWith, 2026-06-11): the white
-    player normalizes to 'DAVEAI' and the difficulty keeps its exact argv case, so the
-    seat-independent line is:  [Parallel] Player A [DAVEAI[RL_Eval]]: 53.9%
-    -> candidate_label 'RL_Eval' (exact case) substring-matches it and nothing else."""
-    cmd = ["node", "c:/libraries/PrismataAI/js_engine/matchup_clean.js",
-           "--games", str(games), "--parallel", "4", "--player-switch", "--think-time", str(think_ms),
-           "--player-white", "DaveAI", "--steam-difficulty-white", "RL_Eval",
-           "--player-black", "SteamAI", "--steam-difficulty-black", "HardestAI",
-           "--dave-exe", dave_exe,
-           "--steam-exe-b", orig_exe] + pool_args
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=72000)
-    return parse_matchup_seatindep(p.stderr, candidate_label, games)
-
-
-def parse_matchup_seatindep(text, candidate_label, games):
-    """A7: read the '--- Win Rates (seat-independent) ---' block and return (candidate win_rate
-    fraction, n). Returns (None, games) if the block is absent (e.g. no --player-switch) or if
-    no line in the block carries the candidate_label (e.g. the pre-fix SteamAI-both-seats
-    mis-wiring, where both identity labels were STEAMAI[HardestAI]).
-
-    Verified line format (matchup_clean.js, both [Pair] and [Parallel] paths, 2026-06-11):
-        [Parallel] Player A [DAVEAI[RL_Eval]]: 53.9%
-        [Parallel] Player B [STEAMAI[HardestAI]]: 46.1%
-    Matching is exact-case SUBSTRING against the captured label ('Player A [DAVEAI[RL_Eval]]'),
-    so candidate_label='RL_Eval' must match the injected difficulty's case exactly. The caller
-    MUST pass a candidate_label unique enough that it is NOT a substring of the opponent's
-    identity label (the match takes the FIRST matching line and stops).
-
-    NOTE: deliberately ignores the '[Parallel] White:/Black:' seat WIN tally for the rate — for
-    a switched candidate the seat tally is NOT the candidate's win rate (A7). The seat tally IS
-    used to recover valid_games/draws (steam-07): matchup's printed rate is wins/validGames
-    with draws counting against BOTH players (NOT the C++ anchors' draw=half-win), so the CI's
-    n must be the VALID game count, not the requested one.
-
-    Returns (p, n, extra) — extra = {"draws", "valid_games", "draw_convention"} when the seat
-    tally was parseable, else {}."""
-    p = None
-    n = games
-    block = re.search(r"Win Rates \(seat-independent\)(.*?)(?:={5,}|\Z)", text, re.S)
-    scope = block.group(1) if block else text
-    for m in re.finditer(r"^\s*\[(?:Pair|Parallel)\]\s+(.+?):\s+([\d.]+)%\s*$", scope, re.M):
-        label, rate = m.group(1).strip(), float(m.group(2))
-        if candidate_label and candidate_label in label:
-            p = rate / 100.0
-            break
-    mg = re.search(r"\[(?:Pair|Parallel)\]\s+Games:\s+(\d+)", text)
-    if mg:
-        n = int(mg.group(1))
-    extra = {}
-    mw = re.search(r"\[(?:Pair|Parallel)\]\s+White:\s+(\d+)", text)
-    mb = re.search(r"\[(?:Pair|Parallel)\]\s+Black:\s+(\d+)", text)
-    md = re.search(r"\[(?:Pair|Parallel)\]\s+Draws:\s+(\d+)", text)
-    if mw and mb and md:
-        draws = int(md.group(1))
-        valid = int(mw.group(1)) + int(mb.group(1)) + draws
-        if valid > 0:
-            extra = {"draws": draws, "valid_games": valid,
-                     "draw_convention": "draws count against BOTH players (matchup_clean.js), "
-                                        "NOT the C++ anchors' draw=half-win"}
-            n = valid
-    return (p, n, extra)
-
-
 # ---------------------------------------------------------------------------
 # Provenance + manifest persistence
 # ---------------------------------------------------------------------------
@@ -294,38 +206,28 @@ def write_manifest(manifest, path):
 # repointed to the candidate .bin by run_iteration.ps1 stage 7.
 CANDIDATE_PLAYER = "RL_Eval"
 # E/Y are recorded METADATA only (historical pre-registered effect size / regression tolerance);
-# since 2026-06-10 nothing gates on them — see the module docstring's VERDICT section.
+# nothing gates on them — kept for the manifest record.
 E_EFFECT = 0.05   # (info) +5 pp -- the smallest IG-driven gain judged worth AWS spend.
 Y_REG    = 0.03   # (info) regression tolerance once used by the retired d_reg gate.
-HEADLINE_POOL = "forced"   # the IG-widened axis (d_rl info); the dashboard renders one cell per anchor.
-VERDICT_RULE = ("REJECT iff iter0/general (candidate vs parent, unforced sets) completed AND "
-                "Wilson95 ci_upper < 0.5; REVIEW iff completed and ci_upper >= 0.5; INCOMPLETE "
-                "iff that anchor is missing/errored. All deltas are information only — "
-                "promotion is a HUMAN call.")
+HEADLINE_POOL = "general"   # v4 PoL anchors are general-only; the dashboard renders one cell per anchor.
 
 # Anchor C++ tournament blocks (must exist run:false in config.txt; group1=RL_Eval candidate).
-# A pool maps to a LIST of blocks whose results aggregate into one cell (J3/J4 2026-06-13: the
-# iter0/origin general pools split across two fixed seed panels, 2026/2027, for partial
-# set-generalization without losing cross-iteration comparability).
-#   iter0  -> vs RL_Eval_iter0 (the PARENT promoted net): general = THE verdict input
-#             (192 rounds = 384 games across two panels); forced = d_rl info (192 games).
-#             Run EVERY iteration (the only per-iteration anchor since J3).
-#   narrow -> vs RL_Narrow (iterator-only variable): run at PROMOTION only.
-#   origin -> vs RL_Eval_origin (PERMANENTLY v221, never repointed — drl-03): the campaign's
-#             cumulative-axis measurement; run at CHECKPOINTS (768 general + 192 forced games).
+# A pool maps to a LIST of blocks whose results aggregate into one cell. v4 proof-of-life set:
+#   origin    -> vs RL_Eval_origin (PERMANENTLY v221, never repointed — drl-03): the relative-
+#                drift anchor + the COLLAPSE/abort signal. block RL_PoL_origin (general only).
+#   masterbot -> vs MasterBot_SWF (AB Playout, NO NeuralNet): the absolute-strength trend.
+#                block RL_PoL_masterbot (general only).
 ANCHOR_BLOCKS = {
-    "iter0":  {"forced": ["RL_Eval_iter0_forced"],
-               "general": ["RL_Eval_iter0_generalA", "RL_Eval_iter0_generalB"]},
-    "narrow": {"forced": ["RL_Eval_narrow_forced"], "general": ["RL_Eval_narrow_general"]},
-    "origin": {"forced": ["RL_Eval_origin_forced"],
-               "general": ["RL_Eval_origin_generalA", "RL_Eval_origin_generalB"]},
+    "origin":    {"general": ["RL_PoL_origin"]},
+    "masterbot": {"general": ["RL_PoL_masterbot"]},
 }
-# The parent-pinned opponent each anchor's stderr must confirm (player-level, prov-06).
-# "parent" resolves to --parent-weights; "origin" to --origin-weights.
+# The pinned opponent each anchor's stderr must confirm (player-level), and the opp_kind that
+# names the provenance source: "origin" resolves to --origin-weights; None means the opponent is
+# a no-NeuralNet AB player (MasterBot_SWF) — there is NO opponent load line to confirm, so the
+# opponent-load check is SKIPPED for it.
 ANCHOR_OPPONENTS = {
-    "iter0":  ("RL_Eval_iter0", "parent"),
-    "narrow": ("RL_Narrow", "parent"),
-    "origin": ("RL_Eval_origin", "origin"),
+    "origin":    ("RL_Eval_origin", "origin"),
+    "masterbot": ("MasterBot_SWF", None),   # AB Playout opponent: no NeuralNet load line to confirm
 }
 
 
@@ -469,73 +371,69 @@ def aggregate_pool_cells(cells):
     return out
 
 
-def compute_verdict(general_cell):
-    """REJECT / REVIEW / INCOMPLETE non-inferiority verdict (2026-06-10; replaces the old GO
-    boolean). general_cell = the iter0/general anchor dict (candidate vs parent, unforced sets):
-      REJECT     iff it completed AND its 95% Wilson ci_upper < 0.5 (proven worse than parent);
-      REVIEW     iff it completed and ci_upper >= 0.5 (human call on the recorded numbers);
-      INCOMPLETE iff it is missing/errored OR completed with ZERO games (edge-08: a 0-game
-                 'completed' anchor certifies nothing)."""
-    if not (isinstance(general_cell, dict) and "win_rate" in general_cell and general_cell.get("ci")):
-        return "INCOMPLETE"
-    if not general_cell.get("games"):
-        return "INCOMPLETE"
-    return "REJECT" if general_cell["ci"][1] < 0.5 else "REVIEW"
+def compute_collapse(origin_cell, threshold):
+    """Point-estimate COLLAPSE/abort signal (v4; replaces REJECT/REVIEW/INCOMPLETE).
+    origin_cell = the origin/general anchor dict (candidate vs the PERMANENT origin reference):
+      True   iff it completed (games>0) AND its win_rate < threshold (drifted badly vs origin);
+      False  iff it completed and win_rate >= threshold;
+      None   iff it is missing/errored OR completed with ZERO games (can't decide).
+    This is a COARSE abort signal, not a powered gate."""
+    if not (isinstance(origin_cell, dict) and "win_rate" in origin_cell and origin_cell.get("games")):
+        return None
+    return origin_cell["win_rate"] < threshold
 
 
-def _refresh_verdict(manifest):
-    """Recompute verdict + information-only deltas from whatever anchors are recorded so far.
-    Called before every incremental write so even a partial (killed-run) manifest carries a
-    self-consistent verdict."""
-    iter0_pools = manifest["anchors"].get("iter0", {}).get("pools", {})
-
-    def _cell(pool):
-        c = iter0_pools.get(pool)
+def _refresh_summary(manifest, threshold):
+    """Recompute the collapse flag + information-only WR/CI summary from whatever anchors are
+    recorded so far. Called before every incremental write so even a partial (killed-run)
+    manifest carries a self-consistent collapse signal."""
+    def _gen_cell(anchor):
+        c = manifest["anchors"].get(anchor, {}).get("pools", {}).get("general")
         return c if isinstance(c, dict) and "win_rate" in c else None
 
-    forced, general = _cell("forced"), _cell("general")
-    manifest["verdict"] = compute_verdict(general)
-    info = {"E": E_EFFECT, "Y": Y_REG,   # recorded metadata only — nothing gates on them
-            "rule": VERDICT_RULE}
-    if forced:   # information only (informs the human IG judgment; does NOT gate)
-        info["d_rl_forced"] = forced["win_rate"] - 0.5
-        info["forced_wr_ci"] = forced["ci"]       # Wilson CI on the forced WIN RATE (not the delta)
-    if general:
-        info["d_reg_general"] = general["win_rate"] - 0.5
-        info["general_wr_ci"] = general["ci"]     # Wilson CI on the general WIN RATE (not the delta)
-        info["general_ci_upper"] = general["ci"][1]
-    manifest["verdict_inputs"] = info
+    origin = _gen_cell("origin")
+    masterbot = _gen_cell("masterbot")
+    manifest["collapse"] = compute_collapse(origin, threshold)
+    manifest["abort_winrate"] = threshold
+    info = {"E": E_EFFECT, "Y": Y_REG}   # recorded metadata only — nothing gates on them
+    if origin:   # the relative-drift anchor + the abort signal
+        info["origin_win_rate"] = origin["win_rate"]
+        info["origin_wr_ci"] = origin["ci"]
+        if "paired_ci" in origin:
+            info["origin_paired_ci"] = origin["paired_ci"]
+    if masterbot:   # the absolute-strength trend
+        info["masterbot_win_rate"] = masterbot["win_rate"]
+        info["masterbot_wr_ci"] = masterbot["ci"]
+        if "paired_ci" in masterbot:
+            info["masterbot_paired_ci"] = masterbot["paired_ci"]
+    manifest["summary"] = info
     manifest["pools"] = {
-        "forced":  {"role": "d_rl info (IG-widened axis vs parent; non-gating)",
-                    **(forced or {"status": "unavailable"})},
-        "general": {"role": "verdict pool (REJECT iff ci_upper<0.5) + d_reg info",
-                    **(general or {"status": "unavailable"})},
+        "origin":    {"role": "relative-drift anchor vs the PERMANENT origin reference + the "
+                              "collapse/abort signal (collapse iff win_rate<abort_winrate)",
+                      **(origin or {"status": "unavailable"})},
+        "masterbot": {"role": "absolute-strength trend vs MasterBot_SWF (AB Playout); non-gating",
+                      **(masterbot or {"status": "unavailable"})},
     }
-    manifest["decision"] = "(human call)"   # the driver computes inputs, never promotes.
 
 
-def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=None,
-                   manifest_path=None):
+def build_manifest(args, run_anchor=run_anchor_block, manifest_path=None):
     """Assemble the eval manifest dict, writing it to manifest_path INCREMENTALLY (atomic temp +
     os.replace) after every completed pool/anchor — a crash/kill leaves a readable partial
-    manifest ("complete": false, "anchors_completed": [...]) instead of nothing. Injectable
-    runners keep the orchestration + verdict logic unit-testable without the C++ engine:
-    run_anchor(dave_bin, block, player, weights_basename, parent_basename) -> anchor-dict;
-    steam_fn(orig_exe, label, games, pool_args, think_ms, dave_exe) -> (p, n)."""
-    if steam_fn is None:
-        steam_fn = run_steam
+    manifest ("complete": false, "anchors_completed": [...]) instead of nothing. The injectable
+    runner keeps the orchestration + collapse logic unit-testable without the C++ engine:
+    run_anchor(dave_bin, block, player, weights_basename, opp_basename, opponent_player) -> anchor-dict."""
     weights_basename = os.path.basename(args.weights)
-    # N-2: each C++ anchor's opponent is pinned (iter0/narrow -> the PARENT bin; origin -> the
-    # PERMANENT origin bin), so the engine stderr must confirm that load too (player-level).
-    parent_basename = os.path.basename(args.parent_weights) if args.parent_weights else None
+    # The origin anchor's opponent (RL_Eval_origin) is pinned to the PERMANENT origin bin, so the
+    # engine stderr must confirm that load too (player-level). The masterbot opponent is an AB
+    # Playout player with NO NeuralNet -> no opponent load line to confirm (opp_kind=None).
     origin_basename = (os.path.basename(args.origin_weights)
                        if getattr(args, "origin_weights", None) else None)
-    if parent_basename and parent_basename == weights_basename:
-        # One stderr load line would satisfy BOTH stamps -> a candidate-vs-itself eval would
-        # pass silently. A deliberate self-match sanity run should omit --parent-weights.
-        raise RuntimeError(f"--weights and --parent-weights are the same file ({weights_basename}) "
-                           "-- candidate-vs-itself is not a gating eval. Omit --parent-weights "
-                           "for a deliberate self-match.")
+    # Self-match guard: a candidate-vs-itself origin eval is vacuous (one stderr load line would
+    # satisfy BOTH stamps). The caller should omit the origin anchor for a deliberate self-test.
+    if origin_basename and origin_basename == weights_basename:
+        raise RuntimeError(f"--weights and --origin-weights are the same file ({weights_basename}) "
+                           "-- candidate-vs-itself origin eval is vacuous. Omit the origin anchor "
+                           "(or --origin-weights) for a deliberate self-match.")
     # Active provenance pre-flight: the config must already point the candidate player at the
     # candidate net BEFORE any tournament flips on.
     verify_config_weights(args.dave_bin, args.candidate_player, weights_basename)
@@ -545,18 +443,19 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
     with open(_config_path(args.dave_bin), encoding="utf-8-sig") as f:
         _cfg_players = json.load(f).get("Players", {})
     _cand_cfg = _cfg_players.get(args.candidate_player, {})
-    anchors_requested = list(getattr(args, "anchors", None) or ["iter0"])
+    anchors_requested = list(getattr(args, "anchors", None) or ["origin", "masterbot"])
     unknown = [a for a in anchors_requested if a not in ANCHOR_BLOCKS]
     if unknown:
         raise RuntimeError(f"unknown anchor(s) {unknown}; known: {sorted(ANCHOR_BLOCKS)}")
+    threshold = getattr(args, "abort_winrate", 0.35)
     manifest = {
         "iteration": args.iteration,
         "candidate_weights": args.weights,
         "candidate_net_sha256": sha256(wpath),
-        "parent_weights": args.parent_weights,
         "origin_weights": getattr(args, "origin_weights", None),
         "candidate_player": args.candidate_player,
         "anchors_requested": anchors_requested,
+        "abort_winrate": threshold,
         "eval_budget": {"TimeLimit": _cand_cfg.get("TimeLimit"),
                         "MaxTraversals": _cand_cfg.get("MaxTraversals"),
                         "UCTConstant": _cand_cfg.get("UCTConstant"),
@@ -565,21 +464,24 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
         "complete": False,
         "anchors_completed": [],
         "anchors": {}, "pools": {},
-        "notes": ("Verdict = detect-proven-harm on iter0/general (candidate vs PARENT promoted net, "
-                  "unforced sets): " + VERDICT_RULE + " narrow (promotion-time) + origin/steam "
-                  "(checkpoint-time) are non-gating yardsticks. CIs: pooled iid Wilson is the "
-                  "verdict statistic; where the per-game rounds CSV exists a paired per-card-set "
-                  "CI is REPORTED alongside (it removes between-set variance the pooled CI "
-                  "ignores; conditional on the fixed seed panels). Manifest is written "
-                  "incrementally; 'complete': false means the run died mid-eval."),
+        "notes": ("v4 proof-of-life eval: origin (candidate vs the PERMANENT origin reference) is "
+                  "the relative-drift anchor + the COLLAPSE/abort signal (collapse iff its general "
+                  "win_rate < abort_winrate); masterbot (candidate vs MasterBot_SWF, an AB Playout "
+                  "player) is the absolute-strength trend. NO REJECT/REVIEW verdict — collapse is a "
+                  "coarse abort, not a powered gate. CIs: pooled iid Wilson; where the per-game "
+                  "rounds CSV exists a paired per-card-set CI is REPORTED alongside (it removes "
+                  "between-set variance the pooled CI ignores). Manifest is written incrementally; "
+                  "'complete': false means the run died mid-eval."),
     }
-    _refresh_verdict(manifest)
+    _refresh_summary(manifest, threshold)
     write_manifest(manifest, manifest_path)
 
     # --- C++ tournament anchors, driven by the ANCHOR_BLOCKS registry (pool -> block LIST) ---
     for anchor in anchors_requested:
-        opponent_player, opp_kind = ANCHOR_OPPONENTS.get(anchor, (None, "parent"))
-        opp_basename = parent_basename if opp_kind == "parent" else origin_basename
+        opponent_player, opp_kind = ANCHOR_OPPONENTS.get(anchor, (None, None))
+        # opp_kind="origin" -> confirm the opponent loaded the origin bin; None (AB MasterBot) ->
+        # no opponent NeuralNet load line exists, so skip the opponent-load confirmation entirely.
+        opp_basename = origin_basename if opp_kind == "origin" else None
         per_pool = {}
         for pool in args.pools:
             blocks = ANCHOR_BLOCKS[anchor].get(pool) or []
@@ -594,7 +496,7 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
                 head = per_pool.get(HEADLINE_POOL) or next(iter(per_pool.values()), {})
                 manifest["anchors"][anchor] = {**{k: v for k, v in head.items() if k != "pools"},
                                                "pools": per_pool}
-                _refresh_verdict(manifest)
+                _refresh_summary(manifest, threshold)
                 write_manifest(manifest, manifest_path)   # incremental: persist after EVERY block
                 # Provenance hard-fail: a COMPLETED block whose engine stderr never confirmed the
                 # candidate-net load is recorded (above) but must not be trusted.
@@ -604,52 +506,19 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
                         f"loading '{weights_basename}' for player {args.candidate_player} "
                         f"(engine_confirmed_load=false; result recorded in the manifest but NOT "
                         "trusted — the engine may have evaluated the wrong net)")
-                # N-2/prov-06 opponent-side hard-fail (player-level): the anchor's opponent must
-                # have loaded the pinned net or the comparison itself is wrong.
+                # Opponent-side hard-fail (player-level): the origin anchor's opponent must have
+                # loaded the pinned origin net or the comparison itself is wrong. (Only stamped
+                # when opp_basename is set, i.e. NOT for the no-NeuralNet masterbot opponent.)
                 if "win_rate" in cell and cell.get("engine_confirmed_parent_load") is False:
                     raise RuntimeError(
                         f"provenance: block {block} completed but engine stderr never confirmed "
                         f"loading '{opp_basename}' for the anchor opponent {opponent_player} "
                         f"(engine_confirmed_parent_load=false; result recorded in the manifest but "
-                        "NOT trusted — the verdict would compare the candidate vs the WRONG net)")
+                        "NOT trusted — the comparison would be against the WRONG net)")
         manifest["anchors_completed"].append(anchor)
         write_manifest(manifest, manifest_path)
 
-    # --- steam anchor: matchup_clean.js fixed-N (A8), A7 seat-independent, GENERAL pool only ---
-    # Non-gating CHECKPOINT yardstick since J3 (opt-in via --run-steam). (forced-pool STEAMAI is
-    # unwired: matchup_clean.js ForcedCards support is unverified.) Earlier anchors are already
-    # on disk, so a steam crash can no longer erase them.
-    if steam_available and not getattr(args, "run_steam", False):
-        manifest["anchors"]["steam"] = {
-            "status": "SKIPPED — steam is a checkpoint-time yardstick (J3); pass --run-steam "
-                      "(run_checkpoint.ps1 does) to run it"}
-        steam_available = False
-    if steam_available:
-        print(f"[steam] matchup_clean.js candidate(DaveAI/RL_Eval) vs 2016 MasterBot "
-              f"({args.steam_games} games) ...", file=sys.stderr)
-        res = steam_fn(args.orig_exe, args.candidate_label, args.steam_games,
-                       ["--candidate-weights", weights_basename], 7000,
-                       os.path.join(args.dave_bin, "PrismataAI.exe"))
-        p, n = res[0], res[1]
-        extra = res[2] if len(res) > 2 and isinstance(res[2], dict) else {}
-        if p is None:
-            manifest["anchors"]["steam"] = {
-                "error": "no seat-independent result parsed (check --player-switch / candidate label)",
-                "games": n}
-        else:
-            lo, hi = wilson_ci(p, n)
-            manifest["anchors"]["steam"] = {"win_rate": p, "games": n, "ci": [lo, hi],
-                                            "pool": "general", **extra,
-                                            "note": "A7 seat-independent, A8 fixed-N, non-gating; "
-                                                    "n = valid games where parseable (steam-07)"}
-        manifest["anchors_completed"].append("steam")
-    else:
-        manifest["anchors"]["steam"] = {
-            "status": "DEFERRED -- 2016 MasterBot baseline absent "
-                      "(expected at c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe; "
-                      "A8 STEAMAI trajectory yardstick)"}
-
-    _refresh_verdict(manifest)
+    _refresh_summary(manifest, threshold)
     manifest["complete"] = True
     write_manifest(manifest, manifest_path)
     return manifest
@@ -657,57 +526,58 @@ def build_manifest(args, steam_available, run_anchor=run_anchor_block, steam_fn=
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Per-iteration RL eval: 3 anchors (iter0/narrow/steam), Wilson CIs, "
-                    "REJECT/REVIEW/INCOMPLETE verdict, incremental manifest.")
+        description="Per-iteration RL proof-of-life eval: 2 anchors (origin/masterbot), Wilson "
+                    "CIs, collapse-on-abort (no REJECT/REVIEW verdict), incremental manifest.")
     ap.add_argument("--iteration", required=True,
                     help="iteration index (int) or checkpoint label (e.g. ckpt_20260613) — "
                          "used for the manifest filename + stamp only")
     ap.add_argument("--weights", required=True, help="candidate .bin filename (in dave bin/asset/config)")
     ap.add_argument("--parent-weights", default=None,
-                    help="current promoted .bin (frozen parent_bin). When given, each C++ anchor's "
-                         "engine stderr must ALSO confirm loading this net for the parent-pinned "
-                         "opponent (engine_confirmed_parent_load, N-2); omitted = check skipped")
+                    help="(vestigial in v4 — accepted but unused; v4 anchors do not use a 'parent' "
+                         "opponent. Use --origin-weights for the origin anchor's opponent-load check.)")
     ap.add_argument("--dave-bin", required=True)
-    ap.add_argument("--orig-exe", default=MASTERBOT2016_EXE,
-                    help="genuine 2016 MasterBot binary (STEAMAI baseline) at its permanent home; "
-                         "steam anchor is DEFERRED if absent")
-    ap.add_argument("--steam-games", type=int, default=200, help="A8: fixed modest N for the STEAMAI yardstick")
     ap.add_argument("--candidate-player", default=CANDIDATE_PLAYER,
                     help="config player repointed to the candidate net (group1 of each anchor block)")
     ap.add_argument("--candidate-label", default=CANDIDATE_PLAYER,
-                    help="candidate identity label as it appears in matchup_clean.js output (A7)")
-    ap.add_argument("--pools", nargs="+", default=["forced", "general"])
-    ap.add_argument("--anchors", nargs="+", default=["iter0"],
-                    help="which C++ anchors to run (J3 cadence: per-iteration = iter0 only; "
-                         "narrow at promotion; origin at checkpoints). Known: %s"
-                         % sorted(ANCHOR_BLOCKS))
+                    help="(accepted for back-compat; unused in v4 — there is no matchup_clean.js anchor)")
+    ap.add_argument("--pools", nargs="+", default=["general"])
+    ap.add_argument("--anchors", nargs="+", default=["origin", "masterbot"],
+                    help="which C++ anchors to run (v4 PoL set: origin = collapse signal; "
+                         "masterbot = absolute trend). Known: %s" % sorted(ANCHOR_BLOCKS))
     ap.add_argument("--origin-weights", default=None,
-                    help="the PERMANENT origin .bin (frozen origin_bin, v221) — required for the "
-                         "origin anchor's opponent-load provenance check")
-    ap.add_argument("--run-steam", action="store_true",
-                    help="run the STEAMAI yardstick (checkpoint-time only since J3)")
+                    help="the PERMANENT origin .bin (frozen origin_bin, v221) — required when the "
+                         "origin anchor runs, for its opponent-load provenance check")
+    ap.add_argument("--abort-winrate", type=float, default=0.35,
+                    help="collapse threshold: collapse=True iff the origin/general win_rate is "
+                         "below this (default 0.35). Coarse point-estimate abort, not a gate.")
     ap.add_argument("--out", default="eval/manifests")
+    # Vestigial v3 args: accepted-and-ignored so the existing PowerShell drivers (run_iteration /
+    # run_checkpoint) don't crash on an unrecognized flag. The steam/matchup anchor was removed
+    # with the REJECT/REVIEW verdict — these no longer do anything.
+    ap.add_argument("--orig-exe", default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--steam-games", type=int, default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--run-steam", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
 
-    # Contamination guards (spec §4 item 6): FORCE_DSNN / use_dsnn.txt would silently swap the net under
-    # eval -- always fatal. A missing .ORIG only DEFERS the steam yardstick; it does NOT block the C++
-    # iter0 (verdict) / narrow anchors (which need no .ORIG), so it is a soft skip, not an assert.
+    # Contamination guards (spec §4 item 6): FORCE_DSNN / use_dsnn.txt would silently swap the net
+    # under eval -- always fatal.
     assert not os.environ.get("PRISMATA_FORCE_DSNN"), "PRISMATA_FORCE_DSNN set - eval contamination"
     assert not os.path.exists(os.path.join(args.dave_bin, "use_dsnn.txt")), "use_dsnn.txt present - eval contamination"
-    steam_available = os.path.exists(args.orig_exe)
-    if not steam_available:
-        print(f"WARNING: STEAMAI baseline absent ({args.orig_exe}) -- steam anchor DEFERRED", file=sys.stderr)
+    if "origin" in (args.anchors or []) and not args.origin_weights:
+        raise SystemExit("--origin-weights is required when the origin anchor runs "
+                         "(the origin opponent's load is provenance-checked).")
 
     path = os.path.join(args.out, f"eval_iter_{args.iteration}.json")
-    manifest = build_manifest(args, steam_available, manifest_path=path)
+    manifest = build_manifest(args, manifest_path=path)
 
     print(f"manifest -> {path}")
-    vi = manifest.get("verdict_inputs", {})
-    print(f"verdict={manifest.get('verdict')}  d_reg={vi.get('d_reg_general')} "
-          f"(general wr ci {vi.get('general_wr_ci')})  d_rl={vi.get('d_rl_forced')} (info only)  "
-          "-- REVIEW means the promotion DECISION is a human call.")
+    s = manifest.get("summary", {})
+    print(f"collapse={manifest.get('collapse')} (abort_winrate={manifest.get('abort_winrate')})  "
+          f"origin={s.get('origin_win_rate')} (ci {s.get('origin_wr_ci')})  "
+          f"masterbot={s.get('masterbot_win_rate')} (ci {s.get('masterbot_wr_ci')})  "
+          "-- collapse=True means the candidate drifted badly vs origin; abort the campaign.")
 
 
 if __name__ == "__main__":
