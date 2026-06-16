@@ -72,8 +72,12 @@ public:
 
     // Backfill outcome_p0 + total_plies into every stashed record and write the
     // JSONL file. outcome_p0 = (winner==Player_One ? 1.0 : Player_None ? 0.5 : 0.0).
+    // lastProgressPly: when >= 0 (stalemate-draw game), records with ply index
+    // > lastProgressPly are dropped and total_plies is stamped as (lastProgressPly+1).
+    // When -1 (normal game), no trimming occurs and total_plies == totalPlies exactly
+    // (byte-for-byte identical output to before this parameter was added).
     // Returns true on a successful write.
-    bool finalize(PlayerID winner, int totalPlies, int gameId);
+    bool finalize(PlayerID winner, int totalPlies, int gameId, int lastProgressPly = -1);
 };
 
 } // namespace Prismata

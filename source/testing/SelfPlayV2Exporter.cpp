@@ -38,7 +38,7 @@ void SelfPlayV2Exporter::stampLastMove(int igClickCount, int igFeasibleMax, int 
     _moveStamps.back() = MoveStamp{ igClickCount, igFeasibleMax, sampledIdx, argmaxIdx, rootChildren, rootTruncated };
 }
 
-bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
+bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId, int lastProgressPly)
 {
     if (_records.empty())
     {
@@ -72,6 +72,15 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
         return false;
     }
 
+    // keptPlies: for a stalemate-draw game (lastProgressPly >= 0) this is the number
+    // of records that survive the trim (plies 0..lastProgressPly inclusive).  For a
+    // normal game (lastProgressPly == -1) keptPlies == totalPlies exactly, so the
+    // stamped total_plies field and the shard content are byte-for-byte identical to
+    // the pre-trim code path — no change to existing training data.
+    // NOTE: do NOT use _records.size() here; totalPlies is the authoritative game
+    // length and is what compute_labels consumes.
+    const int keptPlies = (lastProgressPly >= 0) ? (lastProgressPly + 1) : totalPlies;
+
     // Backfill the game-level fields (outcome_p0, total_plies) plus the per-record
     // move-derived fields (ig_click_count, sampled_idx, argmax_idx) via a robust
     // parse-then-reserialize, so we depend on no string-layout contract (where the
@@ -83,6 +92,15 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
     // ones skipped on parse error — to keep the index aligned to the record processed.
     for (size_t i = 0; i < _records.size(); ++i)
     {
+        // Drop the frozen tail (and the N-ply confirmation window) for stalemate-draw
+        // games. The lastProgressPly >= 0 guard is essential: without it a normal game
+        // (lastProgressPly == -1) would compare i > -1 (always true as size_t) and
+        // skip every record.
+        if (lastProgressPly >= 0 && static_cast<int>(i) > lastProgressPly)
+        {
+            continue;   // drop the frozen tail (and the N-ply confirmation window)
+        }
+
         const std::string & rec = _records[i];
 
         rapidjson::Document doc;
@@ -99,7 +117,7 @@ bool SelfPlayV2Exporter::finalize(PlayerID winner, int totalPlies, int gameId)
         rapidjson::Value outcomeMember;
         outcomeMember.SetDouble(outcomeP0);
         doc.AddMember("outcome_p0", outcomeMember, alloc);
-        doc.AddMember("total_plies", totalPlies, alloc);
+        doc.AddMember("total_plies", keptPlies, alloc);
 
         const MoveStamp & ms = _moveStamps[i];
         doc.AddMember("ig_click_count",  ms.igClickCount,  alloc);
