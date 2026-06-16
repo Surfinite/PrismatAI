@@ -779,6 +779,35 @@ def check_correctness_gates(repo_root):
 
 
 # ---------------------------------------------------------------------------
+# Check: stalemate_threshold (Task 8 / spec §10) — the StalemateThreshold config
+# key must match the frozen selfplay_stalemate_threshold on each RL block. Scale-
+# tier (changing it = re-anchor + a campaign_log entry, not a new campaign); the
+# frozen key is absent on older frozen files → no-op guard.
+# ---------------------------------------------------------------------------
+
+STALEMATE_BLOCKS = ("RL_SelfPlay_General", "RL_PoL_origin", "RL_PoL_masterbot")
+
+
+def check_stalemate_threshold(cfg, frozen):
+    want = frozen.get("selfplay_stalemate_threshold")
+    if want is None:
+        return []   # older frozen files without the key: no-op
+    blocks = {b.get("name"): b for b in cfg.get("Benchmarks", []) if isinstance(b, dict)}
+    failures = []
+    for name in STALEMATE_BLOCKS:
+        blk = blocks.get(name)
+        if blk is None:
+            failures.append("block '%s' not found (must carry StalemateThreshold==%s)" % (name, want))
+            continue
+        got = blk.get("StalemateThreshold")
+        if int(got if got is not None else -1) != int(want):
+            failures.append("%s.StalemateThreshold is %r but frozen selfplay_stalemate_threshold is %s "
+                            "(the draw rule is campaign identity; reconcile config + frozen together)"
+                            % (name, got, want))
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Aggregation
 # ---------------------------------------------------------------------------
 
@@ -810,6 +839,7 @@ def run_checks(config_path, frozen_path, repo_root, skip_slow_gates=False):
             results.append(("origin_pin", check_origin_pin(cfg, frozen)))
             results.append(("anchor_blocks", check_anchor_blocks(cfg, frozen)))
             results.append(("eval_budget", check_eval_budget(cfg, frozen)))
+            results.append(("stalemate_threshold", check_stalemate_threshold(cfg, frozen)))
     results.append(("unit_index", check_unit_index(config_path)))
     if frozen is not None:
         results.append(("existences", check_existences(frozen, repo_root)))

@@ -106,14 +106,14 @@ def make_config():
             # config keeps a dead RL_Step2_Smoke block, but 7b no longer requires it, so
             # the fixture omits it.)
             {"run": False, "type": "Tournament", "name": "RL_SelfPlay_General", "rounds": 516,
-             "Seed": 5600, "Threads": 8,
+             "Seed": 5600, "Threads": 8, "StalemateThreshold": 40,
              "saveReplays": "asset/replays/rl_selfplay_general",
              "players": [{"name": "RL_SelfPlay", "group": 1}, {"name": "RL_SelfPlay", "group": 2}]},
             {"run": False, "type": "Tournament", "name": "RL_PoL_origin", "rounds": 48,
-             "Seed": 2026, "Threads": 8,
+             "Seed": 2026, "Threads": 8, "StalemateThreshold": 40,
              "players": [{"name": "RL_Eval", "group": 1}, {"name": "RL_Eval_origin", "group": 2}]},
             {"run": False, "type": "Tournament", "name": "RL_PoL_masterbot", "rounds": 48,
-             "Seed": 2026, "Threads": 8,
+             "Seed": 2026, "Threads": 8, "StalemateThreshold": 40,
              "players": [{"name": "RL_Eval", "group": 1}, {"name": "RL_Eval", "group": 2}]},
             # A neutral legacy run:false block (not self-play, not an anchor) so the
             # run_true mutation test can isolate check 2 alone.
@@ -146,6 +146,7 @@ def make_frozen():
             "RL_PoL_origin": {"rounds": 48, "Seed": 2026, "Threads": 8},
             "RL_PoL_masterbot": {"rounds": 48, "Seed": 2026, "Threads": 8},
         },
+        "selfplay_stalemate_threshold": 40,
     }
 
 
@@ -743,3 +744,20 @@ def test_quiet_still_prints_failures(env, capsys):
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL: run_true:" in out
+
+
+# ---------------------------------------------------------------------------
+# Check: stalemate_threshold (Task 8 / spec §10)
+# ---------------------------------------------------------------------------
+
+def test_stalemate_threshold_drift_fails(env, capsys):
+    """v4.1: the RL blocks must carry the frozen selfplay_stalemate_threshold."""
+    env["frozen"]["selfplay_stalemate_threshold"] = 40
+    for b in env["cfg"]["Benchmarks"]:
+        if b["name"] in ("RL_SelfPlay_General", "RL_PoL_origin", "RL_PoL_masterbot"):
+            b["StalemateThreshold"] = 40
+    env["cfg"]["Benchmarks"][0]["StalemateThreshold"] = 8   # drift the self-play block
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "stalemate_threshold")
+    assert "StalemateThreshold" in out

@@ -34,10 +34,11 @@
   "tripwire_val_file": "training/data/human_val_1700_50k_v2.h5",
   "prediction_movement_floor": 0.001,
   "game_length_band": [25, 60],
+  "selfplay_stalemate_threshold": 40,
   "promotion_policy": "promote-unless-collapse: Phase 0 = no promotion (fixed generator). Phase 1 = promote every candidate UNLESS the run aborted (crash / val-acc collapse / winrate-vs-origin < abort_winrate_vs_origin / degenerate self-play).",
   "tiers": {
     "hp": ["frozen_N","TemperatureK","TemperatureTau","EpsilonUniform","EpsilonLate","EpsilonIG","UCTConstant","eval_budget","train_schedule","rehearsal_file","tripwire_val_file","promotion_policy","candidate_interior_iterator","candidate_root_iterator"],
-    "scale": ["selfplay_threads","selfplay_rounds","selfplay_seed_base","anchor_blocks","replay_window","abort_winrate_vs_origin"],
+    "scale": ["selfplay_threads","selfplay_rounds","selfplay_seed_base","anchor_blocks","replay_window","abort_winrate_vs_origin","selfplay_stalemate_threshold"],
     "rule": "changing an 'hp' key = a NEW campaign; a 'scale' key = re-anchor + a campaign_log entry. parent_* via promote_candidate.ps1 only; origin_bin never changes."
   },
   "frozen_date": "2026-06-14"
