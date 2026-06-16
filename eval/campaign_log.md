@@ -8,9 +8,12 @@
 > cannot: the decision, the reasoning, and the anomalies. Append-only; never rewrite old entries —
 > correct them with a dated note.
 >
-> **Reading order for a new maintainer:** `eval/rl_campaign.md` (the contract: frozen tuple, verdict,
-> kill/escalation rules) → `eval/rl_runbook.md` (what each stage does) → `eval/README.md` (eval harness + statistics) → this file (what has actually happened and what is accepted-broken) → the audit
-> trail in `docs/superpowers/plans/` (2026-06-09 / 06-10 / 06-11 / 06-12, historical).
+> **Reading order for a new maintainer:** `eval/rl_campaign.md` (the contract: frozen v4 tuple, the
+> collapse/promote-unless-collapse policy, anchors) → `eval/rl_runbook.md` (what each stage does) →
+> `eval/README.md` (eval harness + statistics) → this file (what has actually happened and what is
+> accepted-broken) → the reframe design spec
+> `docs/superpowers/specs/2026-06-14-rl-loop-proof-of-life-reframe-design.md` + the audit trail in
+> `docs/superpowers/plans/` (2026-06-09 … 06-14, historical).
 
 ---
 
@@ -20,19 +23,24 @@ Template (copy for each iteration; one entry per `run_iteration.ps1 -K <K>` atte
 or abandoned attempts):
 
 ```markdown
-### Iteration K=<k> — <date> — <PROMOTED | ITERATED | REJECTED | INVALIDATED | ABORTED stage N>
+### Iteration K=<k> — <date> — <PROMOTED | ITERATED | INVALIDATED | ABORTED stage N> [Phase 0|1]
 
-- **Parent:** <parent_bin name + sha256 prefix> (pt: <parent_pt sha prefix>)
-- **Candidate:** neural_weights_rl_iter<k>.bin <sha256 prefix>
+- **Regime:** v4 "proof-of-life" (tuple_version 4) — systems pipeline validation, no axis under test.
+- **Parent / generator:** <parent_bin name + sha256 prefix> (Phase 0 = fixed v221, no promotion).
+- **Candidate:** neural_weights_rl_iter<k>.bin <sha256 prefix> (warm-started, 6 ep @ 1e-5, no SWA,
+  W=2, rehearsal 0.10 elite, on <n> self-play records / <g> general games).
 - **Config identity:** dave config.txt @ <git short-sha>, campaign_frozen.json @ <git short-sha>
-- **Manifest:** eval/manifests/eval_iter_<k>.json — verdict: <REJECT|REVIEW|INCOMPLETE>
-- **Headline numbers:** iter0/general <w>/<n> (CI <lo>–<hi>); d_rl(forced) <x>pp; d_reg <x>pp;
-  narrow <x>%; steam <x>%  (record "not run" where applicable)
-- **Watch-stats (rl_campaign §1b):** late sampled fraction <x> (expect ≈0.05); IG-feasible records
-  <n>/<total>; IG click dist <…>; game length vs baseline <x>; tripwire Δval-acc <x>pp;
-  prediction-movement probe mean|ΔV| <x> (if instrumented)
-- **Decision + reasoning (the load-bearing paragraph):** <why promote/iterate/stop — what evidence
-  moved you, what you discounted as noise, what you pre-commit to checking next iteration>
+- **Manifest:** eval/manifests/eval_iter_<k>.json — **collapse: <True|False|None>**
+- **Headline numbers:** origin (cand vs v221) <w>W/<d>D/<n> = <x>% (CI <lo>–<hi>); masterbot (cand
+  vs MasterBot_SWF) <w>W/<n> = <x>% (CI <lo>–<hi>). (Narrow/steam not run — checkpoint-only in v4.)
+- **Watch-stats (rl_campaign §1b):** prediction-movement fixed-probe mean|dP| <x> (floor 0.001 —
+  below = null update); self-play probe <x>; val-acc candidate <x>% vs parent <x>% (tripwire Δ <x>pp);
+  game-length median <x> (band [25,60]); self-play P0 win-rate <x> (non-degeneracy band [0.35,0.65]);
+  late sampled fraction <x>.
+- **Decision + reasoning (the load-bearing paragraph):** <why promote/iterate/abort — what evidence
+  moved you, what you discounted as noise, what you pre-commit to checking next iteration. Phase 0:
+  NOT a promotion candidate (fixed generator) — the question is "did the loop run and produce a
+  non-degenerate net", never "did RL improve the net">
 - **Anomalies / deviations from runbook:** <anything — reruns, manual steps, flaky gates, config edits>
 - **Data disposition:** rl_iter_<k>/ <kept in window | quarantined → where + why>
 ```
@@ -89,6 +97,8 @@ or abandoned attempts):
 | 2026-06-13 | **is_blocking frozen-unit feature skew FIXED** (caught by the new B3 gate fixtures; engine-side, both exporter + inference) | the fifth v2.2.1-class silent skew; frozen blockers must read is_blocking=0 like the training data | dave 1eba023c; three-way gate 7 states green |
 | 2026-06-13 | **Rehearsal corpus → ELITE cut (owner proposal)**: SLICE of `human_1800_v2.h5` (provenance inherited — no DB eligibility, no re-extraction): per-game min(H5 rating stamps) ≥2000 + replay-JSON `timeInfo` increment ≥45s, random-sampled ~5k games/~150k records. Measured pool: 23,303 games at 2000+ (1,558 of them absent from replays.db — ladder-DB codes; tc read from `replays_archive/` JSONs, present for every H5 code by construction); ≥19,365 confirmed at 45s+ (~530k records). Val set/tripwire UNCHANGED (human_val_1700) | removes anchor-pulls-toward-weaker-play (same logic as the MB-fleet exclusion); fewer clock blunders = cleaner labels; doubles as the C6 RAM fix; HP-tier → in the pre-K1 re-freeze | worklist C6 |
 | 2026-06-12 | **J7 DECIDED (a)**: two-tier tuple — HP knobs (N, τ, K, ε, c, schedule) = new-campaign tier; scale knobs (rounds, seed policy, eval n) = re-anchor-only tier; encode in campaign_frozen.json | future volume tuning stays cheap and legal | audit §6, selfplay-06 |
+| 2026-06-14 | **REFRAME to proof-of-life (tuple v4)**: drop IG-measurement (EpsilonIG→0 / forced-Hotel block unused / no IG verdict-pool); restore EpsilonLate=0.05; NoIG interior iterator (`HardIterator_5var_NoIG`, M1 fixed cheaply); W 5→2; anchors = origin + `MasterBot_SWF` same-path AB (steam retired); collapse boolean + promote-unless-collapse (no REJECT/REVIEW); two-phase run (fixed-generator smoke → promoting loop). **IG over-click logged as fixed-by-action-space-widening (audit C1)** — no axis under test | the IG premise collapsed for the IG axis (C1); owner reframes the loop as a GENERAL DSNN-improvement / fix-MasterBot-mistakes framework, IG is proof-of-life | **`docs/superpowers/specs/2026-06-14-rl-loop-proof-of-life-reframe-design.md`** (+ impl plan `…-implementation.md`); `campaign_frozen.json` v4; main 67992a9e |
+| 2026-06-16 | **`render_dashboard.py` v3 stale-columns RESOLVED** (Task 13b): the dashboard now renders the v4 `collapse` / `origin(vs v221)` / `masterbot(vs SWF-AB)` / `ig(sp/argmax)` columns; the verdict/iter0/forced/narrow/steam columns flagged in the K=1 entry are gone | the K=1 entry's anomaly (4) | main 67992a9e; the K=1 entry's anomaly (4) is now closed |
 
 ---
 
@@ -109,8 +119,9 @@ Inference on frozen states changes marginally vs all pre-fix numbers (same prece
 
 **Deferred one-off measurements (owner to schedule):** B4 (the 128-game cross-path bound for the
 steam yardstick — until then steam is trend-only, README documents the delta as unbounded) and B7
-(the (N,c) discrimination re-probe at c=0.15/N=4000 — §1f names it the first experiment if
-checkpoint trends look exploration-starved).
+(the (N,c) discrimination re-probe at c=0.15/N=4000 — the retired v3 §1f UCB-indifference-band
+probe rule named it the first experiment if checkpoint trends looked exploration-starved; the v4
+escalation levers are §6 O6/O3).
 
 ---
 
@@ -122,15 +133,17 @@ limitation whose preconditions changed is a bug. One line each; details at the p
 
 | Item | Status / rationale | Pointer |
 |---|---|---|
-| Counterfactual blindness of value-only RL (no signal on unplayed branches); εlate=0.05 ≈ 0.69 dev/game is the chosen compromise | ACCEPTED with watch-stats (d_rl, late sampled fraction) — but see audit §1.2: quantified on the IG axis this is ~single-digit counterfactuals/iter | rl_campaign §1b; audit 06-12 §1.2 |
+| **F-SKEW-1 RETRACTED** — the deep-audit's "6th silent skew" (fragile `is_blocking` on a hand-built fixture) | **REPORTED THEN RETRACTED as a false positive.** C++ `isFrozen` is CORRECT (live rule = chill ≥ currentHP); **do NOT change it.** (The genuine v2.2.1-class skew — frozen blockers reading is_blocking=1 — was the SEPARATE Jun-13 B3 fix below; this retraction is the audit's later hand-built-fixture false alarm.) | `docs/superpowers/plans/2026-06-13-rl-loop-deep-audit-FINDINGS.md` |
+| **Draw/stagnation rule OPEN (engine-side, brainstorm-first)** | 3 of 1,032 Phase-0 games hit the 200-turn cap = genuine DRAWS (the audit's "no stagnation detection"). A 3-fold-repetition rule OR mirroring the SWF client's conditional "Offer Draw" is a NEW design decision to **brainstorm** — out of scope for the v4 config/Python/PS reframe | replays `training/data/rl_iter_1/replays/general/game_{0171,0383,0818}.json.gz` |
+| **Self-play P2 advantage ~64% (P0 wr 0.344, marginally below [0.35,0.65])** | NOTED, not blocking — audit-known, set/strength-dependent; the data is non-degenerate (sane mean, not all draws) | K=1 entry anomaly (3); rl_campaign §1b |
+| Counterfactual blindness of value-only RL (no signal on unplayed branches); v4 EpsilonLate=0.05 is the general late-exploration compromise | ACCEPTED with watch-stats (game-length/seat non-degeneracy, late sampled fraction). The durable fix is the O6 policy head + PUCT (named, deferred) | rl_campaign §1b/§6 |
 | Outcome reproducibility at Threads:8 does not exist (card-set sequence only) | ACCEPTED — per-iteration replay/sidecar archive is the forensic substitute | rl_campaign §1d |
-| Self-play seeds | DECIDED 06-13 (J4): derive from base+K (fresh sets per iteration); eval panels stay FIXED 2-seed (2026/2027) — comparability + partial generalization | preflight frozen_tuple/anchor_blocks |
-| iid Wilson pooled CI is the verdict statistic | paired per-card-set CI now BUILT (A4 rounds CSV + wilson.paired_round_ci, reported in every manifest cell); verdict switches to it only after validation on real runs | eval/README.md stats section |
-| Automated verdict is detect-harm only | promotion policy NOW PRE-REGISTERED (J2 promote-unless-harm via promote_candidate.ps1; checkpoint origin evals carry the evidence) | rl_campaign §3 |
-| ktink_t9 tactical case permanently un-armed (11 PASS / 3 FAIL knife-edge @3s) | ACCEPTED — budget-dependent; never gates | verification doc N-5; rl_runbook stage 6 |
-| Tactical suite | DECIDED 06-13 (J6): telemetry-only while local (never aborts); a regression counts as harm only when REPRODUCED 3-5x | rl_runbook stage 6 |
+| Self-play seeds | DECIDED 06-13 (J4): derive from base+K (fresh sets per iteration). v4: one general block at base 5600 | preflight frozen_tuple |
+| iid Wilson pooled CI + paired per-card-set CI | paired CI (A4 rounds CSV + wilson.paired_round_ci) reported in every manifest cell alongside the pooled Wilson; the v4 collapse signal reads the win-rate point estimate, not a CI bound | eval/README.md stats section |
+| ~~Automated verdict is detect-harm only~~ | **SUPERSEDED by v4 (2026-06-14):** there is no REJECT/REVIEW verdict — a boolean `collapse` (origin general WR < 0.35) is the only abort signal; promotion = promote-unless-collapse via promote_candidate.ps1 | rl_campaign §3 |
+| Tactical suite (ktink_t9 knife-edge, telemetry-only) | **SUPERSEDED by v4:** the stage-6 tactical suite was IG-specific and REMOVED with the IG axis — no tactical gate runs | rl_runbook (no stage 6) |
 | Stage-5 parity gate pins export+forward arithmetic ONLY (not feature extraction) | tol now 1e-4 + stratified sample + honest scope docs (B2); extraction pinned by the three-way gate | rl_runbook stage 5 |
-| A6 maxPlayer-negation seam | BUILT 06-13 (B1): eval/a6_orientation_check.py — 4 decided-game states, both seats, engine airootwinrate must side with the outcome; live-validated; run after ANY engine change | rl_campaign A6 |
+| A6 maxPlayer-negation seam | BUILT 06-13 (B1): eval/a6_orientation_check.py — 4 decided-game states, both seats, engine airootwinrate must side with the outcome; live-validated. v4 (Task 10): **auto-run at preflight** (`correctness_gates`) + the engine-exe sha pin (`engine_sha`) so an unrecorded rebuild can't silently flip the sign before an unattended night | rl_campaign A6 / §2 |
 | Three-way feature gate fixtures | EXTENDED 06-13 (B3): + frozen/damaged/lifespan/IG elite states — which CAUGHT and fixed the frozen-blocker is_blocking skew. Still not covered: engine-native self-play sidecars (no JS leg by construction) | test_three_way_feature_parity.py |
 | unit_index.json missing ⇒ silent globals-only net on config path | ACCEPTED-Low (file git-tracked; loop never touches it); preflight check recommended | audit 06-12 §5 |
 | In-tree IG auto-fire bias (T3-5/T4-9): non-root tree nodes still auto-fire IG | ACCEPTED known limitation | Jun-10 audit |
@@ -139,11 +152,11 @@ limitation whose preconditions changed is a bug. One line each; details at the p
 | Book entry-validity drift vs cardLibrary: partial entry drop silent; full-empty warns once | ACCEPTED (N-12) | verification doc |
 | Hard-abort guards make every referenced weights file a startup dependency (rename ⇒ brick) | ACCEPTED (N-11) — preflight check 5 covers driver runs | verification doc |
 | tau-probe producer script ad-hoc (artifact committed, producer not) | OPEN-Low (N-9) | verification doc |
-| Steam anchor cross-path delta effectively unbounded (16-game check); draw/n conventions differ from C++ anchors | OPEN — trend use only | audit 06-12 §5, steam-07 |
+| ~~Steam anchor cross-path delta effectively unbounded; draw/n conventions differ~~ | **SUPERSEDED by v4:** steam (the 2016 cross-path binary) is RETIRED — the absolute-strength anchor is now the SAME-PATH AB `MasterBot_SWF`, so the cross-path-delta caveat no longer applies | rl_campaign §6; README anchors |
 | Base+8 (RandomCards:8) only, self-play AND eval — real sets span Base+5..11 | ACCEPTED scope limit: conclusions are Base+8-scoped | audit 06-12, rl-design-07 |
 | Manual-rerun export clobber | CLOSED 06-13: parent is sha-content-pinned (preflight parent_sha) + driver guards candBin != parent_bin + promote_candidate.ps1 verifies fresh re-export == on-disk bin | preflight check 15 |
 | Training seed | PINNED 06-13 (2026000+K via the driver) | run_iteration stage 3 |
-| Stage-8 coverage | FIXED 06-13 (C8): both slices + combined + explicit generator-vs-candidate semantics note + B6 ig_contrast_pairs watch-stat | action_coverage.py |
+| Stage-8 coverage | FIXED 06-13 (C8): generator-vs-candidate semantics note + IG telemetry. v4: coverage is **telemetry-only** (no axis under test) and stage 8 is **non-fatal** — `ig_contrast_pairs` is recorded but no longer a gating watch-stat | action_coverage.py; rl_runbook stage 8 |
 
 ---
 
