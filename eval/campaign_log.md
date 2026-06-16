@@ -9,8 +9,7 @@
 > correct them with a dated note.
 >
 > **Reading order for a new maintainer:** `eval/rl_campaign.md` (the contract: frozen tuple, verdict,
-> kill/escalation rules) → `eval/rl_runbook.md` (what each stage does) → `eval/README.md` (eval harness
-> + statistics) → this file (what has actually happened and what is accepted-broken) → the audit
+> kill/escalation rules) → `eval/rl_runbook.md` (what each stage does) → `eval/README.md` (eval harness + statistics) → this file (what has actually happened and what is accepted-broken) → the audit
 > trail in `docs/superpowers/plans/` (2026-06-09 / 06-10 / 06-11 / 06-12, historical).
 
 ---
@@ -38,8 +37,38 @@ or abandoned attempts):
 - **Data disposition:** rl_iter_<k>/ <kept in window | quarantined → where + why>
 ```
 
-*(No iterations run yet. The first real entry should be `-K 1` — but see "Pre-campaign state" below:
-the 2026-06-12 audit recommends pre-iter-1 changes that would re-freeze parts of the tuple first.)*
+### Iteration K=1 — 2026-06-16 — ITERATED (Phase 0, fixed generator — NOT promoted)
+
+- **Regime:** v4 "proof-of-life" (tuple_version 4) — systems pipeline validation, no axis under test.
+- **Parent / generator:** `neural_weights_mixed_v221.bin` (22cc647…); fixed generator (Phase 0, no promotion).
+- **Candidate:** `neural_weights_rl_iter1.bin` (warm-started from v221, 6 epochs @ 1e-5, no SWA, W=2,
+  rehearsal 0.10 elite, on **37,899** self-play records / 1,032 general games).
+- **Config identity:** dave config.txt @ v4 (`d319ef62` driver); campaign_frozen.json v4 (`ca937706`+calib).
+- **Manifest:** `eval/manifests/eval_iter_1.json` — **collapse: False** (no abort).
+- **Headline numbers:** origin (cand vs v221) **47W/1D/96 = 49.5%** (CI 0.40–0.59); masterbot (cand vs the
+  AB SWF MasterBot) **56W/96 = 58.3%** (CI 0.48–0.68). (Narrow/steam not run — checkpoint-only in v4.)
+- **Watch-stats:** prediction-movement fixed-probe mean|dP| **0.0172** (NON-NULL — training moved the net;
+  3.9% winner-flips), self-play probe 0.0138; val-acc candidate **71.6%** vs parent 71.8% (−0.2pp, tripwire
+  quiet); game length median **37** / mean 39.8 / **max 200** (one turn-cap game); self-play P0 win-rate
+  **0.344** (P2 ≈ 64%); IG argmax mean 0.359, dist {0:?,1:12,2:1} (battery); root entropy 1.87.
+- **Decision + reasoning:** This is the Phase-0 **validation** run, not a promotion candidate (fixed
+  generator). The loop is validated **end-to-end on real data**: a genuine non-null candidate (dP≈0.017,
+  vs the deliberate `rounds:4` pre-smoke null of 0.0 caused by records<batch-512), a sane eval (origin
+  ≈ even with v221 as expected for one fixed-gen step; masterbot ~58%; the harness self-match check was
+  exactly 50% in the pre-smoke), and all gates behaving (parity ALL PASS, val-acc tripwire quiet, collapse
+  correctly False). Calibrated `prediction_movement_floor`=0.001 and `game_length_band`=[25,60] into the
+  frozen tuple from this run.
+- **Anomalies / deviations:** (1) **stage-1.5 stale-archive bug caught + fixed** (`d319ef62`): the cleanup
+  glob `sp_*` missed the `general_`-prefixed archive, so the run-after-the-`rounds:4`-smoke collided on
+  Move-Item *after* self-play completed; recovered by reusing the intact 37,899-record self-play data +
+  `-ResumeFrom 2` (no self-play re-run). (2) `rounds:4` pre-smoke produced a NULL candidate (≈280 records
+  < batch 512 → 0 optimizer steps) — expected, validated the null-update detector; full run used 516
+  rounds. (3) P0 win-rate 0.344 is marginally below the [0.35,0.65] non-degeneracy band — a stronger P2
+  advantage than the ~57% baseline (audit-known, set/strength-dependent), data still non-degenerate.
+  (4) `render_dashboard.py` still prints the stale v3 verdict/forced/narrow/steam columns — cosmetic
+  (the manifest's `collapse` is the source of truth); flagged for the Task-14 doc/dashboard pass.
+- **Data disposition:** `rl_iter_1/` kept in window (parent-generated). The `rounds:4` smoke + recovery
+  artifacts are preserved in `training/data/_orphans/rl_iter_1_*`.
 
 ---
 
