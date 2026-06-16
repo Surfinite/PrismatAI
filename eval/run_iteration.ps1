@@ -177,10 +177,18 @@ function Get-ValAcc {
 
 # --- Driver lockfile (C3: no concurrent drivers/tools on the live config) -----
 if (Test-Path $lockFile) {
-    $age = (Get-Date) - (Get-Item $lockFile).LastWriteTime
     $content = Get-Content -Raw $lockFile -ErrorAction SilentlyContinue
-    throw ("another iteration appears to be running (lock $lockFile, age {0:N0} min, contents: {1}). " -f $age.TotalMinutes, $content) +
-          "If that run is dead, delete the lock and re-run. NEVER run two drivers (or calibrate_n/matchup tools) against the live config at once."
+    if (-not $content) {
+        Write-Host "*** stale/empty lock — reclaiming ***"
+        Remove-Item $lockFile -ErrorAction SilentlyContinue
+    } else {
+        $pidMatch = [regex]::Match($content, 'pid=(\d+)')
+        $alive = $false
+        if ($pidMatch.Success) { $alive = [bool](Get-Process -Id ([int]$pidMatch.Groups[1].Value) -ErrorAction SilentlyContinue) }
+        if ($alive) { throw "another iteration is running (lock $lockFile, contents: $content). NEVER run two drivers (or calibrate_n/matchup tools) against the live config at once." }
+        Write-Host "*** stale lock from a dead PID — reclaiming ($content) ***"
+        Remove-Item $lockFile -ErrorAction SilentlyContinue
+    }
 }
 "K=$K pid=$PID started=$(Get-Date -Format o)" | Set-Content -LiteralPath $lockFile
 
@@ -193,7 +201,26 @@ try {
 
 # -----------------------------------------------------------------------------
 # 0) Structural preflight — single source of truth: eval/preflight_config.py.
+#    Self-heal first: a host-kill can leave the self-play block at run:true or a
+#    drifted Seed (the stage-1 finally restores them, but a host-kill skips the
+#    finally). Preflight would hard-fail this recoverable, self-inflicted drift —
+#    detect and reset it before preflight runs.
 # -----------------------------------------------------------------------------
+$selfplayBlock = $frozenEarly.selfplay_block
+$seedBase      = [int]$frozenEarly.selfplay_seed_base
+$cfgNow  = Get-Content -Raw $config | ConvertFrom-Json
+$spBlk   = $cfgNow.Benchmarks | Where-Object { $_.name -eq $selfplayBlock }
+if ($spBlk) {
+    if ($spBlk.run -eq $true) {
+        Write-Host "*** stage-0 self-heal: $selfplayBlock has run:true (killed prior run?) — resetting to run:false ***"
+        Edit-Config -Op run -Name $selfplayBlock -Value false
+    }
+    if ([int]$spBlk.Seed -ne $seedBase) {
+        Write-Host "*** stage-0 self-heal: $selfplayBlock Seed=$($spBlk.Seed) != base $seedBase — restoring base ***"
+        Edit-Config -Op seed -Name $selfplayBlock -Value $seedBase
+    }
+}
+
 Write-Host "`n[0/8] structural preflight (eval/preflight_config.py)"
 python "$eval/preflight_config.py" --config $config --frozen $frozenPath
 if ($LASTEXITCODE -ne 0) {
