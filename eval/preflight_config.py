@@ -45,6 +45,18 @@ Checks
                      at <bin>/asset/config/config.txt, sentinel at
                      <bin>/use_dsnn.txt). The masterbot2016 baseline needs no
                      check -- the 2016 exe predates the sentinel mechanism.
+  10. engine_sha     both engine exes (Prismata_Testing.exe / PrismataAI.exe)
+                     sha256-match the frozen engine_*_exe_sha256 pins (Task 5/10):
+                     an unrecorded rebuild can silently flip the maxPlayer value
+                     SIGN or a shared-C++ feature. Fast -- always runs when frozen
+                     loaded.
+  11. correctness_gates  auto-runs a6_orientation_check.py (value sign-flip guard)
+                     + test_three_way_feature_parity.py (JS extractor == C++
+                     exporter == C++ inference) as subprocesses. These two
+                     catastrophic-but-silent value failures were previously caught
+                     only by MANUAL tests; preflight automates them for unattended
+                     runs. SLOW (~30-60s, needs the engine + pytest) -- skip with
+                     --skip-slow-gates (the fast engine_sha pin still runs).
 
 Exit 0 = all pass; exit 1 = any failure, each printed as one
 "FAIL: <check>: <detail>" line ("OK: <check>" lines unless --quiet).
@@ -58,6 +70,7 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -689,16 +702,68 @@ def check_use_dsnn_sentinel(config_path):
 
 
 # ---------------------------------------------------------------------------
+# Check: engine-exe sha pin (Task 5/10, 2026-06-16) — an unrecorded rebuild can
+# silently flip the maxPlayer value sign or a shared-C++ feature. The frozen
+# tuple pins both engine exes; preflight fails if either was rebuilt without
+# re-running a6 + three-way and re-pinning the sha.
+# ---------------------------------------------------------------------------
+
+def check_engine_sha(frozen, dave_bin):
+    failures = []
+    for key, exe in (("engine_testing_exe_sha256", "Prismata_Testing.exe"),
+                     ("engine_prismataai_exe_sha256", "PrismataAI.exe")):
+        want = frozen.get(key)
+        if not want:
+            continue
+        path = os.path.join(dave_bin, exe)
+        if not os.path.isfile(path):
+            failures.append("engine exe not found for sha check: %s" % path); continue
+        got = _sha256(path)
+        if got.lower() != str(want).lower():
+            failures.append("%s sha256 mismatch: got %s but frozen %s = %s -- the engine was rebuilt; "
+                            "re-run a6 + three-way and re-pin the exe sha (an unrecorded rebuild can "
+                            "silently flip the value sign or a feature)" % (exe, got, key, want))
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# Check: a6 + three-way correctness gates (Task 10, 2026-06-16) — the two
+# catastrophic-but-silent value failures (a maxPlayer value SIGN-FLIP and a
+# shared-C++ FEATURE skew) were only caught by two MANUAL tests. Running them
+# at preflight (subprocess; ~30-60s, needs the engine + pytest) closes the gap
+# for unattended runs. Skippable via --skip-slow-gates (unit tests / fast probes).
+# ---------------------------------------------------------------------------
+
+def check_correctness_gates(repo_root):
+    failures = []
+    a6 = subprocess.run([sys.executable, os.path.join(repo_root, "eval", "a6_orientation_check.py")],
+                        capture_output=True, text=True)
+    if a6.returncode != 0:
+        failures.append("a6 orientation check FAILED (value sign-flip guard): %s"
+                        % ((a6.stdout or "")[-400:] + (a6.stderr or "")[-400:]))
+    tw = subprocess.run([sys.executable, "-m", "pytest",
+                         os.path.join(repo_root, "training", "tests", "test_three_way_feature_parity.py"), "-q"],
+                        capture_output=True, text=True, cwd=repo_root)
+    if tw.returncode != 0:
+        failures.append("three-way feature parity gate FAILED: %s" % ((tw.stdout or "")[-400:]))
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Aggregation
 # ---------------------------------------------------------------------------
 
-def run_checks(config_path, frozen_path, repo_root):
+def run_checks(config_path, frozen_path, repo_root, skip_slow_gates=False):
     """Returns ordered list of (check_name, [failure detail strings])."""
     results = []
     cfg, cfg_failures = load_config(config_path)
     results.append(("json_bom", cfg_failures))
     # M-09: independent of config CONTENT -- guards the engine bin dir itself.
     results.append(("use_dsnn_sentinel", check_use_dsnn_sentinel(config_path)))
+    # The engine bin dir (config lives at <bin>/asset/config/config.txt), reused by
+    # the engine-sha check the same way check_use_dsnn_sentinel derives it.
+    config_dir = os.path.dirname(os.path.abspath(config_path))
+    dave_bin = os.path.dirname(os.path.dirname(config_dir))
     frozen, frozen_failures = load_frozen(frozen_path)
     if frozen_failures:
         results.append(("frozen_json", frozen_failures))
@@ -707,7 +772,7 @@ def run_checks(config_path, frozen_path, repo_root):
         results.append(("iterator_shape", check_iterator_shape(cfg)))
         results.append(("book_sizes", check_book_sizes(cfg)))
         results.append(("reference_graph",
-                        check_reference_graph(cfg, os.path.dirname(os.path.abspath(config_path)))))
+                        check_reference_graph(cfg, config_dir)))
         results.append(("selfplay_replays", check_selfplay_replays(cfg)))
         if frozen is not None:
             results.append(("frozen_tuple", check_frozen_tuple(cfg, frozen)))
@@ -719,8 +784,13 @@ def run_checks(config_path, frozen_path, repo_root):
     if frozen is not None:
         results.append(("existences", check_existences(frozen, repo_root)))
         results.append(("parent_sha",
-                        check_parent_sha(frozen,
-                                         os.path.dirname(os.path.abspath(config_path)))))
+                        check_parent_sha(frozen, config_dir)))
+        # Engine-exe sha pin (fast): always run when frozen is loaded.
+        results.append(("engine_sha", check_engine_sha(frozen, dave_bin)))
+    # a6 + three-way correctness gates (slow; shell out to the engine + pytest):
+    # only when not skipped (unit tests pass --skip-slow-gates so they don't shell out).
+    if not skip_slow_gates:
+        results.append(("correctness_gates", check_correctness_gates(repo_root)))
     return results
 
 
@@ -734,9 +804,13 @@ def main(argv=None):
     p.add_argument("--repo-root", default=REPO_ROOT,
                    help="repo root for repo-relative existence checks (default: %(default)s)")
     p.add_argument("--quiet", action="store_true", help="suppress OK lines")
+    p.add_argument("--skip-slow-gates", action="store_true",
+                   help="skip the a6 + three-way correctness gates (they shell out to the "
+                        "engine + pytest, ~30-60s); the fast engine-exe sha pin still runs")
     args = p.parse_args(argv)
 
-    results = run_checks(args.config, args.frozen, args.repo_root)
+    results = run_checks(args.config, args.frozen, args.repo_root,
+                         skip_slow_gates=args.skip_slow_gates)
     n_failures = 0
     for check, failures in results:
         if failures:

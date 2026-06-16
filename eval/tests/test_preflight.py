@@ -181,13 +181,20 @@ def env(tmp_path):
 
 
 def run_main(env, capsys):
-    """Serialize the (possibly mutated) dicts and run preflight main(). Returns (rc, out)."""
+    """Serialize the (possibly mutated) dicts and run preflight main(). Returns (rc, out).
+
+    Passes --skip-slow-gates: the a6 + three-way correctness gates shell out to the
+    engine + pytest (~30-60s each) and need the real dave-master engine; unit tests
+    of the config/frozen checks must not depend on them. The engine-exe sha pin is
+    fast and still runs (these tmp fixtures carry no engine exes, so the frozen
+    engine_*_exe_sha256 keys are omitted from make_frozen())."""
     env["config_path"].write_text(json.dumps(env["cfg"], indent=1), encoding="utf-8")
     env["frozen_path"].write_text(json.dumps(env["frozen"], indent=1), encoding="utf-8")
     rc = pf.main([
         "--config", str(env["config_path"]),
         "--frozen", str(env["frozen_path"]),
         "--repo-root", str(env["repo"]),
+        "--skip-slow-gates",
     ])
     out = capsys.readouterr().out
     return rc, out
@@ -214,8 +221,13 @@ def test_baseline_fixture_passes(env, capsys):
 
 @pytest.mark.skipif(not os.path.exists(pf.DEFAULT_CONFIG), reason="dave-master config not on this machine")
 def test_real_files_end_to_end(capsys):
-    """The REAL deployed config.txt + campaign_frozen.json must pass preflight today."""
-    rc = pf.main([])
+    """The REAL deployed config.txt + campaign_frozen.json must pass preflight today.
+
+    Runs --skip-slow-gates so the unit suite stays fast + engine-independent: this
+    exercises the structural checks + the fast engine-exe sha pin against the real
+    frozen tuple. The a6 + three-way correctness gates are exercised by the FULL
+    live preflight (run standalone, NOT via this unit suite)."""
+    rc = pf.main(["--skip-slow-gates"])
     out = capsys.readouterr().out
     assert rc == 0, out
 
@@ -228,7 +240,7 @@ def test_bom_fails_json_bom(env, capsys):
     env["config_path"].write_text(json.dumps(env["cfg"]), encoding="utf-8-sig")
     env["frozen_path"].write_text(json.dumps(env["frozen"]), encoding="utf-8")
     rc = pf.main(["--config", str(env["config_path"]), "--frozen", str(env["frozen_path"]),
-                  "--repo-root", str(env["repo"])])
+                  "--repo-root", str(env["repo"]), "--skip-slow-gates"])
     out = capsys.readouterr().out
     assert rc == 1
     assert_only_fails(out, "json_bom")
@@ -238,7 +250,7 @@ def test_malformed_json_fails(env, capsys):
     env["config_path"].write_text("{ not json", encoding="utf-8")
     env["frozen_path"].write_text(json.dumps(env["frozen"]), encoding="utf-8")
     rc = pf.main(["--config", str(env["config_path"]), "--frozen", str(env["frozen_path"]),
-                  "--repo-root", str(env["repo"])])
+                  "--repo-root", str(env["repo"]), "--skip-slow-gates"])
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL: json_bom:" in out
@@ -601,6 +613,71 @@ def test_use_dsnn_sentinel_only_checks_bin_dir(env, capsys):
 
 
 # ---------------------------------------------------------------------------
+# Check 10: engine-exe sha pin (Task 5/10) -- guards against an unrecorded
+# rebuild silently flipping the value sign or a feature. Tested directly (the
+# tmp fixtures carry no engine exes, so make_frozen() omits the sha keys and the
+# end-to-end fixture path exercises only the no-op branch).
+# ---------------------------------------------------------------------------
+
+def test_engine_sha_mismatch_fires(tmp_path):
+    """A pinned sha that does not match the on-disk exe must surface a failure."""
+    exe = tmp_path / "Prismata_Testing.exe"
+    exe.write_bytes(b"some engine bytes")
+    failures = pf.check_engine_sha({"engine_testing_exe_sha256": "deadbeef"}, str(tmp_path))
+    assert failures, "expected a failure for the mismatched sha"
+    assert any("sha256 mismatch" in f for f in failures), failures
+    assert any("Prismata_Testing.exe" in f for f in failures), failures
+
+
+def test_engine_sha_match_passes(tmp_path):
+    """The matching sha (and the absent-key no-op) must produce no failures."""
+    exe = tmp_path / "PrismataAI.exe"
+    content = b"matching engine bytes"
+    exe.write_bytes(content)
+    want = pf._sha256(str(exe))
+    # exact match -> clean; mixed case in the pin still matches (.lower() both sides)
+    assert pf.check_engine_sha({"engine_prismataai_exe_sha256": want.upper()}, str(tmp_path)) == []
+    # absent key -> no-op (older frozen files without the pin)
+    assert pf.check_engine_sha({}, str(tmp_path)) == []
+
+
+def test_engine_sha_missing_exe_fires(tmp_path):
+    """A pinned exe that is not on disk must fail (not silently pass)."""
+    failures = pf.check_engine_sha({"engine_testing_exe_sha256": "deadbeef"}, str(tmp_path))
+    assert failures
+    assert any("engine exe not found" in f for f in failures), failures
+
+
+def test_engine_sha_mismatch_via_run_checks(env, capsys, tmp_path):
+    """run_checks wires engine_sha when frozen carries a pin: a mismatched pin +
+    an on-disk exe (the fixture bin dir) must surface a FAIL: engine_sha line.
+    --skip-slow-gates keeps the correctness gates out of this unit test."""
+    (env["bin_dir"] / "Prismata_Testing.exe").write_bytes(b"fixture engine bytes")
+    env["frozen"]["engine_testing_exe_sha256"] = "deadbeef"
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    fails = [ln for ln in out.splitlines() if ln.startswith("FAIL:")]
+    assert any(ln.startswith("FAIL: engine_sha:") and "sha256 mismatch" in ln for ln in fails), out
+
+
+# ---------------------------------------------------------------------------
+# Check 11: correctness gates -- skip-slow-gates semantics. The gates shell out
+# to the engine + pytest, so the unit suite asserts the SKIP path omits them and
+# the wiring path includes a correctness_gates result (called directly so the
+# engine is never launched here).
+# ---------------------------------------------------------------------------
+
+def test_skip_slow_gates_omits_correctness_gates(env, capsys):
+    """With --skip-slow-gates the correctness_gates check must not appear at all
+    (it would otherwise shell out to the engine + pytest)."""
+    rc, out = run_main(env, capsys)  # run_main passes --skip-slow-gates
+    assert rc == 0, out
+    assert "correctness_gates" not in out
+
+
+
+
+# ---------------------------------------------------------------------------
 # --quiet
 # ---------------------------------------------------------------------------
 
@@ -608,7 +685,7 @@ def test_quiet_suppresses_ok_lines(env, capsys):
     env["config_path"].write_text(json.dumps(env["cfg"]), encoding="utf-8")
     env["frozen_path"].write_text(json.dumps(env["frozen"]), encoding="utf-8")
     rc = pf.main(["--config", str(env["config_path"]), "--frozen", str(env["frozen_path"]),
-                  "--repo-root", str(env["repo"]), "--quiet"])
+                  "--repo-root", str(env["repo"]), "--quiet", "--skip-slow-gates"])
     out = capsys.readouterr().out
     assert rc == 0
     assert "OK:" not in out
@@ -619,7 +696,7 @@ def test_quiet_still_prints_failures(env, capsys):
     env["config_path"].write_text(json.dumps(env["cfg"]), encoding="utf-8")
     env["frozen_path"].write_text(json.dumps(env["frozen"]), encoding="utf-8")
     rc = pf.main(["--config", str(env["config_path"]), "--frozen", str(env["frozen_path"]),
-                  "--repo-root", str(env["repo"]), "--quiet"])
+                  "--repo-root", str(env["repo"]), "--quiet", "--skip-slow-gates"])
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL: run_true:" in out
