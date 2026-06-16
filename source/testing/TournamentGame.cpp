@@ -69,6 +69,20 @@ namespace
     }
 }
 
+static Prismata::PopulationMultiset buildPopulationMultiset(const GameState & s)
+{
+    Prismata::PopulationMultiset sig;
+    for (PlayerID p = 0; p < 2; ++p)
+    {
+        for (const auto & id : s.getCardIDs(p))   // getCardIDs returns LIVE cards only
+        {
+            const int typeID = static_cast<int>(s.getCardByID(id).getType().getID());
+            sig[std::make_pair(static_cast<int>(p), typeID)] += 1;
+        }
+    }
+    return sig;
+}
+
 TournamentGame::TournamentGame(const GameState & initialState, const std::string & p1name, PlayerPtr p1, const std::string & p2name, const PlayerPtr p2)
     : _game(initialState, p1, p2)
     , _discarded(false)
@@ -125,14 +139,27 @@ void TournamentGame::playGame(size_t updateIntervalSec)
     {
         PlayerID playerToMove = _game.getState().getActivePlayer();
 
+        // Stalemate (no-progress) draw: end a frozen game early. Runs for self-play AND eval.
+        // On firing we break with both players alive -> winner()==Player_None -> draw (0.5).
+        if (_stalemate.threshold > 0)
+        {
+            const bool stalled = _stalemate.observe(buildPopulationMultiset(_game.getState()), plyIndex);
+            _lastProgressPly = _stalemate.lastProgressPly;
+            if (stalled)
+            {
+                _stalemateDraw = true;
+                break;
+            }
+        }
+
         // V2 capture at turn-start: the current GameState is the turn-start
         // snapshot the active player's value net would evaluate. One record per
         // player-turn (not per action).
         if (_v2Exporter)
         {
             _v2Exporter->capture(_game.getState(), plyIndex);
-            ++plyIndex;
         }
+        ++plyIndex;
 
         // Snapshot the pre-move state when recording OR exporting V2 records, so
         // per-action frames can be reconstructed off the think-timer below, and the
@@ -320,7 +347,8 @@ void TournamentGame::playGame(size_t updateIntervalSec)
         // completed game this equals the number of captured turn-start records.
         _v2Exporter->finalize(finalState.winner(),
                               static_cast<int>(finalState.getTurnNumber()),
-                              _exportV2GameId);
+                              _exportV2GameId,
+                              _stalemateDraw ? _lastProgressPly : -1);
         _v2Exporter.reset();
     }
 }

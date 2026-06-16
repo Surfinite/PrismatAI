@@ -4,6 +4,7 @@
 #include "rapidjson/document.h"
 #include "ReplaySerializer.h"
 #include "SelfPlayV2Exporter.h"
+#include "StalemateTracker.h"
 #include <memory>
 
 namespace Prismata
@@ -44,6 +45,10 @@ class TournamentGame
     std::string                         _exportV2Dir;
     int                                 _exportV2GameId = 0;
     std::unique_ptr<SelfPlayV2Exporter> _v2Exporter;
+
+    Prismata::StalemateTracker _stalemate;   // threshold 0 = disabled
+    int  _lastProgressPly = -1;              // last population change (trim boundary); -1 = no stalemate
+    bool _stalemateDraw   = false;
 
 public:
 
@@ -94,6 +99,10 @@ public:
         _exportV2Dir = dir;
         _exportV2GameId = gameId;
     }
+
+    // Enable stalemate (no-progress) draw detection. n plies without a population
+    // change ends the game as a draw (0.5). n <= 0 disables (default).
+    void setStalemateThreshold(int n) { _stalemate.threshold = n; }
 };
 
 }
