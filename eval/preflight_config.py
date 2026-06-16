@@ -30,6 +30,10 @@ Checks
                      (frozen selfplay_block) matching frozen selfplay_rounds /
                      selfplay_seed_base / selfplay_threads, NO ForcedCards,
                      run:false at rest
+  M2. selfplay_player   the frozen selfplay_block references RL_SelfPlay in both
+                     group slots, RL_SelfPlay.SelfPlaySampling is true (else
+                     Temperature/Epsilon are inert), and RootMoveIterator is the
+                     IG-subset root (RL_ROOT_ITERATOR)
   7b. selfplay_replays  the self-play blocks carry the expected saveReplays dirs
                      (per-iteration replay archive contract, 2026-06-12)
   7. parent_repin    parent-side players' WeightsFile == frozen parent_bin (F-07
@@ -616,6 +620,31 @@ def check_unit_index(config_path):
 
 
 # ---------------------------------------------------------------------------
+# Check M2: self-play block uses RL_SelfPlay + SelfPlaySampling + IG-subset root
+# The frozen-tuple knobs (N / τ / K / ε) are meaningless if the block generates
+# data with a different player, or if the player's temperature/epsilon machinery
+# is disabled (SelfPlaySampling: false) or fires the wrong action space at root.
+# ---------------------------------------------------------------------------
+
+def check_selfplay_player(cfg, frozen):
+    failures = []
+    bname = frozen.get("selfplay_block", "RL_SelfPlay_General")
+    blk = next((b for b in cfg.get("Benchmarks", []) if isinstance(b, dict) and b.get("name") == bname), None)
+    if blk is None:
+        return ["self-play block '%s' not found" % bname]
+    names = [p.get("name") for p in blk.get("players", []) if isinstance(p, dict)]
+    if names != ["RL_SelfPlay", "RL_SelfPlay"]:
+        failures.append("%s.players reference %s, expected RL_SelfPlay in both groups (the frozen-tuple "
+                        "knobs are meaningless if a different player generates the data)" % (bname, names))
+    sp = cfg.get("Players", {}).get("RL_SelfPlay", {})
+    if sp.get("SelfPlaySampling") is not True:
+        failures.append("RL_SelfPlay.SelfPlaySampling must be true (else Temperature/Epsilon are inert)")
+    if sp.get("RootMoveIterator") != RL_ROOT_ITERATOR:
+        failures.append("RL_SelfPlay.RootMoveIterator is %r, expected %r" % (sp.get("RootMoveIterator"), RL_ROOT_ITERATOR))
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Check 7b: saveReplays on the self-play block (2026-06-12 replay-audit fixes).
 # The per-iteration replay archive (forensic record + future-schema source) is
 # part of the iteration contract; a drifted/removed saveReplays key would make
@@ -776,6 +805,7 @@ def run_checks(config_path, frozen_path, repo_root, skip_slow_gates=False):
         results.append(("selfplay_replays", check_selfplay_replays(cfg)))
         if frozen is not None:
             results.append(("frozen_tuple", check_frozen_tuple(cfg, frozen)))
+            results.append(("selfplay_player", check_selfplay_player(cfg, frozen)))
             results.append(("parent_repin", check_parent_repin(cfg, frozen)))
             results.append(("origin_pin", check_origin_pin(cfg, frozen)))
             results.append(("anchor_blocks", check_anchor_blocks(cfg, frozen)))

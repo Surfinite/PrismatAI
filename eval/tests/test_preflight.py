@@ -675,6 +675,49 @@ def test_skip_slow_gates_omits_correctness_gates(env, capsys):
     assert "correctness_gates" not in out
 
 
+# ---------------------------------------------------------------------------
+# Check M2: selfplay_player — self-play block uses RL_SelfPlay + SelfPlaySampling
+#           + IG-subset root iterator
+# ---------------------------------------------------------------------------
+
+def test_selfplay_block_must_use_rl_selfplay(env):
+    """Both group slots of the frozen self-play block must reference RL_SelfPlay.
+    Swapping them to a different player name must surface a selfplay_player failure."""
+    b = next(x for x in env["cfg"]["Benchmarks"] if x["name"] == "RL_SelfPlay_General")
+    b["players"] = [{"name": "RL_SelfPlay_N100", "group": 1}, {"name": "RL_SelfPlay_N100", "group": 2}]
+    # minimal frozen -- only selfplay_block matters for this check (isolates the block-lookup path)
+    fails = pf.check_selfplay_player(env["cfg"], {"selfplay_block": "RL_SelfPlay_General"})
+    assert any("RL_SelfPlay" in f for f in fails)
+
+
+def test_selfplay_player_missing_sampling_fails(env):
+    """SelfPlaySampling must be True; absent or False means Temperature/Epsilon are inert."""
+    env["cfg"]["Players"]["RL_SelfPlay"]["SelfPlaySampling"] = False
+    fails = pf.check_selfplay_player(env["cfg"], env["frozen"])
+    assert any("SelfPlaySampling" in f for f in fails)
+
+
+def test_selfplay_player_wrong_root_iterator_fails(env):
+    """RootMoveIterator on RL_SelfPlay must be the IG-subset root."""
+    env["cfg"]["Players"]["RL_SelfPlay"]["RootMoveIterator"] = "HardIterator_5var_Root"
+    fails = pf.check_selfplay_player(env["cfg"], env["frozen"])
+    assert any(pf.RL_ROOT_ITERATOR in f for f in fails)
+
+
+def test_selfplay_player_missing_block_fails(env):
+    """A selfplay_block name that does not exist in Benchmarks must fail cleanly."""
+    fails = pf.check_selfplay_player(env["cfg"], {"selfplay_block": "No_Such_Block"})
+    assert any("No_Such_Block" in f for f in fails)
+
+
+def test_selfplay_player_end_to_end_fails(env, capsys):
+    """Wiring check: mutate both group slots to a non-RL_SelfPlay player and confirm
+    the selfplay_player check is the ONLY check that fires (end-to-end via run_main)."""
+    b = next(x for x in env["cfg"]["Benchmarks"] if x["name"] == "RL_SelfPlay_General")
+    b["players"] = [{"name": "RL_SelfPlay_N100", "group": 1}, {"name": "RL_SelfPlay_N100", "group": 2}]
+    rc, out = run_main(env, capsys)
+    assert rc == 1
+    assert_only_fails(out, "selfplay_player")
 
 
 # ---------------------------------------------------------------------------
