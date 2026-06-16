@@ -260,7 +260,7 @@ if ($warnings) {
 Write-Host "`n[1.5/8] archive sidecars + replays -> $workDir"
 $parityArchive = "$workDir/parity_states"
 $staleArchives = @()
-if ((Test-Path $parityArchive) -and (Get-ChildItem -Path "$parityArchive/*" -Include 'sp_*.json','sp_*.json.gz' -ErrorAction SilentlyContinue)) { $staleArchives += $parityArchive }
+if ((Test-Path $parityArchive) -and (Get-ChildItem -Path $parityArchive -File -ErrorAction SilentlyContinue)) { $staleArchives += $parityArchive }
 $replayArchiveGen = "$workDir/replays/general"
 if ((Test-Path $replayArchiveGen) -and (Get-ChildItem -Path $replayArchiveGen -Filter 'game_*.json.gz' -ErrorAction SilentlyContinue)) { $staleArchives += $replayArchiveGen }
 if ($staleArchives) {
@@ -274,7 +274,7 @@ if ($staleArchives) {
 }
 New-Item -ItemType Directory -Force -Path $parityArchive | Out-Null
 $sidecarFiles = @(Get-ChildItem -Path "$parityLiveGen/*" -Include 'sp_*.json.gz','sp_*.json' -ErrorAction SilentlyContinue)
-foreach ($f in $sidecarFiles) { Move-Item $f.FullName "$parityArchive/general_$($f.Name)" }
+foreach ($f in $sidecarFiles) { Move-Item -Force $f.FullName "$parityArchive/general_$($f.Name)" }
 $sidecarCount = $sidecarFiles.Count
 if ($sidecarCount -eq 0) { throw "no parity sidecars (sp_*.json.gz) in $parityLiveGen after self-play — exporter regression, or exportTrainingV2 drifted in config.txt?" }
 New-Item -ItemType Directory -Force -Path $replayArchiveGen | Out-Null
