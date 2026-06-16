@@ -32,6 +32,7 @@ Tournament::Tournament(const rapidjson::Value & tournamentValue)
     JSONTools::ReadInt("UpdateIntervalSec", tournamentValue, _updateIntervalSec);
     JSONTools::ReadInt("Threads", tournamentValue, _threads);
     _threads = std::max<size_t>(1, _threads);
+    JSONTools::ReadInt("StalemateThreshold", tournamentValue, _stalemateThreshold);
 
     _seed = 0;
     JSONTools::ReadInt("Seed", tournamentValue, _seed);   // 0 = time-based (default)
@@ -195,6 +196,8 @@ void Tournament::run()
                             g2.setExportTrainingV2(_exportTrainingV2Dir, gid2);
                         }
                     }
+                    g1.setStalemateThreshold(_stalemateThreshold);
+                    g2.setStalemateThreshold(_stalemateThreshold);
 
                     playGame(g1, t);
                     playGame(g2, t);
@@ -344,6 +347,7 @@ TournamentGame Tournament::playGame(const GameState & state, const size_t whiteI
             game.setExportTrainingV2(_exportTrainingV2Dir, gid);
         }
     }
+    game.setStalemateThreshold(_stalemateThreshold);
     game.playGame();
 
     return game;
