@@ -11,6 +11,7 @@
 #include "Move.h"
 #include "Action.h"
 #include "Constants.h"
+#include "../testing/StalemateTracker.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -359,6 +360,26 @@ int main(int argc, char *argv[])
         check(sampleRootIndexLate(tie, cTie, 0.0, 0.0, 0.9, 0.5, 0.75) == argmaxIndex(tie, 0.75), "late argmax == argmaxIndex at same u3");
 
         printf("--test-sampler: %s\n", ok ? "PASS" : "FAIL");
+        return ok ? 0 : 1;
+    }
+
+    // Usage: PrismataAI.exe --test-stalemate    (prints PASS/FAIL, returns 0/1)
+    if (argc >= 2 && std::string(argv[1]) == "--test-stalemate")
+    {
+        Prismata::StalemateTracker tr1; tr1.threshold = 3;
+        Prismata::PopulationMultiset a; a[std::make_pair(0, 0)] = 1;
+        bool f[5];
+        for (int p = 0; p < 5; ++p) { f[p] = tr1.observe(a, p); }
+        bool ok = !f[0] && !f[1] && !f[2] && f[3] && f[4] && tr1.lastProgressPly == 0;
+
+        Prismata::StalemateTracker tr2; tr2.threshold = 2;
+        Prismata::PopulationMultiset b; b[std::make_pair(0, 0)] = 2;
+        Prismata::PopulationMultiset seq[5] = { a, a, b, b, b };   // change at ply 2
+        bool g[5];
+        for (int p = 0; p < 5; ++p) { g[p] = tr2.observe(seq[p], p); }
+        ok = ok && !g[3] && g[4] && tr2.lastProgressPly == 2;
+
+        printf("--test-stalemate: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;
     }
 
