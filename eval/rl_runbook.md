@@ -17,7 +17,7 @@
 The driver runs this automatically and aborts on any FAIL; also runnable standalone. It never
 rewrites `config.txt` — drift must be reconciled deliberately (edit `campaign_frozen.json` AND
 `config.txt` together; parent changes go through `eval/promote_candidate.ps1` ONLY).
-**18 checks** (a full run, with the slow correctness gates; `--skip-slow-gates` drops to 17). The
+**19 checks** (a full run, with the slow correctness gates; `--skip-slow-gates` drops to 18). The
 authoritative ordered list is `run_checks()` in `preflight_config.py`:
 
 | Check | What it asserts | Why |
@@ -35,6 +35,7 @@ authoritative ordered list is `run_checks()` in `preflight_config.py`:
 | `origin_pin` | `RL_Eval_origin.WeightsFile` == frozen `origin_bin` (v221, PERMANENT) | the origin anchor is NEVER repointed — it carries the relative-drift / collapse measurement |
 | `anchor_blocks` | `RL_PoL_origin` / `RL_PoL_masterbot` rounds/Seed/Threads == frozen | eval volume is campaign identity |
 | `eval_budget` | TimeLimit/MaxTraversals/UCTConstant on `RL_Eval` + `RL_Eval_origin` == frozen `eval_budget` | A1: the deployment budget was previously enforced by nothing |
+| `stalemate_threshold` | `StalemateThreshold` on the self-play block + both eval anchor blocks == frozen `selfplay_stalemate_threshold` (40) | the early-draw + frozen-tail-trim rule is campaign identity; a drifted threshold changes both the self-play data and the eval draw policy |
 | `unit_index` | `unit_index.json` exists + carries the canonical 116 units | a missing index silently lobotomizes every NeuralNet player (engine also FATALs on mappedTypes==0) |
 | `existences` | frozen `parent_pt` + `rehearsal_file` (elite) + `tripwire_val_file` exist | warm-start, stage 3, 4.5 depend on them |
 | `parent_sha` | sha256(on-disk parent bin) == frozen `parent_bin_sha256` | the parent is CONTENT-pinned — catches a same-K re-export clobber and name-consistent-but-wrong promotions |
@@ -43,7 +44,7 @@ authoritative ordered list is `run_checks()` in `preflight_config.py`:
 
 ## The stages (0–8, plus 1.5 / 4.5 / 4.6 — there is NO stage 6 in v4)
 
-**0 — Structural preflight [gate]** — the 18-check table above; also rejects `-N` ≠ `frozen_N` and
+**0 — Structural preflight [gate]** — the 19-check table above; also rejects `-N` ≠ `frozen_N` and
 `-Window` ≠ frozen `replay_window`. **Stage-0 self-heal (Task 12):** before preflight, if a host-kill
 left the self-play block at `run:true` or a drifted `Seed` (the stage-1 `finally` restores them, but
 a host-kill skips the `finally`), the driver resets them via `Edit-Config` and logs it — preflight
@@ -61,6 +62,10 @@ itself under **regime v4**: τ=0.7 sampling turns 0–11; turns ≥12 **argmax w
 `EpsilonLate=0.05`** late sampler (no IG-targeted ε in v4) and **seeded-random argmax tie-breaks**
 (the old first-wins tie-break + longest-move-first ordering systematically over-clicked inside the
 UCB indifference band). Engine output is captured to `selfplay_<ts>.log` and WARNING lines surfaced.
+**Stalemate rule (live):** a frozen game — the board `(owner,cardType)` multiset over live units
+unchanged for `StalemateThreshold`=40 plies — ends early as a 0.5 draw, and self-play **trims the
+frozen tail** from the shard (kept length = `total_plies`). Python oracle the C++ mirrors:
+`eval/stalemate.py`; probe `PrismataAI.exe --test-stalemate`.
 
 **1.5 — Archive [core]** — parity sidecars + replays → `training/data/rl_iter_<K>/{parity_states,
 replays/general}/` (ONE general slice in v4; the future-schema re-extraction source). A prior
@@ -105,7 +110,8 @@ AB SWF-faithful `MasterBot_SWF`, 96 games) is the absolute-strength trend. **No 
 verdict, no forced pool, no narrow/iter0/steam.** Player-level engine-load provenance on the
 candidate (the masterbot opponent is AB/Playout — no NeuralNet load line to confirm). The manifest
 carries pooled Wilson + paired per-card-set CIs and the boolean `collapse`. On collapse the driver
-prints a loud `*** COLLAPSE ***` line.
+prints a loud `*** COLLAPSE ***` line. The eval applies the **same stalemate rule but early-end
+only** (a frozen game scores 0.5; no tail trim — eval keeps no training shard).
 
 **8 — Coverage + dashboard [telemetry]** — IG-click coverage stats (general slice; **non-fatal** — a
 failure must NOT abort the iteration) + `render_dashboard.py` (the v4 table: `iter`, `collapse`,
@@ -131,6 +137,17 @@ no axis riding on them in v4.
    band). **No steam.** **This is where the campaign's actual answer comes from** — per-iteration
    `collapse` cells are harm screens, not evidence. Kill criteria (rl_campaign §3/§6) read CHECKPOINT
    trend, not per-iteration noise.
+   - **ALWAYS use the default `-Iteration 0`** (timestamped manifest `eval_iter_ckpt_<ts>.json`).
+     **NEVER pass `-Iteration <K>`** — it names the manifest `eval_iter_<K>.json` and CLOBBERS that
+     iteration's per-iter manifest (the dashboard then double-counts / loses the per-iter cell).
+   - The checkpoint **bumps the two anchor blocks to rounds 192**, restored in a `finally`. A
+     **host-kill (IDE/VSCode restart, power loss) skips the `finally`** → config left at 192 →
+     preflight `anchor_blocks` then rejects every run. Recovery: restore `RL_PoL_origin` /
+     `RL_PoL_masterbot` `rounds` to the frozen value (48).
+   - On long runs the engine can FATAL-abort on a **transient Windows file-lock** at its periodic
+     HTML-write (`HTMLTable::appendHTMLTableToFile`, exit 0xC0000409) even though the dir exists —
+     just **re-run** (the `finally` already restored config). A **Defender exclusion on the dave
+     `bin` dir** prevents it.
 5. **Record every iteration** in `eval/campaign_log.md` (template at the top): collapse, the
    origin/masterbot headline numbers, watch-stats (4.6 probe values, self-play P0 win-rate /
    non-degeneracy, game length, late sampled fraction, tripwire Δval-acc), decision + reasoning.
@@ -155,3 +172,24 @@ interior + root iterators (NoIG interior + IG-subset root). **Scale tier** (chan
 campaign_log entry, same campaign): selfplay rounds 516 · seed base 5600 · Threads:8 · anchor blocks
 (rounds/Seed/Threads) · **W=2** · `abort_winrate_vs_origin=0.35`. Parent keys change ONLY via
 `promote_candidate.ps1`; `origin_bin` NEVER changes.
+
+## Building a Steam drop-in bundle (per checkpoint)
+
+`eval/build_steam_bundle.ps1 -Label <name>` packages a net (default: frozen `parent_bin` = the
+lineage head; override `-Weights <bin>`) into `C:/libraries/DSNN_steam_bundles/<name>/` — a
+self-describing, self-verifying DSNN drop-in for Steam's `PrismataAI.exe`:
+
+- **Self-describing:** the bundle's `use_dsnn.txt` carries `weights = <bin>` (engine `dave@50977510`+),
+  so the drop-in plays its own net with **no `PRISMATA_DSNN_WEIGHTS` env var and no renamed `.bin`**.
+  Precedence: `use_dsnn.txt weights=` > `PRISMATA_DSNN_WEIGHTS` env > built-in default.
+- **Action space = the measured one:** root `HardIterator_5var_IGsubset_Root` (net picks the IG click
+  COUNT 0..N) + interior **`HardIterator_5var_NoIG`** (IG never auto-fires below root). The FORCE_DSNN
+  deploy path was aligned to the campaign's NoIG interior in `dave@50977510`; bundles ≤ v221 used the
+  IG-included `HardIterator_5var` interior (an UNMEASURED, over-click-prone space).
+- **Self-verifying:** drives the bundle exe on a one-shot FORCE_DSNN request and asserts the right net
+  loads, `treeIterator=HardIterator_5var_NoIG`, `mappedTypes>0`, and a move is produced. It also
+  REFUSES to ship an exe whose sha ≠ frozen `engine_prismataai_exe_sha256`, so a bundle always carries
+  the campaign-pinned engine. `-SkipVerify` / `-Force` / `-ThinkTime <ms>` available.
+- After any dave rebuild that changes the exe, **re-pin the engine shas first** (Engine & Build
+  gotcha) — the script refuses otherwise. Bundles live OUTSIDE the repo (distribution artifacts; not
+  git-tracked); each carries a generated `README.txt` + `bundle_manifest.json` (shas + provenance).
