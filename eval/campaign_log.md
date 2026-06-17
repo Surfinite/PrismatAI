@@ -153,6 +153,45 @@ or abandoned attempts):
 - **Data disposition:** `rl_iter_3/` kept in window (rl_iter2-generated). `rl_iter_2/` slides out of the
   W=2 window after K=3 (window for K=4 = iter_3 + iter_4).
 
+### Iteration K=4 — 2026-06-17 — PROMOTED (Phase 1, third promoting iteration)
+
+- **Regime:** v4 "proof-of-life" (tuple_version 4); third **Phase-1** promoting iteration.
+- **Parent / generator:** `neural_weights_rl_iter3.bin` (76eedbb4…) — the K=3-promoted parent.
+  W=2 window = iter_3 (rl_iter2-generated) + iter_4 (rl_iter3-generated).
+- **Candidate:** `neural_weights_rl_iter4.bin` (67dec168…) — warm-started from rl_iter3, 6 ep @ 1e-5, no
+  SWA, W=2, rehearsal 0.10 elite, on **37,603** self-play records / 1,032 general games (Seed 5604).
+- **Config identity:** dave config.txt @ `ad55d68a` (K=3 repoint); campaign_frozen.json @ `e571b306`
+  (K=3 promote). [run-time, pre-promote — promotion advances both to dave `1e7a2ff8` / this main commit.]
+- **Manifest:** `eval/manifests/eval_iter_4.json` — **collapse: False**.
+- **Headline numbers:** origin (cand vs v221) **48W/0D/96 = 50.0%** (CI 0.40–0.60; paired 0.45–0.55);
+  masterbot (cand vs the AB SWF MasterBot) **60W/0D/96 = 62.5%** (CI 0.53–0.72; paired 0.55–0.70). Origin
+  is EXACTLY even with v221; masterbot is back to the K=2 peak.
+- **Watch-stats:** prediction-movement fixed-probe mean|dP| **0.0114** (NON-NULL; 2.15% winner-flips),
+  self-play probe 0.0102 (1.22% flips); val-acc candidate **71.5%** vs parent 71.6% (−0.1pp, tripwire
+  quiet); **game length max 87 / median 36 / mean 37.6 — ZERO 200-cap games (37,603 records)**;
+  export-parity ALL PASS (worst 6.59e-06); IG argmax mean 0.333, dist {0:26,1:13}; ig_contrast_pairs 33;
+  root entropy 1.880. Self-play P0 win-rate not separately recomputed (H5 carries discounted `label_A`).
+- **Decision + reasoning:** **PROMOTED** per promote-unless-collapse — collapse False (origin 50.0% ≫
+  abort 0.35), val-acc tripwire quiet (71.5 vs 71.6), parity PASS, prediction-movement non-null. THIRD
+  consecutive promotion. **⚠️ ORIGIN-ANCHOR TREND worth flagging: across the three promoting iterations
+  the origin win-rate (vs the PERMANENT v221) has drifted DOWN monotonically — 54.7 → 52.1 → 50.0 — i.e.
+  the cumulative advantage over v221 has decayed from +4.7pp (K=2) to ~0pp (K=4), while the masterbot
+  absolute-strength anchor stayed healthy (62.5 / 58.3 / 62.5).** All per-iter origin CIs overlap 50% and
+  each other (n=96, ±~10pp), so the decline is NOT statistically resolved — it is consistent with both
+  regression-to-the-mean NOISE and genuine promote-unless-collapse drift (off-policy W=2 fine-tuning on a
+  moving parent slowly forgetting the v221-relative edge). This is precisely the ambiguity the powered
+  checkpoint exists to resolve. **DECISION: pause the blind K→K+1 cadence and run the powered checkpoint
+  (`run_checkpoint.ps1`, 768+ origin games vs v221) on rl_iter4 NOW** (we are inside the K=3–5 window) —
+  the per-iter cells cannot tell us whether 3 promotions bought any real cumulative gain; spending two
+  more ~2.5 hr iterations before measuring would compound that blindness. Owner to decide regime/policy
+  response (continue / adjust N / revisit promote-unless-collapse) FROM the powered result.
+- **Anomalies / deviations:** none — clean full run, stage 8 ran normally (no restart; manifest carries
+  action_coverage). NOTE: the K=3-vs-K=4 self-heal log line ("stale lock from a dead PID — reclaiming
+  K=3 pid=39108") at K=4 start was the EXPECTED `.iteration.lock` reclaim after the K=3 VSCode-restart
+  killed that driver — working as designed.
+- **Data disposition:** `rl_iter_4/` kept in window (rl_iter3-generated). `rl_iter_3/` slides out of the
+  W=2 window after K=4 (window for K=5 = iter_4 + iter_5).
+
 ---
 
 ## Campaign-level decisions (one line per (config-hash, net-hash) delta — rl_campaign §5)
@@ -177,6 +216,7 @@ or abandoned attempts):
 | 2026-06-16/17 | **Stalemate draw rule SHIPPED** (`selfplay_stalemate_threshold:40`, SCALE-tier): self-play **and** eval end a frozen game early as a 0.5 draw when the board `(owner,cardType)` multiset is unchanged for 40 plies; self-play also trims the frozen tail from the training shard (kept-length stamped). Engine rebuilt (TournamentGame/SelfPlayV2Exporter/Tournament), `engine_*_exe_sha256` re-pinned, a6 + three-way re-run UNCHANGED (no GameState/feature/value change). Frozen + preflight-asserted. **Validated live on K=2: max game length 105 plies, ZERO 200-cap games (vs 3 in K=1).** | data quality + speed (the 3 Phase-0 cap-draws were ~70% frozen junk); mirrors the SWF "Claim Draw" stalemate ladder's binding kill-cutoff | spec/plan `docs/superpowers/{specs,plans}/2026-06-16-selfplay-stalemate-draw-policy*`; main `46a5dddc` / dave `3663b5b7` |
 | 2026-06-17 | **PROMOTED iter-2 → parent** (net-hash delta: `neural_weights_mixed_v221.bin` → `neural_weights_rl_iter2.bin`, sha `cb457e8…`): the FIRST Phase-1 promotion. origin 54.7% / masterbot 62.5% (both up vs K=1 49.5/58.3); val-acc 71.6%, tripwire quiet | promote-unless-collapse: collapse False + tripwire quiet + parity PASS | the K=2 entry above; `eval/promote_candidate.ps1 -K 2`; this main promote commit / dave `fe41ed8b` |
 | 2026-06-17 | **PROMOTED iter-3 → parent** (net-hash delta: `neural_weights_rl_iter2.bin` → `neural_weights_rl_iter3.bin`, sha `76eedbb4…`): SECOND Phase-1 promotion + first candidate trained from a PROMOTED (non-v221) parent — the promoting loop closes. origin 52.1% / masterbot 58.3% (down from K=2's 54.7/62.5 but inside the wide per-iter CIs; cumulative +2.1pp origin over v221); val-acc 71.6%, tripwire quiet. **Survived a mid-iteration VSCode auto-restart** (orphaned `run_eval.py` finished the eval; stage-8 telemetry backfilled directly) | promote-unless-collapse: collapse False + tripwire quiet + parity PASS | the K=3 entry above; `eval/promote_candidate.ps1 -K 3`; this main promote commit / dave `ad55d68a` |
+| 2026-06-17 | **PROMOTED iter-4 → parent** (net-hash delta: `neural_weights_rl_iter3.bin` → `neural_weights_rl_iter4.bin`, sha `67dec168…`): THIRD Phase-1 promotion. origin 50.0% / masterbot 62.5%. **Origin trend across the 3 promotions = 54.7→52.1→50.0 (cumulative gain over v221 decayed +4.7pp → ~0pp) — within per-iter noise but motivating a POWERED CHECKPOINT before continuing**; val-acc 71.5%, tripwire quiet | promote-unless-collapse: collapse False + tripwire quiet + parity PASS | the K=4 entry above; `eval/promote_candidate.ps1 -K 4`; this main promote commit / dave `1e7a2ff8` |
 
 ---
 
