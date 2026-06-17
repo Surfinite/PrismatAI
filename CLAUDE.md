@@ -11,7 +11,7 @@
 
 ## Current Status (June 17, 2026)
 
-**RL campaign REGIME v4 "proof-of-life" — Phase-1 PROMOTING loop LIVE; first promotion landed (Jun 17).**
+**RL campaign REGIME v4 "proof-of-life" — Phase-1 ran K=1–4, K=2/3/4 PROMOTED (parent now `neural_weights_rl_iter4.bin`); first powered checkpoint validated the loop; campaign PAUSED for owner reassessment (Jun 17).**
 Reframed (Jun 14) from the IG-axis measurement campaign to a general DSNN-improvement /
 fix-MasterBot-mistakes framework: ONE general self-play block (516 rounds ≈ 1032 games), **EpsilonLate
 0.05 / EpsilonIG 0** (IG over-click already fixed by action-space widening), NoIG interior iterator
@@ -24,11 +24,25 @@ RL_Eval_origin never moves). Preflight **19 checks**. Contract: `campaign_frozen
 spec `docs/superpowers/specs/2026-06-14-rl-loop-proof-of-life-reframe-design.md`; operate via
 `eval/rl_runbook.md`.
 
-**Phase-1 is RUNNING (promote-unless-collapse; powered origin+masterbot checkpoint at K=3–5 via
-`eval/run_checkpoint.ps1`).** Phase-0 (fixed-generator validation, K=1) passed; **K=2 PROMOTED (Jun 17)**
-— first candidate to BEAT v221 (origin 54.7% / masterbot 62.5%, both up vs K=1's 49.5/58.3). **⚠️ The RL
-parent net is NO LONGER v221** — it is whatever `campaign_frozen.json` `parent_bin` + the latest
-`eval/campaign_log.md` entry say (currently `neural_weights_rl_iter2.bin`). Logbook: `eval/campaign_log.md`.
+**Phase-1 PAUSED at parent `neural_weights_rl_iter4.bin` (Jun 17).** Phase-0 (K=1, fixed generator) passed;
+**K=2/3/4 all PROMOTED** (promote-unless-collapse; per-iter origin vs v221 = 54.7 / 52.1 / 50.0, masterbot
+62.5 / 58.3 / 62.5; all collapse False, tripwire quiet, parity PASS). The **first powered checkpoint**
+(`run_checkpoint.ps1`, 384 games/anchor) on rl_iter4: **origin 52.3% [0.47–0.57] vs v221, masterbot 67.3%
+[0.62–0.72], B8 no-forgetting, collapse False** — resolves the per-iter origin "decline" as NOISE (lineage ≥
+parity, clearly strong vs MasterBot); loop is **healthy** with a MODEST (~+2pp powered) v221-relative gain =
+proof-of-life as designed. **Owner chose PAUSE & reassess** (open menu: N-sweep / continue K=5+ / pivot to a
+concrete MasterBot-mistake axis). **⚠️ The RL parent is `neural_weights_rl_iter4.bin` (67dec168…)** — always
+read `campaign_frozen.json` `parent_bin` + the latest `eval/campaign_log.md` entry, never assume. Resume any
+direction cleanly from rl_iter4. Logbook: `eval/campaign_log.md`.
+
+**Steam drop-in: per-checkpoint bundle builder + FORCE_DSNN fidelity fix (Jun 17).** `eval/build_steam_bundle.ps1
+-Label <name>` packages any net (default = frozen lineage head) into `C:/libraries/DSNN_steam_bundles/<name>/`
+— a **self-describing** (`use_dsnn.txt` `weights=` key; no env var, no renamed `.bin`), **self-verifying**
+DSNN drop-in. Engine `dave@50977510` (re-pin main `d94908b9`): the FORCE_DSNN deploy path gained the `weights=`
+key **AND** its interior iterator `HardIterator_5var` → **`HardIterator_5var_NoIG`** — the deployed bot now plays
+the campaign's trained/measured NoIG-interior action space (closes the RL-vs-deployed asymmetry; bundles ≤ v221
+shipped the IG-included, unmeasured interior). a6 + three-way UNCHANGED (FORCE_DSNN unused in self-play/eval).
+First bundle built + verified: `DSNN_steam_bundles/v221_rl_iter4`.
 
 **Self-play/eval stalemate draw rule SHIPPED + validated live (Jun 17)** — a frozen game ends early as a
 0.5 draw + self-play trims the frozen tail; the first Phase-1 run had **0 games hit the 200-turn cap (vs 3
@@ -208,6 +222,7 @@ python training/export_weights_v2.py \
 - **Two git remotes**: `origin` = davechurchill upstream, `PrismatAlpha` = user's fork. Push to `PrismatAlpha`.
 - **`PrismataAI-dave-master` is a git WORKTREE of the main repo, not a clone** (started as a fork; now `git worktree add`-ed). It SHARES main's `.git` (object store + branch namespace): its `.git` is a file → `gitdir: …/PrismataAI/.git/worktrees/PrismataAI-dave-master`, `git-common-dir` = main's `.git`. Several dave-* worktrees exist (`git worktree list` from main: `dave-master`, `dave-fixes`, `dave-mc`, `dave-preport`) at sibling `C:/libraries/PrismataAI-dave-*` paths (NOT under `.worktrees/`). So commits in either repo share one object DB; both branches (`feature/production-vectors`, `dave-master-jsonclean`) track `PrismatAlpha`; helper scripts that use `git rev-parse --git-path` resolve under main's `.git/worktrees/`.
 - **Deployable `neural_weights_*.bin` are git-tracked in the MAIN repo `bin/asset/config/`**; a working copy lives in `dave-master/bin/asset/config/` (where the dave engine reads). Export to dave-master; commit the tracked copy in main.
+- **Steam drop-in bundles (per checkpoint)**: `eval/build_steam_bundle.ps1 -Label <name>` packages a net (default = frozen lineage head) → `C:/libraries/DSNN_steam_bundles/<name>/`; **self-describing** (`use_dsnn.txt` `weights=<bin>` key — precedence `use_dsnn.txt weights=` > `PRISMATA_DSNN_WEIGHTS` env > built-in default; no env var / no renamed `.bin`) + **self-verifying** (drives FORCE_DSNN, asserts the net loads + `treeIterator=HardIterator_5var_NoIG` + `mappedTypes>0` + a move). FORCE_DSNN deploy path (engine `dave@50977510`+) = root `HardIterator_5var_IGsubset_Root` + interior **`HardIterator_5var_NoIG`** (now matches the campaign's measured action space; bundles ≤ v221 used the IG-included interior). The script REFUSES an exe whose sha ≠ frozen pin → re-pin after any rebuild first. Bundles live OUTSIDE the repo (not tracked). Detail: `eval/rl_runbook.md` "Building a Steam bundle".
 - **Branch can switch unexpectedly**: Always `git branch --show-current` before branch-dependent operations.
 - **Config tournament toggles**: Check `"run":true` in `config.txt` before launching.
 - **Feature schema contract (DeepSets, current = v2.2.1)**: doc `docs/dsnn-feature-schema.md`; machine source `training/schema_v2.json` + `training/property_table.json`. Token = 32 embed + **37 static** + 10 instance = **79**; **15 globals** (incl. `under_attack`); value head 303. `schema_version` stays `v2` (= DeepSets generation); use `feature_revision` for additive changes. **Static props flow via the DSN2 `.bin` header → no C++ edit**; a GLOBAL change needs `vectorize_v2.py` + the per-global *construction* in dave-master `NeuralNet.cpp` (`evaluateValue` build + the `if (num_global>=N)` guard) + bumping `model_deepsets.py`'s default `num_global`. The global *count* now auto-derives from the value-head width at load (`NeuralNet.cpp` `COMBINED`/dump loop, `export_weights_v2.py`, `compare_parity_deepsets.py`) — no manual count edits. Engine loads either supported count (14 or 15) from the `.bin`; a width implying an unsupported count warns (`dave@481f916`).
