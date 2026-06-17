@@ -9,9 +9,34 @@
 
 **This repo's `source/engine` + `source/ai` are the clean-room `engine_v2`, which is INDICTED** (~33 pts weaker than Dave's original — see *Parity-Gap Experiments* below / `docs/deepsets-training-results.md`). **Do NOT read, build, or modify it for AI or engine work — it is legacy.** The current, strong engine + AI is **engine_v1 in the SEPARATE repo `c:/libraries/PrismataAI-dave-master` (branch `dave-master-jsonclean`, builds x64/v145).** Query/run it via `node js_engine/query_move.js … --dave-exe c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe`. **THIS** repo (`feature/production-vectors`) is for **training (`training/`), the JS engine (`js_engine/`), eval (`eval/`), and docs** — not the C++ engine. ⚠️ The "How to Build and Run" section below builds **engine_v2** and is **legacy**; don't follow it for current work.
 
-## Current Status (June 13, 2026)
+## Current Status (June 17, 2026)
 
-**RL campaign REGIME v3 — third audit implemented, RUN-READY (Jun 12–13).** The third (design-level)
+**RL campaign REGIME v4 "proof-of-life" — Phase-1 PROMOTING loop LIVE; first promotion landed (Jun 17).**
+Reframed (Jun 14) from the IG-axis measurement campaign to a general DSNN-improvement /
+fix-MasterBot-mistakes framework: ONE general self-play block (516 rounds ≈ 1032 games), **EpsilonLate
+0.05 / EpsilonIG 0** (IG over-click already fixed by action-space widening), NoIG interior iterator
+`HardIterator_5var_NoIG`, replay window **W=2**, NO SWA (candidate = `final_model.pt`), rehearsal 0.10
+elite. Eval = TWO same-path anchors: **origin** (cand vs the PERMANENT v221 `RL_Eval_origin`) =
+relative-drift + the **collapse** signal (collapse iff origin general WR < 0.35); **masterbot** (cand vs
+the AB SWF-faithful `MasterBot_SWF`) = absolute-strength trend. NO REJECT/REVIEW verdict —
+**promote-unless-collapse** via `eval/promote_candidate.ps1` (repoints the TWO pins RL_Eval + RL_SelfPlay;
+RL_Eval_origin never moves). Preflight **19 checks**. Contract: `campaign_frozen.json` (tuple_version 4) +
+spec `docs/superpowers/specs/2026-06-14-rl-loop-proof-of-life-reframe-design.md`; operate via
+`eval/rl_runbook.md`.
+
+**Phase-1 is RUNNING (promote-unless-collapse; powered origin+masterbot checkpoint at K=3–5 via
+`eval/run_checkpoint.ps1`).** Phase-0 (fixed-generator validation, K=1) passed; **K=2 PROMOTED (Jun 17)**
+— first candidate to BEAT v221 (origin 54.7% / masterbot 62.5%, both up vs K=1's 49.5/58.3). **⚠️ The RL
+parent net is NO LONGER v221** — it is whatever `campaign_frozen.json` `parent_bin` + the latest
+`eval/campaign_log.md` entry say (currently `neural_weights_rl_iter2.bin`). Logbook: `eval/campaign_log.md`.
+
+**Self-play/eval stalemate draw rule SHIPPED + validated live (Jun 17)** — a frozen game ends early as a
+0.5 draw + self-play trims the frozen tail; the first Phase-1 run had **0 games hit the 200-turn cap (vs 3
+in Phase-0)**. Mechanism + files: see the Engine & Build gotchas.
+
+## Status history (superseded)
+
+**RL campaign REGIME v3 — third audit implemented, RUN-READY (Jun 12–13) [SUPERSEDED by v4].** The third (design-level)
 audit (`docs/superpowers/plans/2026-06-12-rl-loop-design-audit-FINDINGS.md`) found the loop
 mechanically green but structurally unable to resolve its own output (~78 optimizer steps/iter vs
 ±8.7pp eval resolution; ~zero IG counterfactuals; no promotion policy). ALL J1–J7 owner decisions +
@@ -29,8 +54,6 @@ rounds-CSV. **Bonus catch:** extending the three-way gate's fixtures (frozen/dam
 states) caught + fixed a REAL fifth v2.2.1-class skew (`is_blocking` was 1 on frozen units in both
 C++ legs; the faithful JS engine says 0). Tests 218/218; the campaign logbook + decision ledger is
 **`eval/campaign_log.md`**. First real run: `eval/run_iteration.ps1 -K 1`.
-
-## Status history (superseded)
 
 **RL loop audited, remediated, RUN-READY (Jun 9–12).** Two independent cold-start audits + a verification sweep + three fix batches landed (main `2654e21..1a9788d`, dave `26075fa..eb52fa8`, all pushed to PrismatAlpha). Headlines: `train.py --rl-mode` now **WARM-STARTS** (`--init-weights` required — it previously trained every iteration from RANDOM init, the E1 bug; iter-1 parent = `training/models/deepsets_v221/swa_model.pt`, sha-verified == the deployed v221 bin); the GO gate is replaced by a **REJECT/REVIEW/INCOMPLETE verdict** (detect-proven-harm + human decision; nothing auto-promotes); the engine **hard-fails** on config mistakes (unknown books/filters/iterators/players, NN load failures); the dave config is **SWF-faithful** (buy tree incl. `BuyEconFast`, 4-entry `DefaultOpeningBook`; EconLimits matched=untouched); the campaign tuple is **FROZEN** in `eval/campaign_frozen.json` (**N=1000, τ=0.7, K=12, εlate=0.05 "regime v2"**, ⅔ general + ⅓ forced-Hotel self-play mix, Threads:8) and asserted by `eval/preflight_config.py` (stage 0, 10 checks — never rewrites config); the steam anchor pits the candidate vs the genuine **2016 MasterBot at `c:/libraries/prismata_baselines/masterbot2016/`**; tournament HTML now carries **per-seat P1/P2 W/G columns** with slot-indexed attribution. The infamous "25.8% iter0" was the random-init candidate vs v221 — the harness is sound (identical players = exactly 50%, proven four ways). Operate via **`eval/rl_runbook.md`**; first real run: `eval/run_iteration.ps1 -K 1`. Record: the two FINDINGS docs + `docs/superpowers/plans/2026-06-11-rl-fixes-verification.md` (resolution table added Jun 12).
 
@@ -72,7 +95,7 @@ A C++ game engine and AI for **Prismata**, a turn-based perfect-information stra
 
 ## User Preferences
 
-- **Cost-conscious** — prefer local compute, minimize cloud spend
+- **Cost-conscious about AWS / cloud spend ONLY** — prefer local compute, minimize cloud (AWS) spend. This does **NOT** extend to Claude/Anthropic usage: sessions rarely hit the 5-hour usage cap, so **never restrict Workflow, subagents, model choice, or how thoroughly a session works on token-cost grounds.** Token cost is not a constraint on Claude Code usage.
 - Git comfort: "noob" — not well versed with git, so **proactively recommend the best-practice approach and explain the why briefly** instead of waiting to be asked. Don't ask permission for routine local work (branching, staging, committing) — just do it sensibly and say what you did. Only pause to confirm before actions that leave the machine or are hard to undo: pushing to a remote, force-pushing, or history rewrites (rebase, `reset --hard`, filter-repo). Push to the `PrismatAlpha` fork, never the `davechurchill` upstream, and never open PRs against upstream.
 - The user is "Surfinite" everywhere
 
@@ -178,9 +201,12 @@ python training/export_weights_v2.py \
 - **Binary staleness: never infer from mtime vs commit time** (build-before-commit is the norm here). Grep the exe for a new diagnostic string instead, e.g. `grep -c "FATAL: AIParameters" bin/Prismata_Testing.exe`.
 - **Isolated engine experiments**: copy `Prismata_Testing.exe` + `asset/config/` into a scratch dir (+ empty `tests/`, `asset/training/`, `asset/replays/`) and run from there — e.g. `eval/_audit_scratch/bin_audit/`. Never edit the real `bin/asset/config/config.txt` for probes; the exe is self-contained (no DLLs).
 - **dave-master build (= "v145" = VS 18 / 2026; `cmake` NOT on PATH)**: `"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" build/Prismata_Standalone.vcxproj //p:Configuration=Release //p:Platform=x64 //m //v:minimal` (also `build/Prismata_Testing.vcxproj`). Output → `bin/`. `bin/PrismataAI.exe` is a manual copy of `Prismata_Standalone.exe` (not a CMake target).
+- **dave-master has NO C++ unit-test framework** (no gtest); unit-test pure C++ via a standalone `bin/PrismataAI.exe --test-X` PASS/FAIL probe in `source/standalone/main.cpp` (pattern `--test-rng`/`--test-sampler`/`--test-stalemate`). A header-only struct + a probe needs no `.vcxproj` edit. **After ANY dave-master rebuild: re-pin `engine_testing_exe_sha256`/`engine_prismataai_exe_sha256` in `campaign_frozen.json` + re-run a6/three-way**, or preflight's `engine_sha`/`correctness_gates` fail. Build heavy (~min) — batch C++ edits, build once; C++ tasks can be committed un-built (the build is a separate gate).
+- **Self-play/eval stalemate draw rule (LIVE 2026-06-17)**: a frozen game (board `(owner,cardType)` multiset over LIVE units unchanged for `StalemateThreshold`=40 plies) ends early as a 0.5 draw; self-play ALSO trims the frozen tail (kept-length `total_plies`; eval is early-end only). C++: `source/testing/StalemateTracker.h` + the `TournamentGame.cpp` loop (`buildPopulationMultiset`) + `SelfPlayV2Exporter::finalize` trim + `Tournament` reads `StalemateThreshold`. Python oracle (the C++ MUST mirror it): `eval/stalemate.py`; probe `--test-stalemate`. Frozen `selfplay_stalemate_threshold` (scale-tier) + preflight `check_stalemate_threshold`. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-16-selfplay-stalemate-draw-policy*`.
 - **Internal name system**: Engine uses codenames (e.g., "Tesla Tower" = Tarsier, "Brooder" = Blastforge). Full mapping in `cardLibrary.jso`.
 - **AS3↔C++ naming dictionary**: `role`=`CardStatus`, `disruptDamage`=`m_currentChill`, `MOVE_MELEE`=`ASSIGN_FRONTLINE`, `glassBroken`=breach flag (not a phase — no `Phases::Breach` equivalent in JS), `MOVE_ASSIGN`=`USE_ABILITY`, `MOVE_DEFEND`=`ASSIGN_BLOCKER`. Full dictionary in `docs/plans/engine-logic-audit-plan.md`.
 - **Two git remotes**: `origin` = davechurchill upstream, `PrismatAlpha` = user's fork. Push to `PrismatAlpha`.
+- **`PrismataAI-dave-master` is a git WORKTREE of the main repo, not a clone** (started as a fork; now `git worktree add`-ed). It SHARES main's `.git` (object store + branch namespace): its `.git` is a file → `gitdir: …/PrismataAI/.git/worktrees/PrismataAI-dave-master`, `git-common-dir` = main's `.git`. Several dave-* worktrees exist (`git worktree list` from main: `dave-master`, `dave-fixes`, `dave-mc`, `dave-preport`) at sibling `C:/libraries/PrismataAI-dave-*` paths (NOT under `.worktrees/`). So commits in either repo share one object DB; both branches (`feature/production-vectors`, `dave-master-jsonclean`) track `PrismatAlpha`; helper scripts that use `git rev-parse --git-path` resolve under main's `.git/worktrees/`.
 - **Deployable `neural_weights_*.bin` are git-tracked in the MAIN repo `bin/asset/config/`**; a working copy lives in `dave-master/bin/asset/config/` (where the dave engine reads). Export to dave-master; commit the tracked copy in main.
 - **Branch can switch unexpectedly**: Always `git branch --show-current` before branch-dependent operations.
 - **Config tournament toggles**: Check `"run":true` in `config.txt` before launching.
@@ -259,6 +285,7 @@ python training/export_weights_v2.py \
 ### Training
 
 - **DeepSets offline eval on an H5**: `eval/eval_deepsets_h5.py --model <best/swa_model.pt> --val-file <h5>` (reuses train.py `eval_epoch`; CPU default to avoid XPU contention; handles SWA ckpts). Legacy `training/evaluate_model.py` is flat-PrismataNet ONLY — won't load DeepSets. `mixed_35prop.bin`=14-global, `mixed_v22/v221.bin`=15-global (match weights' global count to the schema for `--dump-features`).
+- **V2 self-play H5 label columns are `label_A`/`label_B_weight`/`label_C`/`label_D`** (NOT `labels`/`outcome_p0` — those don't exist as H5 datasets); `label_A` is the ply-discounted training label, NOT the raw P0 win-rate. `total_plies` per record = the KEPT (stalemate-trimmed) game length. To read self-play P0 win-rate / game length, use `total_plies` + the per-record fields, not a `label_A` mean.
 - **`train.py --rl-mode` REQUIRES `--init-weights`** (warm-start from the parent `.pt`; hard-fails without — the E1 random-init bug guard). Warmup auto-rescales for short RL runs (`resolve_warmup`); pass `--swa-lr` explicitly (the default lr×0.1 equals the 1e-6 floor at the RL lr of 1e-5 — N-1 bug).
 - **RL self-play null-update trap**: `train.py --batch-size` default = 512 (with `drop_last`), so an RL iteration whose self-play yields < ~512 records runs **0 optimizer steps** → candidate bit-identical to the parent (stage-4.6 prediction-movement reads `dP=0.0`). `rounds:4` (~280 recs) hits this; smoke at `rounds>=64` (~4.5k recs); the real run is 516 rounds (~37.9k recs, ~95 min self-play, ~1.5 hr full eval).
 - **RL smoke override is TWO files**: to shrink a smoke, set BOTH dave `RL_SelfPlay_General.rounds` AND `campaign_frozen.json` `selfplay_rounds` (stage-0 preflight asserts they're EQUAL), run, then RESTORE both to 516. Eval-block volume (`RL_PoL_origin`/`RL_PoL_masterbot`, 48 rounds) is separate.
