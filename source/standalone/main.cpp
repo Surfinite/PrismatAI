@@ -293,6 +293,14 @@ int main(int argc, char *argv[])
         Prismata::DsnnConfig f = Prismata::parseDsnnConfig("think_time=-3\nmax_traversals=-1\n");
         check(f.thinkTimeMs < 0 && f.maxTraversals < 0, "negative values behave as unset");
 
+        // weights key (string value): unset by default; parsed; case-insensitive key; value trimmed.
+        check(d.weightsName.empty(), "empty file -> weights unset");
+        check(c.weightsName.empty(), "weights unset when key absent (think/traversal-only file)");
+        Prismata::DsnnConfig w = Prismata::parseDsnnConfig("Weights =  neural_weights_rl_iter4.bin \n");
+        check(w.weightsName == "neural_weights_rl_iter4.bin", "weights key case-insensitive + value trimmed");
+        Prismata::DsnnConfig w2 = Prismata::parseDsnnConfig("think_time=8000\nweights=foo.bin\n");
+        check(w2.thinkTimeMs == 8000 && w2.weightsName == "foo.bin", "weights coexists with think_time");
+
         printf("--test-dsnnconfig: %s\n", ok ? "PASS" : "FAIL");
         return ok ? 0 : 1;
     }

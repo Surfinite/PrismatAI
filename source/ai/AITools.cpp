@@ -54,6 +54,7 @@ DsnnConfig Prismata::parseDsnnConfig(const std::string & contents)
         {
             if      (key == "think_time")     { cfg.thinkTimeMs   = std::stoi(val); }
             else if (key == "max_traversals") { cfg.maxTraversals = std::stol(val); }
+            else if (key == "weights")        { cfg.weightsName   = val; }   // bare .bin filename; no throw
         }
         catch (...) { /* bad numeric value -> leave the default for that key only */ }
     }
@@ -252,10 +253,14 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
                 dsnnTimeLimit = defaultTimeLimit;
             }
 
+            // Weights precedence: use_dsnn.txt 'weights=' key (bundle-local, most specific)
+            // > PRISMATA_DSNN_WEIGHTS env (machine-global) > built-in default. A bundle's own
+            // use_dsnn.txt thus names the net it ships -- self-describing drop-in, no env var.
             const char * weightsEnv = std::getenv("PRISMATA_DSNN_WEIGHTS");
-            const std::string weightsName = (weightsEnv && weightsEnv[0] != '\0')
-                                          ? std::string(weightsEnv)
-                                          : std::string("neural_weights_mixed_v221.bin");
+            const std::string weightsName =
+                  (!dcfg.weightsName.empty())           ? dcfg.weightsName
+                : (weightsEnv && weightsEnv[0] != '\0') ? std::string(weightsEnv)
+                :                                         std::string("neural_weights_mixed_v221.bin");
 
             // Resolve weights against the exe dir first (Steam may launch with any CWD),
             // then the old CWD-relative fallbacks.
@@ -275,7 +280,12 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
                     && AIParameters::Instance().hasMoveIterator(Players::Player_Two, n);
             };
             std::string rootIterName = "HardIterator_5var_IGsubset_Root";
-            std::string treeIterName = "HardIterator_5var";
+            // Interior = the NoIG tree iterator, matching the RL campaign's MoveIterator: IG
+            // never auto-fires below root, so the net's root IG-count choice (0..N) is the ONLY
+            // IG decision -- the exact action space the deployed nets were trained + evaluated
+            // on. (The old "HardIterator_5var" let IG auto-fire at interior nodes -- an
+            // UNMEASURED, over-click-prone space; the RL_Eval pairing never used it.)
+            std::string treeIterName = "HardIterator_5var_NoIG";
             if (!hasIterBothPlayers(rootIterName) || !hasIterBothPlayers(treeIterName))
             {
                 fprintf(stderr, "FORCE_DSNN: IG-subset iterators not registered (config.txt missing?); using HardIterator\n");
@@ -318,8 +328,8 @@ std::string AITools::GetAIMove(const std::string & aiParamsString)
 
                 aiPlayer = PlayerPtr(new Player_UCT(activePlayer, params));
 
-                fprintf(stderr, "FORCE_DSNN: '%s' -> UCT+NeuralNet, weights=%s, timeLimit=%dms, maxTraversals=%ld, cValue=%.2f, rootIterator=%s\n",
-                        requestedName.c_str(), weightsName.c_str(), dsnnTimeLimit, dsnnTraversals, cval, rootIterName.c_str());
+                fprintf(stderr, "FORCE_DSNN: '%s' -> UCT+NeuralNet, weights=%s, timeLimit=%dms, maxTraversals=%ld, cValue=%.2f, rootIterator=%s, treeIterator=%s\n",
+                        requestedName.c_str(), weightsName.c_str(), dsnnTimeLimit, dsnnTraversals, cval, rootIterName.c_str(), treeIterName.c_str());
             }
             else
             {

@@ -12,6 +12,8 @@ namespace Prismata
     {
         int  thinkTimeMs   = -1;    // <0 = unset (requested TimeLimit, 7000->10000); 0 = no time cap
         long maxTraversals = -1;    // <0 = unset (100000); 0 = uncapped
+        std::string weightsName;    // empty = unset (then PRISMATA_DSNN_WEIGHTS env, else built-in default);
+                                    // a bare filename resolved against <exeDir>/asset/config/
     };
 
     // Pure parser: tolerant of UTF-8 BOM, CRLF, blank/# lines; case-insensitive keys;
