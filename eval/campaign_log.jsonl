@@ -12,3 +12,4 @@
 {"K":4,"resume_from":0,"ts":"2026-06-17T08:47:10","event":"start","parent_pt":"c:/libraries/PrismataAI/training/models/rl_iter_3/final_model.pt","parent_bin":"neural_weights_rl_iter3.bin"}
 {"stage_reached":8,"K":4,"ts":"2026-06-17T11:50:39","candidate_bin":"neural_weights_rl_iter4.bin","event":"complete","collapse":false}
 {"K":4,"new_parent_bin":"neural_weights_rl_iter4.bin","event":"promote","new_parent_sha256":"67dec1685bf32cd3af7071da782114a9e2fd47bf996f26752e1523e891f47225","val_acc_pct":71.5,"ts":"2026-06-17T11:53:36"}
+{"lineage_bin":"neural_weights_rl_iter4.bin","lineage_val_acc":71.5,"ts":"2026-06-17T18:41:32","label":"4","event":"checkpoint","origin_val_acc":71.8}

@@ -192,6 +192,34 @@ or abandoned attempts):
 - **Data disposition:** `rl_iter_4/` kept in window (rl_iter3-generated). `rl_iter_3/` slides out of the
   W=2 window after K=4 (window for K=5 = iter_4 + iter_5).
 
+### CHECKPOINT @ K=4 lineage head — 2026-06-17 — the powered v221-relative read
+
+- **What / why:** the FIRST powered checkpoint (`run_checkpoint.ps1`), triggered at K=4 (inside the
+  K=3–5 cadence) because the per-iter origin cells had drifted 54.7 → 52.1 → 50.0 and the per-iter ±10pp
+  resolution could not say whether that was real regression or noise. Evaluates the promoted lineage head
+  `neural_weights_rl_iter4.bin` (67dec168…) vs the PERMANENT v221 origin at 192 rounds/block.
+- **Manifest:** `eval/manifests/eval_iter_ckpt_k4.json` (dashboard row `ckpt_k4`). The per-iter
+  `eval_iter_4.json` remains the 96-game cell; this is the 384-game powered cell.
+- **Powered numbers (384 games/anchor, ~±5pp):** origin (vs v221) **201W/0D/384 = 52.3%** (CI 0.47–0.57);
+  masterbot (vs MasterBot_SWF) **258W/1D/384 = 67.3%** (CI 0.62–0.72). **B8 cumulative-forgetting guard:**
+  lineage val-acc **71.5%** vs the FIXED v221 constant 71.8% (within 5pp — no forgetting). collapse False.
+- **Verdict:** the per-iter origin "decline" was **NOISE, not regression** — the powered origin read is
+  **52.3% (CI 0.47–0.57)**: the lineage is at-least-parity and probably slightly ahead of v221 (the CI
+  grazes 50). Masterbot is clearly and increasingly strong (67.3%, well above 50 and higher than any
+  per-iter cell). No collapse, no forgetting → **the loop is healthy.** Honest caveat: the v221-relative
+  gain after 3 promotions is **MODEST (~+2pp powered, CI includes 0)** — consistent with "proof-of-life"
+  (a working, non-degenerate, slightly-improving loop), not a large RL win. Per-iter origin cells are
+  confirmed too noisy to read individually (as designed); THIS powered cell is the go/no-go evidence.
+- **Operational notes (both recovered, no data impact):** (1) the first checkpoint attempt (11:57) died
+  at 55 min on a **transient Windows file-lock** on the engine's periodic HTML progress-write (FATAL
+  `HTMLTable` append on an existing file, exit 0xC0000409); the `finally` cleanly restored config (rounds
+  → 48, no drift); the re-run completed. Durable fix if it recurs: a Defender exclusion on the dave `bin`
+  dir. (2) the checkpoint was first launched with `-Iteration 4`, which **clobbered the per-iter
+  `eval_iter_4.json`**; restored it (eval cells from the committed record; `action_coverage` regenerated
+  from the intact K=4 self-play — deterministic stats matched: ig_present_turns 566, ig_contrast_pairs 33)
+  and re-homed the checkpoint to `eval_iter_ckpt_k4.json`. Use `-Iteration 0` (timestamped) for future
+  checkpoints to avoid the per-iter name collision.
+
 ---
 
 ## Campaign-level decisions (one line per (config-hash, net-hash) delta — rl_campaign §5)
@@ -217,6 +245,7 @@ or abandoned attempts):
 | 2026-06-17 | **PROMOTED iter-2 → parent** (net-hash delta: `neural_weights_mixed_v221.bin` → `neural_weights_rl_iter2.bin`, sha `cb457e8…`): the FIRST Phase-1 promotion. origin 54.7% / masterbot 62.5% (both up vs K=1 49.5/58.3); val-acc 71.6%, tripwire quiet | promote-unless-collapse: collapse False + tripwire quiet + parity PASS | the K=2 entry above; `eval/promote_candidate.ps1 -K 2`; this main promote commit / dave `fe41ed8b` |
 | 2026-06-17 | **PROMOTED iter-3 → parent** (net-hash delta: `neural_weights_rl_iter2.bin` → `neural_weights_rl_iter3.bin`, sha `76eedbb4…`): SECOND Phase-1 promotion + first candidate trained from a PROMOTED (non-v221) parent — the promoting loop closes. origin 52.1% / masterbot 58.3% (down from K=2's 54.7/62.5 but inside the wide per-iter CIs; cumulative +2.1pp origin over v221); val-acc 71.6%, tripwire quiet. **Survived a mid-iteration VSCode auto-restart** (orphaned `run_eval.py` finished the eval; stage-8 telemetry backfilled directly) | promote-unless-collapse: collapse False + tripwire quiet + parity PASS | the K=3 entry above; `eval/promote_candidate.ps1 -K 3`; this main promote commit / dave `ad55d68a` |
 | 2026-06-17 | **PROMOTED iter-4 → parent** (net-hash delta: `neural_weights_rl_iter3.bin` → `neural_weights_rl_iter4.bin`, sha `67dec168…`): THIRD Phase-1 promotion. origin 50.0% / masterbot 62.5%. **Origin trend across the 3 promotions = 54.7→52.1→50.0 (cumulative gain over v221 decayed +4.7pp → ~0pp) — within per-iter noise but motivating a POWERED CHECKPOINT before continuing**; val-acc 71.5%, tripwire quiet | promote-unless-collapse: collapse False + tripwire quiet + parity PASS | the K=4 entry above; `eval/promote_candidate.ps1 -K 4`; this main promote commit / dave `1e7a2ff8` |
+| 2026-06-17 | **CHECKPOINT @ K=4 lineage head** (powered, 384g/anchor): origin (vs v221) **52.3%** CI 0.47–0.57; masterbot (vs SWF-AB) **67.3%** CI 0.62–0.72; B8 lineage val-acc 71.5% vs fixed-v221 71.8% (no forgetting); collapse False. **Resolves the per-iter origin drift (54.7→52.1→50.0) as NOISE** — lineage ≥ parity vs v221, clearly strong vs MasterBot. Modest v221-relative gain (~+2pp, CI∋0) = proof-of-life healthy → continue | first powered checkpoint (run_checkpoint.ps1) per the K=3–5 cadence | the CHECKPOINT entry above; `eval/manifests/eval_iter_ckpt_k4.json` |
 
 ---
 
