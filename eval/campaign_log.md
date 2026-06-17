@@ -78,6 +78,38 @@ or abandoned attempts):
 - **Data disposition:** `rl_iter_1/` kept in window (parent-generated). The `rounds:4` smoke + recovery
   artifacts are preserved in `training/data/_orphans/rl_iter_1_*`.
 
+### Iteration K=2 — 2026-06-17 — PROMOTED (Phase 1, first promoting iteration)
+
+- **Regime:** v4 "proof-of-life" (tuple_version 4); first **Phase-1** promoting iteration.
+- **Parent / generator:** `neural_weights_mixed_v221.bin` (22cc647…) — still the generator (nothing
+  promoted before K=2). W=2 window = iter_1 + iter_2, both v221-generated (coherent).
+- **Candidate:** `neural_weights_rl_iter2.bin` (cb457e8…) — warm-started from v221, 6 ep @ 1e-5, no SWA,
+  W=2, rehearsal 0.10 elite, on **37,606** self-play records / 1,032 general games. **First self-play
+  generated with the stalemate draw rule (StalemateThreshold:40) live.**
+- **Config identity:** dave config.txt @ `3663b5b7` (v4 + stalemate enabled); campaign_frozen.json @
+  `46a5dddc` (v4 + stalemate-freeze). [run-time, pre-promote — promotion advances both.]
+- **Manifest:** `eval/manifests/eval_iter_2.json` — **collapse: False**.
+- **Headline numbers:** origin (cand vs v221) **52W/1D/96 = 54.7%** (CI 0.45–0.64; paired 0.49–0.60);
+  masterbot (cand vs the AB SWF MasterBot) **60W/0D/96 = 62.5%** (CI 0.53–0.72). **Both up vs K=1**
+  (49.5% / 58.3%) — the candidate now beats v221 on the origin anchor.
+- **Watch-stats:** prediction-movement fixed-probe mean|dP| **0.0201** (NON-NULL; 4.64% winner-flips),
+  self-play probe 0.0175 (2.39% flips); val-acc candidate **71.6%** vs parent 71.8% (−0.2pp, tripwire
+  quiet); **game length max 105 / median 36 / mean 37.9 — ZERO 200-cap games (vs 3 in K=1): the
+  stalemate rule fired + trimmed on real self-play data** (~210 records in the trimmed band); export-parity
+  ALL PASS (worst ~1e-6); IG argmax mean 0.385, dist {0:24,1:15}; ig_contrast_pairs 29; root entropy 1.87.
+  Self-play P0 win-rate not separately recomputed (H5 carries the discounted `label_A`); ~0.34 expected
+  (set/strength-dependent, audit-known); candidate non-degeneracy confirmed by winning both seats in eval.
+- **Decision + reasoning:** **PROMOTED** per the frozen promote-unless-collapse policy — collapse False
+  (origin 54.7% ≫ abort 0.35), val-acc tripwire quiet, parity PASS, prediction-movement non-null. This is
+  the first candidate to BEAT v221 on origin (54.7% > 50%) AND lift the masterbot trend (58.3→62.5%) — a
+  genuine one-iteration gain. CAVEAT: the per-iteration origin CI is wide [0.45,0.64] and is non-trivially
+  powered only at the **checkpoint cadence (K=3–5, `run_checkpoint.ps1`)** — treat +5pp as encouraging,
+  confirm at the checkpoint; do NOT over-read a single iteration. Parent advanced v221 → rl_iter2; K=3 now
+  generates with rl_iter2.
+- **Anomalies / deviations:** none. First run with the stalemate rule live — clean (no 200-cap games).
+- **Data disposition:** `rl_iter_2/` kept in window (v221-generated). `rl_iter_1/` slides out of the
+  window after K=2.
+
 ---
 
 ## Campaign-level decisions (one line per (config-hash, net-hash) delta — rl_campaign §5)
@@ -99,6 +131,8 @@ or abandoned attempts):
 | 2026-06-12 | **J7 DECIDED (a)**: two-tier tuple — HP knobs (N, τ, K, ε, c, schedule) = new-campaign tier; scale knobs (rounds, seed policy, eval n) = re-anchor-only tier; encode in campaign_frozen.json | future volume tuning stays cheap and legal | audit §6, selfplay-06 |
 | 2026-06-14 | **REFRAME to proof-of-life (tuple v4)**: drop IG-measurement (EpsilonIG→0 / forced-Hotel block unused / no IG verdict-pool); restore EpsilonLate=0.05; NoIG interior iterator (`HardIterator_5var_NoIG`, M1 fixed cheaply); W 5→2; anchors = origin + `MasterBot_SWF` same-path AB (steam retired); collapse boolean + promote-unless-collapse (no REJECT/REVIEW); two-phase run (fixed-generator smoke → promoting loop). **IG over-click logged as fixed-by-action-space-widening (audit C1)** — no axis under test | the IG premise collapsed for the IG axis (C1); owner reframes the loop as a GENERAL DSNN-improvement / fix-MasterBot-mistakes framework, IG is proof-of-life | **`docs/superpowers/specs/2026-06-14-rl-loop-proof-of-life-reframe-design.md`** (+ impl plan `…-implementation.md`); `campaign_frozen.json` v4; main 67992a9e |
 | 2026-06-16 | **`render_dashboard.py` v3 stale-columns RESOLVED** (Task 13b): the dashboard now renders the v4 `collapse` / `origin(vs v221)` / `masterbot(vs SWF-AB)` / `ig(sp/argmax)` columns; the verdict/iter0/forced/narrow/steam columns flagged in the K=1 entry are gone | the K=1 entry's anomaly (4) | main 67992a9e; the K=1 entry's anomaly (4) is now closed |
+| 2026-06-16/17 | **Stalemate draw rule SHIPPED** (`selfplay_stalemate_threshold:40`, SCALE-tier): self-play **and** eval end a frozen game early as a 0.5 draw when the board `(owner,cardType)` multiset is unchanged for 40 plies; self-play also trims the frozen tail from the training shard (kept-length stamped). Engine rebuilt (TournamentGame/SelfPlayV2Exporter/Tournament), `engine_*_exe_sha256` re-pinned, a6 + three-way re-run UNCHANGED (no GameState/feature/value change). Frozen + preflight-asserted. **Validated live on K=2: max game length 105 plies, ZERO 200-cap games (vs 3 in K=1).** | data quality + speed (the 3 Phase-0 cap-draws were ~70% frozen junk); mirrors the SWF "Claim Draw" stalemate ladder's binding kill-cutoff | spec/plan `docs/superpowers/{specs,plans}/2026-06-16-selfplay-stalemate-draw-policy*`; main `46a5dddc` / dave `3663b5b7` |
+| 2026-06-17 | **PROMOTED iter-2 → parent** (net-hash delta: `neural_weights_mixed_v221.bin` → `neural_weights_rl_iter2.bin`, sha `cb457e8…`): the FIRST Phase-1 promotion. origin 54.7% / masterbot 62.5% (both up vs K=1 49.5/58.3); val-acc 71.6%, tripwire quiet | promote-unless-collapse: collapse False + tripwire quiet + parity PASS | the K=2 entry above; `eval/promote_candidate.ps1 -K 2`; this main promote commit / dave `fe41ed8b` |
 
 ---
 

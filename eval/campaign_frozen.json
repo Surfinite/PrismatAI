@@ -8,10 +8,10 @@
   "EpsilonLate": 0.05,
   "EpsilonIG": 0.0,
   "UCTConstant": 0.3,
-  "parent_bin": "neural_weights_mixed_v221.bin",
-  "parent_bin_sha256": "22cc647ee7b7427e79bde539f331979ce5d95eec309d69495a1ba2fc88c57e97",
-  "parent_pt": "training/models/deepsets_v221/swa_model.pt",
-  "parent_val_acc_pct": 71.8,
+  "parent_bin": "neural_weights_rl_iter2.bin",
+  "parent_bin_sha256": "cb457e8279d679e0caec2cb327ded990d34a13e2a75f266855eaf49e06233bae",
+  "parent_pt": "training/models/rl_iter_2/final_model.pt",
+  "parent_val_acc_pct": 71.6,
   "origin_bin": "neural_weights_mixed_v221.bin",
   "origin_val_acc_pct": 71.8,
   "engine_testing_exe_sha256": "1403ad62b01b751d2fd461fb0f3134ccaa64df54968619b2782553460649a12b",
@@ -22,23 +22,68 @@
   "selfplay_seed_base": 5600,
   "candidate_interior_iterator": "HardIterator_5var_NoIG",
   "candidate_root_iterator": "HardIterator_5var_IGsubset_Root",
-  "eval_budget": { "TimeLimit": 7000, "MaxTraversals": 100000, "UCTConstant": 0.3 },
+  "eval_budget": {
+    "TimeLimit": 7000,
+    "MaxTraversals": 100000,
+    "UCTConstant": 0.3
+  },
   "anchor_blocks": {
-    "RL_PoL_origin":    { "rounds": 48, "Seed": 2026, "Threads": 8 },
-    "RL_PoL_masterbot": { "rounds": 48, "Seed": 2026, "Threads": 8 }
+    "RL_PoL_origin": {
+      "rounds": 48,
+      "Seed": 2026,
+      "Threads": 8
+    },
+    "RL_PoL_masterbot": {
+      "rounds": 48,
+      "Seed": 2026,
+      "Threads": 8
+    }
   },
   "abort_winrate_vs_origin": 0.35,
   "replay_window": 2,
-  "train_schedule": { "epochs": 6, "lr": 1e-05, "swa": false, "rehearsal_start": 0.10, "rehearsal_floor": 0.10, "rehearsal_decay": 0.0 },
+  "train_schedule": {
+    "epochs": 6,
+    "lr": 1E-05,
+    "swa": false,
+    "rehearsal_start": 0.1,
+    "rehearsal_floor": 0.1,
+    "rehearsal_decay": 0.0
+  },
   "rehearsal_file": "training/data/human_elite_2000_45s_v2.h5",
   "tripwire_val_file": "training/data/human_val_1700_50k_v2.h5",
   "prediction_movement_floor": 0.001,
-  "game_length_band": [25, 60],
+  "game_length_band": [
+    25,
+    60
+  ],
   "selfplay_stalemate_threshold": 40,
   "promotion_policy": "promote-unless-collapse: Phase 0 = no promotion (fixed generator). Phase 1 = promote every candidate UNLESS the run aborted (crash / val-acc collapse / winrate-vs-origin < abort_winrate_vs_origin / degenerate self-play).",
   "tiers": {
-    "hp": ["frozen_N","TemperatureK","TemperatureTau","EpsilonUniform","EpsilonLate","EpsilonIG","UCTConstant","eval_budget","train_schedule","rehearsal_file","tripwire_val_file","promotion_policy","candidate_interior_iterator","candidate_root_iterator"],
-    "scale": ["selfplay_threads","selfplay_rounds","selfplay_seed_base","anchor_blocks","replay_window","abort_winrate_vs_origin","selfplay_stalemate_threshold"],
+    "hp": [
+      "frozen_N",
+      "TemperatureK",
+      "TemperatureTau",
+      "EpsilonUniform",
+      "EpsilonLate",
+      "EpsilonIG",
+      "UCTConstant",
+      "eval_budget",
+      "train_schedule",
+      "rehearsal_file",
+      "tripwire_val_file",
+      "promotion_policy",
+      "candidate_interior_iterator",
+      "candidate_root_iterator"
+    ],
+    "scale": [
+      "selfplay_threads",
+      "selfplay_rounds",
+      "selfplay_seed_base",
+      "anchor_blocks",
+      "replay_window",
+      "abort_winrate_vs_origin",
+      "selfplay_stalemate_threshold"
+    ],
     "rule": "changing an 'hp' key = a NEW campaign; a 'scale' key = re-anchor + a campaign_log entry. parent_* via promote_candidate.ps1 only; origin_bin never changes."
   },
   "frozen_date": "2026-06-14"
