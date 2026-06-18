@@ -274,6 +274,28 @@ or abandoned attempts):
 - **Anomalies / deviations:** none (P0 wr recovered to 0.336, in regime).
 - **Data disposition:** `rl_iter_6/` kept in window (rl_iter5-generated). `rl_iter_5/` slides out after K=6.
 
+### Iteration K=7 — 2026-06-18 — PROMOTED (Phase 1, MA axis, 3rd MA-open iteration)
+
+- **Parent / generator:** `neural_weights_rl_iter6.bin` (01fa8b83…). Candidate `neural_weights_rl_iter7.bin`
+  (23803283…) — 6 ep @ 1e-5, no SWA, W=2, rehearsal 0.10 elite, **37,268** records / 1,032 games (Seed 5607).
+- **Manifest:** `eval/manifests/eval_iter_7.json` — **collapse: False**.
+- **Headline:** origin (vs v221) **44W/0D/96 = 45.8%** (CI 0.36–0.56; paired 0.39–0.52 — grazes 0.5);
+  masterbot **56W/0D/96 = 58.3%** (CI 0.48–0.68; paired 0.50–0.66).
+- **Watch-stats:** prediction-movement fixed 0.00757 (non-null; 1.27% flips), self-play 0.00563; val-acc 71.3
+  vs 71.4 (tripwire quiet); game length median 35 / mean 36.1 / max 75 — 0 cap; parity PASS (1.22e-04). P0 wr
+  **0.342** (continued recovery: 0.317→0.336→0.342).
+- **Decision + reasoning:** **PROMOTED** (promote-unless-collapse) — collapse False, tripwire quiet, parity
+  PASS, movement non-null. **⚠️ TREND FLAG: origin vs v221 across the 3 MA-open iters = 51.0→47.9→45.8**
+  (gentle monotonic decline through parity), with prediction-movement also shrinking (0.0097→0.0084→0.0076 =
+  lineage converging). This is the SAME shape the pre-MA campaign showed (54.7→52.1→50.0, powered-checkpoint-
+  resolved as NOISE @ 52.3%), and the masterbot ABSOLUTE anchor corroborates **no real degradation**
+  (61.5→59.4→58.3, still strong). Not over-reading 3 underpowered 96-game cells; **the K=8 powered checkpoint
+  is the arbiter** — central question now: is the MA lineage at parity vs v221, or has promote-unless-collapse
+  drifted it slightly below (the off-policy W=2 hazard)? Pre-commit: if the checkpoint origin is < ~0.45
+  powered (real sub-v221 drift), STOP promoting + reassess; if ~parity (à la K=4's 52.3%), it was noise.
+- **Anomalies / deviations:** none (gates green; the origin trend is a watch item, not an abort condition).
+- **Data disposition:** `rl_iter_7/` kept in window (rl_iter6-generated). `rl_iter_6/` slides out after K=7.
+
 ---
 
 ## Campaign-level decisions (one line per (config-hash, net-hash) delta — rl_campaign §5)
