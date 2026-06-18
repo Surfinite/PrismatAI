@@ -22,3 +22,6 @@
 {"event":"start","K":7,"resume_from":0,"parent_bin":"neural_weights_rl_iter6.bin","ts":"2026-06-18T14:59:30","parent_pt":"c:/libraries/PrismataAI/training/models/rl_iter_6/final_model.pt"}
 {"event":"complete","collapse":false,"K":7,"stage_reached":8,"candidate_bin":"neural_weights_rl_iter7.bin","ts":"2026-06-18T18:00:46"}
 {"K":7,"ts":"2026-06-18T18:02:50","new_parent_sha256":"2380328373ab6d07e3ed0ade898f8436cba822ef9f5113363a82faa97376f99f","val_acc_pct":71.3,"event":"promote","new_parent_bin":"neural_weights_rl_iter7.bin"}
+{"ts":"2026-06-18T18:03:37","parent_bin":"neural_weights_rl_iter7.bin","K":8,"event":"start","resume_from":0,"parent_pt":"c:/libraries/PrismataAI/training/models/rl_iter_7/final_model.pt"}
+{"event":"complete","ts":"2026-06-18T21:06:02","K":8,"candidate_bin":"neural_weights_rl_iter8.bin","stage_reached":8,"collapse":false}
+{"new_parent_bin":"neural_weights_rl_iter8.bin","K":8,"new_parent_sha256":"235b689dad8f8fd8234a0c02dc105bae6df64e6bc727e0dc8b4d27661a1b7688","ts":"2026-06-18T21:08:05","val_acc_pct":71.4,"event":"promote"}

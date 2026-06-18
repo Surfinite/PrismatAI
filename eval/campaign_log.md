@@ -296,6 +296,29 @@ or abandoned attempts):
 - **Anomalies / deviations:** none (gates green; the origin trend is a watch item, not an abort condition).
 - **Data disposition:** `rl_iter_7/` kept in window (rl_iter6-generated). `rl_iter_6/` slides out after K=7.
 
+### Iteration K=8 — 2026-06-18 — PROMOTED (Phase 1, MA axis, 4th MA-open iteration)
+
+- **Parent / generator:** `neural_weights_rl_iter7.bin` (23803283…). Candidate `neural_weights_rl_iter8.bin`
+  (235b689d…) — 6 ep @ 1e-5, no SWA, W=2, rehearsal 0.10 elite, **36,940** records / 1,032 games (Seed 5608).
+- **Manifest:** `eval/manifests/eval_iter_8.json` — **collapse: False**.
+- **Headline:** origin (vs v221) **50W/0D/96 = 52.1%** (CI 0.42–0.62; paired 0.45–0.59) — **RECOVERED**;
+  masterbot **56W/0D/96 = 58.3%** (CI 0.48–0.68; paired 0.49–0.67).
+- **Watch-stats:** prediction-movement fixed 0.00848 (non-null; 2.05% flips), self-play 0.00544; val-acc 71.4
+  vs 71.3 (tripwire quiet); game length median 35 / mean 35.8 / **max 200 — 1 cap game** (first since K=1);
+  parity PASS (3.66e-04, within combined tol). P0 wr **0.340** (stable in regime).
+- **Decision + reasoning:** **PROMOTED** (promote-unless-collapse). **The K=7 trend flag RESOLVED as noise:**
+  origin recovered 45.8→52.1, so the 4 MA-open cells read 51.0 / 47.9 / 45.8 / 52.1 = **oscillating around
+  parity**, not a monotonic decline — exactly the generator-insensitive fixed-point behaviour Campbell &
+  Churchill measured (thesis Exp 3: value models from different-strength generators are "quite similar";
+  Medium→Master 82%, Master→Master 89%) and the diminishing-returns regime they predicted for iterated
+  self-play (thesis §7.1). masterbot stable ~58%. **The K=8 powered checkpoint (next) is the arbiter** of the
+  MA thesis (≥5pp MIE).
+- **Anomalies / deviations:** **1/1032 self-play games hit the 200-turn cap** (first since K=1) — plausibly the
+  MA sac→rebuy churn keeping the live-unit multiset CHANGING so the frozen-multiset stalemate detector
+  (threshold 40) never trips (the predicted MA×stalemate interaction). 0.1% of games, non-degenerate overall
+  (median 35); non-blocking, noted as the MA-specific watch-stat materializing once.
+- **Data disposition:** `rl_iter_8/` kept in window (rl_iter7-generated). `rl_iter_7/` slides out after K=8.
+
 ---
 
 ## Campaign-level decisions (one line per (config-hash, net-hash) delta — rl_campaign §5)
