@@ -1,0 +1,410 @@
+[
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Mahar Rectifier",
+    "charge": 0,
+    "hp": 5,
+    "val": 52.480000000000004
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Tia Thurnax",
+    "charge": 3,
+    "hp": 4,
+    "val": 78.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Steelsplitter",
+    "charge": 0,
+    "hp": 3,
+    "val": 26.0
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Tia Thurnax",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.0
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  }
+]

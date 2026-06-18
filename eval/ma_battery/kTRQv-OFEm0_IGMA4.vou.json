@@ -1,0 +1,302 @@
+[
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Photonic Fibroid",
+    "charge": 0,
+    "hp": 2,
+    "val": 16.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Infusion Grid",
+    "charge": 0,
+    "hp": 4,
+    "val": 27.999997001
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Photonic Fibroid",
+    "charge": 0,
+    "hp": 2,
+    "val": 16.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Infusion Grid",
+    "charge": 0,
+    "hp": 4,
+    "val": 27.999997001
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Photonic Fibroid",
+    "charge": 0,
+    "hp": 2,
+    "val": 16.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Infusion Grid",
+    "charge": 0,
+    "hp": 4,
+    "val": 27.999997001
+  },
+  {
+    "unit": "Photonic Fibroid",
+    "charge": 0,
+    "hp": 2,
+    "val": 16.0
+  },
+  {
+    "unit": "Photonic Fibroid",
+    "charge": 0,
+    "hp": 2,
+    "val": 16.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Infusion Grid",
+    "charge": 0,
+    "hp": 4,
+    "val": 27.999997001
+  },
+  {
+    "unit": "Infusion Grid",
+    "charge": 0,
+    "hp": 4,
+    "val": 27.999997001
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Infusion Grid",
+    "charge": 0,
+    "hp": 4,
+    "val": 27.999997001
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Infusion Grid",
+    "charge": 0,
+    "hp": 4,
+    "val": 27.999997001
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  }
+]

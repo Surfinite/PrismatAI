@@ -220,6 +220,40 @@ or abandoned attempts):
   and re-homed the checkpoint to `eval_iter_ckpt_k4.json`. Use `-Iteration 0` (timestamped) for future
   checkpoints to avoid the per-iter name collision.
 
+### Iteration K=5 — 2026-06-18 — PROMOTED (Phase 1 — FIRST MA-axis iteration)
+
+- **Regime:** v4 "proof-of-life", now with the **MA axis OPEN** (re-anchor row in the decisions table:
+  IG_Only + Ability_Filter_Live_NoIG extended with Mobile Animus; MaxChildren 40→80). FIRST iteration
+  whose self-play + eval action space includes the IG×MA count cross-product.
+- **Parent / generator:** `neural_weights_rl_iter4.bin` (67dec168…) — generated the K=5 self-play with MA open.
+- **Candidate:** `neural_weights_rl_iter5.bin` (808bf5ec…) — warm-started from rl_iter4, 6 ep @ 1e-5, no SWA,
+  W=2, rehearsal 0.10 elite, on **37,432** self-play records / 1,032 general games (Seed 5605).
+- **Config identity:** dave config.txt @ MA-open + K=4 repoint; campaign_frozen.json parent=rl_iter4 (pre-promote).
+- **Manifest:** `eval/manifests/eval_iter_5.json` — **collapse: False**.
+- **Headline numbers:** origin (cand vs v221) **49W/0D/96 = 51.0%** (CI 0.41–0.61; paired 0.46–0.56);
+  masterbot (cand vs MasterBot_SWF) **59W/0D/96 = 61.5%** (CI 0.51–0.71; paired 0.53–0.70). Both essentially
+  flat vs K=4 (50.0% / 62.5%) — opening MA did NOT move the per-iter numbers, exactly as the prep widening
+  control predicted (v221≈iter4 on MA → widening, not learning, is the lever; per-iter is underpowered anyway).
+- **Watch-stats:** prediction-movement fixed-probe mean|dP| **0.00967** (NON-NULL > floor 0.001; 1.66% flips),
+  self-play probe 0.00793 (0.64% flips); val-acc candidate **71.4%** vs parent 71.5% (−0.1pp, tripwire quiet);
+  game length median **36** / mean 36.3 / max 95 — **ZERO 200-cap games** (37,432 records); export-parity PASS
+  (worst 6.1e-05). **P0 self-play win-rate 0.317** — marginally BELOW the [0.35,0.65] non-degeneracy band (see
+  anomalies). **MA coverage (crude, from replays): ~7.5% of self-play games involve Mobile Animus** (the proper
+  ma_present/ma_feasible_max stamp is IG-only today; a real distribution is deferred to a coverage-tool/exporter pass).
+- **Decision + reasoning:** **PROMOTED** per promote-unless-collapse — collapse False (origin 51.0% ≫ 0.35),
+  val-acc tripwire quiet, parity PASS, prediction-movement non-null. The first MA-open candidate is at parity
+  vs v221 (51.0%) and strong vs MasterBot (61.5%); no degradation from opening MA. Consistent with the
+  pre-registered expectation that the MA gain (if any) is modest and shows at the powered checkpoint, not in a
+  single per-iter cell. **P0 wr 0.317** treated as the audit-known P2 seat advantage (K=1 was 0.344; MA is
+  symmetric so it cannot create seat bias), NOT a degenerate generator (median length 36, 0 cap games, both
+  seats win substantially) — non-blocking, but flagged to watch across K=6–8. **MA coverage ~7.5%** is modest:
+  if the checkpoint shows no MA gain, low coverage + "widening does the work" is the likely explanation, and a
+  forced-MA curriculum block is the (not-yet-added) contingency lever.
+- **Anomalies / deviations:** (1) P0 self-play win-rate 0.317 < band lower bound 0.35 — accepted P2-advantage
+  regime, watch the trend. (2) MA coverage measured crudely (cardName scan over replays); a rigorous MA-click
+  distribution needs the ma_present exporter stamp or a replay-click parser — deferred (non-gating).
+- **Data disposition:** `rl_iter_5/` kept in window (rl_iter4-generated). `rl_iter_4/` slides out after K=5.
+
 ---
 
 ## Campaign-level decisions (one line per (config-hash, net-hash) delta — rl_campaign §5)
@@ -247,6 +281,8 @@ or abandoned attempts):
 | 2026-06-17 | **PROMOTED iter-4 → parent** (net-hash delta: `neural_weights_rl_iter3.bin` → `neural_weights_rl_iter4.bin`, sha `67dec168…`): THIRD Phase-1 promotion. origin 50.0% / masterbot 62.5%. **Origin trend across the 3 promotions = 54.7→52.1→50.0 (cumulative gain over v221 decayed +4.7pp → ~0pp) — within per-iter noise but motivating a POWERED CHECKPOINT before continuing**; val-acc 71.5%, tripwire quiet | promote-unless-collapse: collapse False + tripwire quiet + parity PASS | the K=4 entry above; `eval/promote_candidate.ps1 -K 4`; this main promote commit / dave `1e7a2ff8` |
 | 2026-06-17 | **CHECKPOINT @ K=4 lineage head** (powered, 384g/anchor): origin (vs v221) **52.3%** CI 0.47–0.57; masterbot (vs SWF-AB) **67.3%** CI 0.62–0.72; B8 lineage val-acc 71.5% vs fixed-v221 71.8% (no forgetting); collapse False. **Resolves the per-iter origin drift (54.7→52.1→50.0) as NOISE** — lineage ≥ parity vs v221, clearly strong vs MasterBot. Modest v221-relative gain (~+2pp, CI∋0) = proof-of-life healthy → continue | first powered checkpoint (run_checkpoint.ps1) per the K=3–5 cadence | the CHECKPOINT entry above; `eval/manifests/eval_iter_ckpt_k4.json` |
 | 2026-06-17 | **Engine rebuild + re-pin** (dave `50977510`): the FORCE_DSNN **Steam deploy path** gains a `use_dsnn.txt` **`weights=`** key (self-describing per-checkpoint bundles, no env var) AND its interior iterator `HardIterator_5var` → **`HardIterator_5var_NoIG`** — the deployed bot now plays the campaign's trained/measured NoIG-interior action space (root IG-subset 0..N + no interior IG auto-fire), closing the RL-vs-deployed asymmetry. `engine_*_exe_sha256` RE-PINNED (testing `c9fb0a64…`, prismataai `58478ec6…`). a6 (0.998/0.001/1.000/0.000) + three-way **UNCHANGED** (FORCE_DSNN is never used in self-play/eval → no measurement affected); `--test-dsnnconfig`/`--test-stalemate` PASS; preflight 19/19 | enable repeatable per-checkpoint Steam bundles + deploy fidelity to the measured action space | this main commit; dave `50977510`; builder `eval/build_steam_bundle.ps1` |
+| 2026-06-18 | **DOC CORRECTION (not a config/net delta): `label_A` is NOT ply-discounted.** It is the **raw game outcome** (`outcome_p0`; P0 win=1.0 / loss=0.0 / draw=0.5) stamped **identically on every ply** (`vectorize_v2.py::compute_labels`: `label_a = float(outcome_p0)`); the RL loop trains on **strategy A** (`train.py` default; `run_iteration.ps1` passes no override). The phrasing **"H5 carries the discounted `label_A`"** in the **K=1–K=4 iteration entries above** (and the now-fixed `CLAUDE.md` gotcha) is **WRONG**. Consequence for reading those entries: **nothing measured changes** — eval/checkpoint win-rates are C++ tournament OUTCOMES, not training labels — only the *interpretation* "late-game decisions carry discounted credit" is **retracted**; every ply receives full-weight outcome credit. To read self-play P0 win-rate from an H5, dedupe to one record/game (`ply_index==0`), NOT a record-weighted `label_A` mean (the mismatch is per-game record-count weighting, not discounting; cf. `eval/calibrate_n.py::metrics_from_h5`). | owner caught the doc error 2026-06-18; verified in code (`vectorize_v2.py:320-321`) | this row; `CLAUDE.md:303` fixed (this main commit) |
+| 2026-06-18 | **RE-ANCHOR — MA axis OPENED (config-only; K=5 onward).** Extended the subset/Click filter `IG_Only` → `["Infusion Grid","Mobile Animus"]` AND the NoIG interior exclusion `Ability_Filter_Live_NoIG` → `[...,"Mobile Animus"]` (the validated 2-filter edit, handoff §4.4) so the existing `HardIterator_5var_IGsubset_Root` (subsetFilter `IG_Only`) + `HardIterator_5var_NoIG` interior now branch on the **IG×MA count cross-product** — the net chooses MA fire-count 0..N at root; interior never auto-fires MA (replaces the forced-MA-sac "Mistake 2"). **Shared-origin:** all three RL players (`RL_SelfPlay`/`RL_Eval`/`RL_Eval_origin`) share the action space, so the collapse/origin guard stays valid (same iterator) and the origin anchor reads the **pure LEARNING delta** (both sides have MA-widening); the widening+learning absolute read comes from the fixed-iterator `MasterBot_SWF` anchor + a one-off widening control. **`MaxChildren` 40→80** on the same three players — combinatorics probe found the worst realistic board {IG=3,MA=2} = **60** post-dedup root children > the old cap 40 (the cap would bind + longest-first emission would silently drop the conservative low-click candidates, biasing data toward over-firing); 60 < N/10=100 so **N=1000 unchanged → NOT a new campaign** (`MaxChildren` is observe-only/scale, not in the frozen tuple). No engine rebuild (config-only; `engine_sha` pin valid); **preflight 19/19 PASS**. Pre-declared **MIE for MA = ≥5pp** (the K=8 checkpoint sized/pooled accordingly). Prep evidence: §4.1 iter4 MA-fire `{0:12,1:6,2:3}` non-degenerate; widening control v221 `{0:11,1:7,2:3}` ≈ iter4 (widening does the work, RL nudges 4/21). | open the next action-space axis per the proof-of-life→general-improvement plan | this row; dave `config.txt` 5-line diff (IG_Only + Ability_Filter_Live_NoIG + MaxChildren×3); driver `eval/run_iteration.ps1 -K 5` (chain wrapper `eval/run_phase1_loop.ps1`) |
 
 ---
 

@@ -1,0 +1,44 @@
+[
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Photonic Fibroid",
+    "charge": 0,
+    "hp": 2,
+    "val": 16.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  }
+]

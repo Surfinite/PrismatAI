@@ -1,0 +1,434 @@
+[
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Feral Warden",
+    "charge": 0,
+    "hp": 3,
+    "val": 22.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Feral Warden",
+    "charge": 0,
+    "hp": 3,
+    "val": 22.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Centurion",
+    "charge": 0,
+    "hp": 6,
+    "val": 77.0
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Centurion",
+    "charge": 0,
+    "hp": 6,
+    "val": 77.0
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Centurion",
+    "charge": 0,
+    "hp": 6,
+    "val": 77.0
+  },
+  {
+    "unit": "Drone",
+    "charge": 0,
+    "hp": 1,
+    "val": 11.0
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Forcefield",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.75
+  },
+  {
+    "unit": "Wall",
+    "charge": 0,
+    "hp": 3,
+    "val": 20.9999985
+  },
+  {
+    "unit": "Drone",
+    "charge": 0,
+    "hp": 1,
+    "val": 11.0
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Centurion",
+    "charge": 0,
+    "hp": 6,
+    "val": 77.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Rhino",
+    "charge": 2,
+    "hp": 2,
+    "val": 18.666666666666668
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Centurion",
+    "charge": 0,
+    "hp": 6,
+    "val": 77.0
+  },
+  {
+    "unit": "Feral Warden",
+    "charge": 0,
+    "hp": 3,
+    "val": 22.0
+  },
+  {
+    "unit": "Feral Warden",
+    "charge": 0,
+    "hp": 3,
+    "val": 22.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Feral Warden",
+    "charge": 0,
+    "hp": 3,
+    "val": 22.0
+  },
+  {
+    "unit": "Feral Warden",
+    "charge": 0,
+    "hp": 3,
+    "val": 22.0
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Centurion",
+    "charge": 0,
+    "hp": 6,
+    "val": 77.0
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Rhino",
+    "charge": 0,
+    "hp": 2,
+    "val": 13.9999995
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  },
+  {
+    "unit": "Engineer",
+    "charge": 0,
+    "hp": 1,
+    "val": 7.3
+  }
+]
