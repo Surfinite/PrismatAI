@@ -17,3 +17,5 @@
 {"ts":"2026-06-18T11:51:52","K":5,"candidate_bin":"neural_weights_rl_iter5.bin","stage_reached":8,"event":"complete","collapse":false}
 {"new_parent_bin":"neural_weights_rl_iter5.bin","event":"promote","ts":"2026-06-18T11:55:53","val_acc_pct":71.4,"new_parent_sha256":"808bf5ecfcc41803b64ca040387c71e47e33308bb25ea4cd93ecec808fb834fa","K":5}
 {"resume_from":0,"parent_pt":"c:/libraries/PrismataAI/training/models/rl_iter_5/final_model.pt","parent_bin":"neural_weights_rl_iter5.bin","K":6,"ts":"2026-06-18T11:58:14","event":"start"}
+{"collapse":false,"K":6,"candidate_bin":"neural_weights_rl_iter6.bin","ts":"2026-06-18T14:56:36","stage_reached":8,"event":"complete"}
+{"event":"promote","new_parent_bin":"neural_weights_rl_iter6.bin","ts":"2026-06-18T14:58:24","new_parent_sha256":"01fa8b8340606c4690a109c93dcce7f0737dc3e129f533beaf6683c83213b498","K":6,"val_acc_pct":71.4}
