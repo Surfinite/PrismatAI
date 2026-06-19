@@ -319,6 +319,56 @@ or abandoned attempts):
   (median 35); non-blocking, noted as the MA-specific watch-stat materializing once.
 - **Data disposition:** `rl_iter_8/` kept in window (rl_iter7-generated). `rl_iter_7/` slides out after K=8.
 
+### CHECKPOINT @ K=8 lineage head (MA axis) — 2026-06-18/19 — the powered MA read
+
+- **What / why:** the answer-producing measurement after 4 MA-open promotions (K=5–8). Evaluates the
+  promoted lineage head `neural_weights_rl_iter8.bin` (235b689d…) vs the PERMANENT v221 origin at 192
+  rounds/block (384 games/anchor), against the pre-declared **MA MIE = ≥5pp** (origin ≥ 0.55).
+- **Manifest:** `eval/manifests/eval_iter_ckpt_20260618_2109.json`.
+- **Powered numbers (384 games/anchor):** origin (vs v221) **206W/0D/384 = 53.6%** — pooled Wilson
+  [0.486, 0.586] (**includes 0.5**), paired per-card-set [0.502, 0.571] (**excludes 0.5 by 0.2pp — fragile**);
+  masterbot (vs SWF-AB) **244W/2D/384 = 63.8%** pooled [0.589, 0.685], paired [0.599, 0.677]. **B8:** lineage
+  val-acc 71.4% vs fixed-v221 71.8% (no forgetting). collapse False. Anchor rounds restored 192→48 cleanly.
+- **Verdict (statistically precise, post adversarial review):**
+  1. **origin = "consistent with parity, point +3.6pp"** — significance above 0.5 is PAIRED-CI-only (LB 0.502,
+     clears by 0.2pp) and is NOT supported by the pooled CI; do NOT call it meaningfully above parity. +3.6pp
+     is the honest point estimate, **NOT "noise"** (calling it noise is a Type-II error: 384g has ~41% power
+     for +3.6pp).
+  2. **MIE (≥5pp) is INDETERMINATE, not "failed":** 384 games can neither PROVE it (need LB≥0.55, have 0.502)
+     nor REJECT it (0.55 sits inside the paired CI). Proving/excluding +5pp needs ~780 origin games; resolving
+     +3.6 vs +5 vs parity needs ~2180.
+  3. **vs the pre-MA K=4 checkpoint (origin 52.3% / masterbot 67.3%):** origin statistically indistinguishable
+     (52.3→53.6, +1.3pp); masterbot indistinguishable (p=0.31) but the point estimate **trended DOWN −3.5pp**
+     (67.3→63.8) — confounded (K=4 = 3 promotions, K=8 = 7, moving generator) but central tendency moved the
+     wrong way, consistent with the diminishing-returns prediction.
+  - **Net:** **MA integrated CLEANLY and did not degrade the lineage** (promote-unless-collapse satisfied,
+    B8 no-forgetting, masterbot strong 63.8%), **best-estimate ~+3.6pp ≥ parity over v221, but the +5pp axis
+    MIE was not met (indeterminate at this power).** The lineage sits on the same plateau as pre-MA.
+- **Pooling decision:** do NOT pool a second 384-game read. The point estimate 0.5365 is already below the
+  0.55 bar; pooling re-centers on ~0.5365 (P(clears 0.55) ~14%, ~81% lands in the [0.515,0.55] non-actionable
+  limbo) → buys only CI-narrowing, not a decision. A powered MA verdict would need a single ~780-game paired
+  checkpoint — the wrong instrument at end-of-budget.
+- **Strategic call (corrected by adversarial review — O6 pivot is PREMATURE):** **Bank "proof-of-life
+  COMPLETE" as the milestone** (loop healthy + trustworthy: 4 clean promotions, no-forgetting, no-collapse,
+  config integrity). Do **NOT** pivot to O6 (policy head + PUCT) yet: IG and MA are the **same CLASS of axis**
+  (low-base-rate self-sac fire-COUNT, ~7.5% self-play coverage, tiny LR updates, prediction-movement ~0.008),
+  so two flat/indeterminate nulls from a shared mechanism is **closer to ONE data point than two** — too thin
+  to declare the whole "value-only RL per axis" class exhausted, and the checkpoint cannot distinguish
+  "MA genuinely neutral" from "MA under-covered / under-trained." **Recommended next (a NEW campaign — lr is
+  hp-tier): ONE coverage-controlled CRUX iteration — a forced-MA curriculum block (raise the ~7.5% coverage)
+  + lr 1e-5→3e-5 (let the net actually move on the signal), TOGETHER, evaluated at ≥384/anchor (≥780 to power
+  +5pp).** If forced-coverage + higher-LR MA STILL lands origin ≤ ~0.55 with a tightened CI → THAT is the
+  defensible A9 STOP for the value-only-per-axis line, and **O6 becomes the well-motivated pivot** (literature:
+  diminishing returns + generator-insensitive fixed point + value-only ceiling → a policy PRIOR over the ~30
+  portfolio candidates + PUCT, NOT direct buy-prediction, which Campbell & Churchill showed FAILS — thesis §7.2).
+  Reject batching multiple axes now (destroys attribution); defer N/c retune unless the crux hints at
+  exploration starvation. **Frame O6 as the HYPOTHESIZED next platform pending the crux run, not a conclusion.**
+- **Literature grounding (read this session):** Campbell & Churchill (the direct ancestor of this value net)
+  PREDICTED diminishing returns from iterating self-play and MEASURED a generator-insensitive fixed point
+  (Exp 3: cross-generator value models "quite similar", Medium→Master 82%). Our origin ≈ parity over v221
+  across BOTH IG and MA is that fixed point. Their named successor is a policy network; their direct-prediction
+  buy-policy failed (§7.2) → motivates O6's prior-over-portfolio + PUCT design specifically.
+
 ---
 
 ## Campaign-level decisions (one line per (config-hash, net-hash) delta — rl_campaign §5)
