@@ -9,9 +9,9 @@
 
 **This repo's `source/engine` + `source/ai` are the clean-room `engine_v2`, which is INDICTED** (~33 pts weaker than Dave's original — see *Parity-Gap Experiments* below / `docs/deepsets-training-results.md`). **Do NOT read, build, or modify it for AI or engine work — it is legacy.** The current, strong engine + AI is **engine_v1 in the SEPARATE repo `c:/libraries/PrismataAI-dave-master` (branch `dave-master-jsonclean`, builds x64/v145).** Query/run it via `node js_engine/query_move.js … --dave-exe c:/libraries/PrismataAI-dave-master/bin/PrismataAI.exe`. **THIS** repo (`feature/production-vectors`) is for **training (`training/`), the JS engine (`js_engine/`), eval (`eval/`), and docs** — not the C++ engine. ⚠️ The "How to Build and Run" section below builds **engine_v2** and is **legacy**; don't follow it for current work.
 
-## Current Status (June 17, 2026)
+## Current Status (June 19, 2026)
 
-**RL campaign REGIME v4 "proof-of-life" — Phase-1 ran K=1–4, K=2/3/4 PROMOTED (parent now `neural_weights_rl_iter4.bin`); first powered checkpoint validated the loop; campaign PAUSED for owner reassessment (Jun 17).**
+**RL campaign REGIME v4 "proof-of-life" — COMPLETE. K=1–8 ran; K=2–8 all PROMOTED (parent now `neural_weights_rl_iter8.bin`, 235b689d…). The Mobile-Animus (MA) action-space axis was opened (K=5–8) + powered-checkpointed: cleanly integrated, NO powered gain. Loop validated end-to-end; next lever is a policy head (hypothesized) — see `docs/superpowers/plans/2026-06-19-policy-head-brainstorm-context.md`.**
 Reframed (Jun 14) from the IG-axis measurement campaign to a general DSNN-improvement /
 fix-MasterBot-mistakes framework: ONE general self-play block (516 rounds ≈ 1032 games), **EpsilonLate
 0.05 / EpsilonIG 0** (IG over-click already fixed by action-space widening), NoIG interior iterator
@@ -24,16 +24,20 @@ RL_Eval_origin never moves). Preflight **19 checks**. Contract: `campaign_frozen
 spec `docs/superpowers/specs/2026-06-14-rl-loop-proof-of-life-reframe-design.md`; operate via
 `eval/rl_runbook.md`.
 
-**Phase-1 PAUSED at parent `neural_weights_rl_iter4.bin` (Jun 17).** Phase-0 (K=1, fixed generator) passed;
-**K=2/3/4 all PROMOTED** (promote-unless-collapse; per-iter origin vs v221 = 54.7 / 52.1 / 50.0, masterbot
-62.5 / 58.3 / 62.5; all collapse False, tripwire quiet, parity PASS). The **first powered checkpoint**
-(`run_checkpoint.ps1`, 384 games/anchor) on rl_iter4: **origin 52.3% [0.47–0.57] vs v221, masterbot 67.3%
-[0.62–0.72], B8 no-forgetting, collapse False** — resolves the per-iter origin "decline" as NOISE (lineage ≥
-parity, clearly strong vs MasterBot); loop is **healthy** with a MODEST (~+2pp powered) v221-relative gain =
-proof-of-life as designed. **Owner chose PAUSE & reassess** (open menu: N-sweep / continue K=5+ / pivot to a
-concrete MasterBot-mistake axis). **⚠️ The RL parent is `neural_weights_rl_iter4.bin` (67dec168…)** — always
-read `campaign_frozen.json` `parent_bin` + the latest `eval/campaign_log.md` entry, never assume. Resume any
-direction cleanly from rl_iter4. Logbook: `eval/campaign_log.md`.
+**Phase-1 ran K=1–8; parent now `neural_weights_rl_iter8.bin` (235b689d…).** K=2–8 all PROMOTED
+(promote-unless-collapse). **MA axis opened at K=5 (config-only re-anchor: `IG_Only` +
+`Ability_Filter_Live_NoIG` extended with "Mobile Animus"; `MaxChildren` 40→80)** — the net now chooses the
+IG×MA fire-count at root (replaces the forced-MA-sac over-click). **K=8 powered checkpoint** (rl_iter8 vs
+v221, 384 games/anchor): **origin 53.6% (paired [0.502,0.571]), masterbot 63.8%, B8 no-forgetting, collapse
+False** — statistically indistinguishable from the pre-MA K=4 checkpoint (52.3% / 67.3%): **MA integrated
+cleanly but bought NO powered ≥5pp gain** (the value-only "generator-insensitive fixed point" Campbell &
+Churchill predicted + measured). **Proof-of-life COMPLETE.** Recommended next (a NEW campaign — lr is
+hp-tier): ONE coverage-controlled crux iteration (forced-MA curriculum block + lr 1e-5→3e-5, powered
+≥780/anchor) to disambiguate "MA neutral" vs "MA under-covered/under-trained"; if still flat → pivot to the
+**policy head** (`docs/superpowers/plans/2026-06-19-policy-head-brainstorm-context.md` — the dave-master PUCT
+consumer is already built). **⚠️ The RL parent is `neural_weights_rl_iter8.bin`** — always read
+`campaign_frozen.json` `parent_bin` + the latest `eval/campaign_log.md` entry, never assume. Logbook:
+`eval/campaign_log.md`.
 
 **Steam drop-in: per-checkpoint bundle builder + FORCE_DSNN fidelity fix (Jun 17).** `eval/build_steam_bundle.ps1
 -Label <name>` packages any net (default = frozen lineage head) into `C:/libraries/DSNN_steam_bundles/<name>/`
@@ -49,6 +53,12 @@ First bundle built + verified: `DSNN_steam_bundles/v221_rl_iter4`.
 in Phase-0)**. Mechanism + files: see the Engine & Build gotchas.
 
 ## Status history (superseded)
+
+**RL Phase-1 PAUSED at parent `rl_iter4` (Jun 17) [SUPERSEDED — campaign continued to rl_iter8].** Phase-0
+(K=1) passed; K=2/3/4 PROMOTED (per-iter origin vs v221 54.7/52.1/50.0, masterbot 62.5/58.3/62.5); first
+powered checkpoint on rl_iter4 = origin 52.3% [0.47–0.57] / masterbot 67.3% [0.62–0.72], no-forgetting =
+proof-of-life healthy with a modest ~+2pp gain. Owner paused, then opened the MA axis (K=5–8) — see Current
+Status. Full record: `eval/campaign_log.md`.
 
 **RL campaign REGIME v3 — third audit implemented, RUN-READY (Jun 12–13) [SUPERSEDED by v4].** The third (design-level)
 audit (`docs/superpowers/plans/2026-06-12-rl-loop-design-audit-FINDINGS.md`) found the loop
@@ -237,6 +247,7 @@ python training/export_weights_v2.py \
 - **Tournament per-seat stats + slot attribution (dave `6e93480`)**: statsTable has `P1 W/G`/`P2 W/G` columns; results are credited by SLOT index, so same-name self-match blocks are legitimate (rows render `Name (gN)`; the old first-name-match `-nan` bug is gone).
 - **2016 MasterBot baseline**: permanent home `c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe` (sha-pinned README in-dir; the Steam-dir `.ORIG` remains as backup). run_eval's steam anchor + matchup tooling point here — never at the Steam install (whose live exe is our DSNN swap-in).
 - **query_move.js defaults**: WIDENED `HardIterator_5var_IGsubset_Root` + `UCTConstant 0.3`, echoed to stderr per run. Pass `--root-iterator HardIterator_5var_Root` to probe the narrow (auto-fire) space deliberately.
+- **query_move.js eats raw F6 `.txt` dumps directly** (`parseRequestFile` brace-matches the `"CurrentInfo"` object out of the multi-section blob — no separate extractor needed). An F6 dump = `"CurrentInfo":{mergedDeck,gameState,aiParameters,aiPlayerName}` + `"TurnStartInfo":{…}` + trailing plain-text `VOU [Unit] chN hpM val=…` debug lines (a VOU-instrumented SWF build appends these; board state is still fully recoverable, and such dumps can be ACTION-phase, not only the historical pre-swoosh DEFENSE). To run `action_coverage.py --battery`, convert dumps → clean `*.json` (see `eval/build_ma_battery.py`).
 - **x86 OOM — 4 threads max per process (engine_v2 x86 builds ONLY)**: `/LARGEADDRESSAWARE` = 4GB. Use `"Threads": 4` + multiple bat instances. Process dies silently at ~1400 games. dave-master builds x64 — not affected.
 - **Console output routing**: `[SelfPlay]`/`[Progress]` use `fprintf(stderr, ...)`. New Tournament.cpp messages should use stderr.
 - **Tournament `tests/` directory required**: `HTMLTable::appendHTMLTableToFile()` crashes if `tests/` doesn't exist.
@@ -283,6 +294,10 @@ python training/export_weights_v2.py \
 
 - ⚠️ **Several items below describe the LEGACY engine_v2 self-play pipeline** (binary shards + CRC, `SelfPlay_CI` playout generation, timestamped `run_*` dirs, PID-based seeding, value-only 26-tensor export). Current RL self-play = **dave-master**: JSONL V2 export (`SelfPlayV2Exporter`), NN-guided sampled UCT, unconditional colour-swap, per-block seedable `thread_local` RNG, Threads:8-safe. See `eval/rl_runbook.md`.
 - **RL campaign is now v4 "proof-of-life"** (reframed from regime v3 IG-axis): contract = `eval/campaign_frozen.json` (`tuple_version` 4) + spec `docs/superpowers/specs/2026-06-14-rl-loop-proof-of-life-reframe-design.md`; Phase-0 validated (loop runs end-to-end, real candidate). The top-of-file "Current Status" regime-v3 narrative is **superseded**.
+- **The Phase-1 loop is MANUAL**: `eval/run_iteration.ps1 -K <k>` → inspect manifest + watch-stats → `eval/promote_candidate.ps1 -K <k>` → `-K+1`; checkpoint every 3–5 via `eval/run_checkpoint.ps1 -Iteration 0`. `eval/run_phase1_loop.ps1` is a DRAFT chaining wrapper (HALT-on-abort / file-lock bounded-retry / config self-heal) for unattended runs.
+- **Commit dave `config.txt` only at a QUIESCENT boundary** (after `promote_candidate`, before the next `run_iteration` launch): during self-play the block is flipped `run:true` (restored to `false` in a `finally`), so committing mid-run captures a preflight-invalid config.
+- **`MaxChildren` is NOT preflight-pinned** (preflight pins only `MaxTraversals`==frozen_N + the `eval_budget` keys); it's observe-only / scale-tier, so widening it for a wider action-space axis (opening IG×MA needed 40→80) is a re-anchor + a `campaign_log` entry, NOT a new campaign. (HP knobs — N/τ/K/ε/c/lr/iterators — ARE a new campaign.)
+- **Opening an AbilitySubset axis (IG, MA, …) is config-only** (no rebuild): add the unit to the subset filter (`IG_Only`) AND the interior exclusion (`Ability_Filter_Live_NoIG`); the existing `HardIterator_5var_IGsubset_Root` then branches on the per-unit fire-count cross-product automatically. Result so far: both IG and MA = clean integration, ~parity over v221 (no powered gain) — the value-only fixed point.
 - **RL driver reuse without re-running self-play**: `run_iteration.ps1` WIPES the live export dirs (`rl_general_v2`, `_parity`, replays) at stage 1. To reuse an existing ~95-min self-play after a downstream crash, pre-stage `training/data/rl_iter_<K>/{parity_states, replays/general}` + concat shards → `selfplay_iter_<K>.jsonl`, then `-ResumeFrom 2` (skips stages 1/1.5; requires catJsonl + parity_states present).
 - **RL parity gate + sidecar names**: stage 5 (`tools/parity/dump_value_batch.py`) samples max 1000 sidecars (`--max-states`), so it stays fast on 36k-record runs. Archived sidecars carry a `general_`/`forced_` slice prefix; the live exporter writes unprefixed `sp_*.json.gz` (a glob that assumes one form misses the other — caused a stage-1.5 re-run collision, fixed `d319ef62`).
 - **SkipColorSwap auto-detection (engine_v2 ONLY)**: the legacy engine_v2 self-play auto-detects identical AI configs (`rounds = desired_games`). **dave-master has NO SkipColorSwap** — its `Tournament.cpp` colour-swaps unconditionally (every cross-group pair plays both seat orderings of a shared per-round card set; same-group pairs play zero games). Treating this gotcha as universal derailed the Jun-9 audit's recon.
@@ -327,6 +342,9 @@ python training/export_weights_v2.py \
 - **GCP spot L4 unreliable**: Frequent preemption and stockouts. AWS eu-north-1 spot (g6.2xlarge) more stable for long runs.
 
 ### Windows & Python Environment
+
+- **Reading PDFs**: the `Read` tool needs poppler (`pdftoppm`, NOT installed here) and `WebFetch` can't parse PDF text — but `WebFetch` DOES save the raw binary to `tool-results/`. Extract text with **PyMuPDF** (`import fitz`, available): per-page `get_text()` → a `.txt`, then Read/grep that. (Papers cached at `.parity_tmp/papers/`.)
+- **Bash heredocs mangle backslashes**: an inline `python - <<'PY'` corrupts backslash string literals (`'\\'`, regex `\d`, `chr(92)` workaround needed) — write the Python to a file and run it instead.
 
 - **`nohup &` broken in Git Bash**: Use `run_in_background` parameter or persistent PowerShell.
 - **Python stdout buffering**: Use `PYTHONUNBUFFERED=1`.
@@ -412,9 +430,8 @@ AMD Ryzen 7 5700X3D (8c/16t), 32GB DDR4-3200, Intel Arc B580 (12GB VRAM). Self-p
 
 ## Known Issues (Current)
 
-- **PUCT implemented but disabled** — `"UsePUCT": true` in config. Don't enable until policy >30%.
-- **C++ missing stagnation detection**: AS3 has 4-level progress counter. C++ only has flat 200-turn limit.
-- **Neural policy head weak** — 13.3% accuracy (unverified). Unused for move ordering.
+- **PUCT consumer BUILT in dave-master; policy PRODUCER missing** — `source/ai/UCTSearch.cpp` has the `usePUCT()` branch + the PUCT formula (`Q + c·P·√N/(1+n)`, :294–315) + a per-unit-type buy-logit policy representation (candidate prior = softmax of summed bought-unit logits, :379–405) + a uniform-prior fallback. BUT the DeepSets `.bin` has NO policy head (value head only) → priors are uniform; and self-play stamps argmax/chosen but NOT the per-child visit distribution. The old "13.3% policy / enable at >30%" was **legacy PrismataNet (engine_v2), NOT this DSNN**. Adding a policy head = model+export+reader+train+stamp, not search plumbing. See `docs/superpowers/plans/2026-06-19-policy-head-brainstorm-context.md`.
+- **C++ missing stagnation detection**: AS3 has 4-level progress counter. C++ only has flat 200-turn limit (a frozen-multiset stalemate draw rule trims most of it, but MA-style sac/rebuy churn that keeps the multiset CHANGING can still reach the 200 cap — rare, ~0.1% of self-play games).
 - **C++ `killCardByID` may have cleanup bugs** (unverified): Prismata has no on-death triggers — actual bug unknown.
 - **Replay validation tests legality, not state correctness** (unverified): 50.4% pass rate.
 
