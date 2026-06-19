@@ -166,6 +166,45 @@ leverage thing the brainstorm can confirm.
 
 ---
 
+## 4a. Worked motivating case — the buy-timing / economic-tempo gap (`game_0873`)
+
+**Observation** (owner, from the K=8 self-play 200-turn cap game `game_0873`, a draw): both players spent
+their bank the instant they could afford anything; *either* could have won by saving across several turns and
+dropping a decisive army. The result was a defensive economic equilibrium → endless churn → the 200-turn cap
+(the changing board also dodges the frozen-multiset stalemate detector).
+
+**Engine reality:** the campaign's active buy column is five spend-oriented variants (`BuyEconTech` /
+`BuyTechEcon` / `BCG{Attack,Will,Def}_Root` — GreedyKnapsack / sequence / TechHeuristic families) that buy
+whatever is affordable each turn. A `BuyNothing` partial-player TYPE exists (`ActionBuy_Nothing`,
+`config.txt:161`) but is **not wired into that portfolio**, so the search never even gets a "bank it"
+candidate at the root — and *no* partial player anywhere does **cross-turn tempo** ("sit on a growing bank for
+N turns, then commit"). Each turn's buy is recomputed greedily on current resources; the lookahead only ranks
+the spend-now candidates the portfolio emits.
+
+**Why this is a strong motivating case for the policy/planning work:**
+- Same action-space-gap pattern as IG/MA (the search can only pick what the portfolio emits) — but
+  **resource-banking / economic tempo is a genuinely strategic capability the bot wholly lacks**, not a
+  fire-count it already played fine. If any action-space dimension is a *real* strength gap (unlike the IG/MA
+  non-movers), tempo is the better bet.
+- **A buy-*affinity* policy (the per-unit-type logits the engine already assumes, §3) captures "*which* units"
+  but says NOTHING about "*when* to commit."** Cleanest argument that the interesting frontier is the
+  **temporal/economic dimension (commit vs bank), not unit selection.**
+- **Honest caveat (the run's core lesson):** merely adding a `BuyNothing`/save candidate likely would NOT move
+  strength on its own — IG/MA showed that a new option the value net picks-by-value lands at the same ~parity
+  fixed point, because the *value estimates* don't strongly prefer the new line (and equilibrium/stalemate
+  positions are exactly where value discrimination is documented weakest — M10 / mKPSu / DbS6q). A
+  "bank-for-a-burst" line has the same dependency: the net must rate a poorer-now-but-banking state higher
+  across several turns of N=1000 lookahead — a multi-turn planning ask value-only MCTS is poorly suited to.
+  So tempo is plausibly **where a policy prior + sims-concentrating PUCT earns its keep over pure value** —
+  the O6 hypothesis, on a dimension that actually matters.
+- **For the brainstorm:** worked example = `training/data/rl_iter_8/replays/general/game_0873.json.gz`. Open
+  questions: add a save / partial-commit candidate to the buy portfolio? Is tempo best addressed by a policy
+  prior, a tempo-aware buy candidate, deeper search (PUCT), or an explicit multi-turn planning target? And how
+  would you even *measure* a tempo gain — the eval-power problem bites harder for a subtle strategic axis than
+  it did for the fire-counts.
+
+---
+
 ## 5. Constraints / realities a policy design must respect
 
 - **Action space** = portfolio cross-product (dynamic, deduped, `MaxChildren=80`, longest-first emission;
@@ -216,3 +255,6 @@ leverage thing the brainstorm can confirm.
 4. Biggest open design call: **buy-only policy (matches the built plumbing + the papers' "buying is the main
    decision")** vs **extending to the ability/fire-count axes** (covers the MA/IG work but needs a richer
    output). And, as always: **power the eval to a pre-declared MIE.**
+5. Consider whether the real frontier is **economic tempo (commit vs bank), not unit selection** — value-only
+   MCTS can't plan multi-turn resource-banking (worked example `game_0873`, §4a); a buy-affinity policy
+   doesn't touch it. This may be where a policy prior + PUCT actually beats pure value.
