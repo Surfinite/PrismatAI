@@ -66,3 +66,13 @@ test('loss cpp: lifespan==1 -> 0', () => {
   const b = dv.unitView(mk('Sound Barrier', { health: 1, lifespan: 1 }));
   assert.equal(dv.loss(b, 1, 'cpp'), 0);
 });
+
+test('isIsomorphic: two same-HP Husks match; different HP do not', () => {
+  const a = dv.unitView(mk('House', { health: 1 }));
+  const b = dv.unitView(mk('House', { health: 1 }));
+  const c = dv.unitView(mk('Wall', { health: 3 }));
+  assert.equal(dv.isIsomorphic(a, b), true);
+  assert.equal(dv.isIsomorphic(a, c), false);
+  assert.equal(dv.isoKey(a), dv.isoKey(b));
+  assert.notEqual(dv.isoKey(a), dv.isoKey(c));
+});

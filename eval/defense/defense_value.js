@@ -27,8 +27,36 @@ function unitView(stateUnit) {
     heal: ct ? (ct.HPGained || 0) : 0,
     max: ct ? (ct.HPMax !== undefined ? ct.HPMax : ct.toughness) : 0,
     ct,
+    raw: stateUnit,   // original game-state unit, for iso fields not on the view (chill/delay/construction/status)
   };
 }
+
+// ---------------------------------------------------------------------------
+// isoKey / isIsomorphic — stable isomorphism-class identity for a blocker,
+// mirroring Card::isIsomorphic (PrismataAI-dave-master/source/engine/Card.cpp:862-874).
+// C++ compares 10 fields: getType, getPlayer, currentHealth, currentChill,
+// getCurrentCharges, isDead, getCurrentDelay, getConstructionTime,
+// getCurrentLifespan, getStatus. Defense grouping/matching keys on iso-class
+// (never instId), so this is load-bearing for the sim + human-pick matching.
+// Reads iso fields not on the view (chill/delay/construction/status) from view.raw.
+// ---------------------------------------------------------------------------
+function isoKey(view) {
+  const r = view.raw || {};
+  return [
+    view.internal,                                    // getType
+    view.owner,                                       // getPlayer
+    view.hp,                                          // currentHealth
+    r.disruptDamage | 0,                              // currentChill
+    view.charge | 0,                                  // getCurrentCharges
+    r.delay | 0,                                      // getCurrentDelay
+    r.constructionTime | 0,                           // getConstructionTime
+    view.life === undefined ? -1 : view.life,         // getCurrentLifespan
+    r.deadness && r.deadness !== 'alive' ? 1 : 0,     // isDead
+    r.role || r.status || 'default',                  // getStatus
+  ].join('|');
+}
+
+function isIsomorphic(a, b) { return isoKey(a) === isoKey(b); }
 
 // Full functional value at current state (ours mode), via the value model with overrides.
 function V(view) {
@@ -152,4 +180,4 @@ function lossCpp(view, damage) {
   }
 }
 
-module.exports = { unitView, V, body, resolveInternal, loss };
+module.exports = { unitView, V, body, resolveInternal, loss, isoKey, isIsomorphic };
