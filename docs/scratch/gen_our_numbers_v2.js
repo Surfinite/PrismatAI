@@ -194,10 +194,10 @@ function qValue(c, name, h, ch, ls, cardLs) {
 }
 function Q(c, name) { return f2(qValue(c, name, c.toughness, c.charge || 0, c.lifespan === undefined ? -1 : c.lifespan, c.lifespan)); }
 function csvLine(line) { const o = []; let cur = '', q = false; for (let i = 0; i < line.length; i++) { const ch = line[i]; if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; } else { if (ch === ',') { o.push(cur); cur = ''; } else if (ch === '"') q = true; else cur += ch; } } o.push(cur); return o; }
-const sheet = {};
-for (const line of fs.readFileSync(SHEET, 'utf8').split(/\r?\n/).slice(1)) { if (!line.trim()) continue; const f = csvLine(line); const nm = (f[0] || '').trim(); if (!nm) continue; const num = x => { const v = parseFloat(x); return isNaN(v) ? '' : f2(v); }; sheet[nm] = { def: num(f[3]), tot: num(f[5]) }; }
 
 if (require.main === module) {
+const sheet = {};
+for (const line of fs.readFileSync(SHEET, 'utf8').split(/\r?\n/).slice(1)) { if (!line.trim()) continue; const f = csvLine(line); const nm = (f[0] || '').trim(); if (!nm) continue; const num = x => { const v = parseFloat(x); return isNaN(v) ? '' : f2(v); }; sheet[nm] = { def: num(f[3]), tot: num(f[5]) }; }
 // ---- build ----
 const inscope = [], deferred = [];
 for (const [k, c] of Object.entries(lib)) {
