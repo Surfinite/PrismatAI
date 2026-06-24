@@ -489,7 +489,7 @@ AMD Ryzen 7 5700X3D (8c/16t), 32GB DDR4-3200, Intel Arc B580 (12GB VRAM). Self-p
 | `docs/PROJECT_HISTORY.md` | Full chronological dev history (sections 1-29) |
 | `docs/jsengine-faithfulness-results.md` | JS engine faithfulness campaign — COMPLETE (May 2026): faithful to AS3 client; residual 33/61267 = client recording bugs reproduced faithfully (~0.05% replays unviewable in real client too) |
 | `docs/deepsets-training-results.md` | DeepSets training results + parity-gap finding (May 2026) |
-| `docs/superpowers/specs/2026-06-24-defense-eval-pipeline-design.md` | Defense-eval pipeline: grade the functional `DamageLoss_Functional` heuristic vs elite human defense — design + plan (`.../plans/2026-06-24-defense-eval-pipeline.md`) + handoff (Jun 2026, SPEC'D, not built) |
+| `docs/superpowers/specs/2026-06-24-defense-eval-pipeline-design.md` | Defense-eval pipeline: grade the functional `DamageLoss_Functional` heuristic vs elite human defense — design + plan (`.../plans/2026-06-24-defense-eval-pipeline.md`) + handoff (built + gate-validated Jun 24; harness in eval/defense/, 26 tests, cpp-sim 1234/1235 vs engine) |
 | `docs/scratch/2026-06-22-unit-value-heuristic-v3-handoff.md` | Functional unit-value model (`docs/scratch/gen_our_numbers_v2.js`); §16 = the prime-absorber survivor-delta redesign |
 | `docs/CLAUDE_REFERENCE.md` | Extended reference (cloud, sniffer, commentary, full file tables) |
 | `docs/plans/2026-03-09-training-plan-v3-READY-v3.md` | Training plan v3 (finalized) |

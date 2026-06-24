@@ -80,7 +80,7 @@ function recordsForCode(code) {
     const humanLossCpp = blockers.reduce((s, v) => s + dv.loss(v, human.perUnit[v.instId] || 0, 'cpp'), 0);
 
     const rec = metrics.computeMetrics({
-      board: blockers, incoming,
+      board: blockers.map(b => ({ isoKey: dv.isoKey(b) })), incoming,
       human: { assignment: human, humanLoss: humanLossOurs, humanLoss_cpp: humanLossCpp },
       aiOurs, aiCpp,
     });
