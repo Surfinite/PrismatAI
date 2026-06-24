@@ -30,3 +30,15 @@ test('forced single feasible set is tagged via tiedAlts length 1', () => {
   const r = sim.solveDefense(board, 2, 'ours'); // only one unit can be prime
   assert.equal(r.tiedAlts.length <= 1, true);
 });
+
+test('exact-absorb boundary: 2x Husk@1 vs 2 -> both chump, prime null (no survivor)', () => {
+  // House (internal "Husk") @1 hp each, 2 incoming. Both die exactly absorbing the
+  // incoming; no unit survives partial damage, so prime MUST be null and both are chumps.
+  const board = [mk('House', { health: 1, instId: 1 }), mk('House', { health: 1, instId: 2 })];
+  const r = sim.solveDefense(board, 2, 'ours');
+  assert.equal(r.assignment.prime, null, 'no surviving partial-damage unit -> prime must be null');
+  const chumpTotal = r.assignment.chumps.reduce((n, c) => n + c.count, 0);
+  assert.equal(chumpTotal, 2, 'both husks must be classified as chumps');
+  assert.equal(r.perUnit[1], 1, 'husk 1 took its full 1 hp (dead)');
+  assert.equal(r.perUnit[2], 1, 'husk 2 took its full 1 hp (dead)');
+});

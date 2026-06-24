@@ -117,19 +117,37 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001) {
   // group is the last blocker, the next un-chumped unit takes lastDmg; the rest 0.
   const toAssignment = (s) => {
     const chumps = [], untouched = [], perUnit = {};
+    // Honest prime labeling: the last blocker SURVIVES only if it takes < its hp
+    // (partial damage). At the exact-absorb / hp==remaining boundary the "last
+    // blocker" dies absorbing exactly its hp (lastDmg >= hp) — physically a chump,
+    // not a surviving prime. Reclassify it as a chump and report prime = null.
+    let primeKey = s.lastKey;
+    if (primeKey !== null) {
+      const pg = byKey.get(primeKey);
+      if (s.lastDmg >= pg.hp) primeKey = null;   // last blocker died -> not a prime
+    }
     for (const g of groups) {
-      const nc = s.chumpCounts.get(g.key) || 0;
-      const isPrime = (s.lastKey !== null && g.key === s.lastKey) ? 1 : 0;
+      let nc = s.chumpCounts.get(g.key) || 0;
+      const survivingPrime = (primeKey !== null && g.key === primeKey) ? 1 : 0;
+      // The original last-blocker slot for this group: a surviving prime keeps its
+      // own slot (not a chump); a dead "prime" folds into the chump count instead.
+      const deadPrimeHere = (s.lastKey !== null && g.key === s.lastKey && survivingPrime === 0) ? 1 : 0;
+      nc += deadPrimeHere;
       if (nc) chumps.push({ isoKey: g.key, count: nc });
-      const untouchedN = g.units.length - nc - isPrime;
+      const untouchedN = g.units.length - nc - survivingPrime;
       if (untouchedN > 0) untouched.push({ isoKey: g.key, count: untouchedN });
       g.units.forEach((u, i) => {
-        if (i < nc) perUnit[u.instId] = g.hp;                       // chump: full hp, dies
-        else if (isPrime && i === nc) perUnit[u.instId] = s.lastDmg; // the single last blocker
-        else perUnit[u.instId] = 0;                                  // untouched survivor
+        // perUnit is UNCHANGED by the relabel: the dead last blocker still shows its
+        // damage (s.lastDmg == its hp). Original chumps occupy [0, originalNc); the
+        // last-blocker slot is at originalNc (its damage is s.lastDmg either way).
+        const originalNc = s.chumpCounts.get(g.key) || 0;
+        const isLastSlot = (s.lastKey !== null && g.key === s.lastKey && i === originalNc);
+        if (i < originalNc) perUnit[u.instId] = g.hp;                 // chump: full hp, dies
+        else if (isLastSlot) perUnit[u.instId] = s.lastDmg;          // the single last blocker
+        else perUnit[u.instId] = 0;                                   // untouched survivor
       });
     }
-    return { chumps, prime: s.lastKey, untouched, perUnit };
+    return { chumps, prime: primeKey, untouched, perUnit };
   };
 
   // Materialise + dedup tied alternatives by PHYSICAL outcome (perUnit signature).
