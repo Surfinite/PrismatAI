@@ -288,5 +288,6 @@ console.log(`wrote ${OUT}: ${inscope.length} in-scope, ${deferred.length} deferr
 
 module.exports = {
   ours, parseCost, costWill, attackOf, geom, geomPerp, lib,
+  willScoreCpp, inflCpp, resolveBT, buySac,   // C++ DamageLoss_WillCost helpers (reused by eval/defense/defense_value.js lossCpp)
   CONSTANTS: { BV, ATK, R, RES, THREAT, OPT_SELFSAC_ATK, OPT_SELFSAC_TOKEN, DOOMED_NUDGE, CHILL_COEFF, UNDEF_PER_HP, FRAGILE_PEN },
 };

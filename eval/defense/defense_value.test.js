@@ -50,3 +50,19 @@ test('loss ours: heal headroom makes absorption free (Xaetron@10 absorbs 2)', ()
   // body(@10)=min(14,12)=12 ; body(@8)=min(12,12)=12 ; delta 0
   assert.ok(near(dv.loss(x, 2, 'ours'), 0), `got ${dv.loss(x, 2, 'ours')}`);
 });
+
+test('loss cpp: non-fragile survivor = 0 (Wall absorbs 2)', () => {
+  const wall = dv.unitView(mk('Wall', { health: 3 }));
+  assert.equal(dv.loss(wall, 2, 'cpp'), 0);
+});
+
+test('loss cpp: 1HP block-only special-case = 1.875', () => {
+  const husk = dv.unitView(mk('House', { health: 1 }));
+  assert.ok(near(dv.loss(husk, 1, 'cpp'), 1.875), `got ${dv.loss(husk, 1, 'cpp')}`);
+});
+
+test('loss cpp: lifespan==1 -> 0', () => {
+  // Barrier internal "Sound Barrier": lifespan 1
+  const b = dv.unitView(mk('Sound Barrier', { health: 1, lifespan: 1 }));
+  assert.equal(dv.loss(b, 1, 'cpp'), 0);
+});
