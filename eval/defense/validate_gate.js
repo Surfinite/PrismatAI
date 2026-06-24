@@ -33,6 +33,7 @@ const replay_exporter = require('../../js_engine/replay_exporter');
 const { loadJSON, buildInitInfo } = require('../replay_to_request');
 const sim = require('./defense_sim');
 const dv = require('./defense_value');
+const { canBlockState, availableBlockers } = require('./blockers');
 const { find } = require('./_find_replay');
 
 const REPO = path.resolve(__dirname, '..', '..');
@@ -42,41 +43,9 @@ const AIPARAMS = path.join(REPO, 'docs', 'scratch', 'ktink_t9_action_request.jso
 const WEIGHTS = 'neural_weights_rl_iter8.bin';
 const PLAYER = 'RL_TestA12';
 
-// -----------------------------------------------------------------------------
-// canBlockState — faithful JS port of Card::canBlock() (PrismataAI-dave-master/
-// source/engine/Card.cpp:478-505). The engine's BlockIterator only ever considers
-// units for which canBlock() is true (BlockIterator.cpp:21), so the sim MUST be fed
-// exactly that set or it will block iso-classes the engine cannot (e.g. an Animus
-// with defaultBlocking=0, or a tapped role=assigned Drone with assignedBlocking=0).
-//
-//   getType().canBlock(status==Assigned)   -> assigned ? assignedBlocking : defaultBlocking
-//                                              (CardType.cpp:336-346; flags default false)
-//   getCurrentDelay() > 0                   -> excluded
-//   isUnderConstruction()                   -> constructionTime > 0 excluded
-//   isDead()                                -> deadness != 'alive' excluded
-//   isFrozen()  (currentChill >= currentHealth, Card.cpp) -> excluded
-// -----------------------------------------------------------------------------
-function canBlockState(u, ct) {
-  if (!ct) return false;
-  const assigned = (u.role === 'assigned');
-  const typeCanBlock = assigned ? !!ct.assignedBlocking : !!ct.defaultBlocking;
-  if (!typeCanBlock) return false;
-  if ((u.delay | 0) > 0) return false;
-  if ((u.constructionTime | 0) > 0) return false;
-  if (u.deadness !== undefined && u.deadness !== 'alive') return false;
-  const hp = (u.health !== undefined) ? u.health : (ct.toughness | 0);
-  if ((u.disruptDamage | 0) >= hp) return false;   // isFrozen()
-  return true;
-}
-
-// Available blockers for `player` at a defense State A, filtered exactly like the engine.
-function availableBlockers(gs, player) {
-  return (gs.table || []).filter(u => {
-    if (u.owner !== player) return false;
-    const v = dv.unitView(u);
-    return canBlockState(u, v.ct);
-  });
-}
+// canBlockState / availableBlockers — the canBlock-faithful blocker filter now lives
+// in the shared ./blockers module (imported above), so compare.js and this gate feed
+// solveDefense the IDENTICAL blocker set (the gate validates the harness's actual filter).
 
 // -----------------------------------------------------------------------------
 // Stable iso-class signature for cross-comparison. The engine's `aiclicks` carry

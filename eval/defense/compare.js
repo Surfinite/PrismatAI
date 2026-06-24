@@ -8,6 +8,7 @@ const sim = require('./defense_sim');
 const dv = require('./defense_value');
 const metrics = require('./metrics');
 const { renderReport } = require('./report');
+const { availableBlockers } = require('./blockers'); // shared canBlock-faithful filter (must match validate_gate.js)
 const { find } = require('./_find_replay'); // tiny archive lookup helper (Task 8)
 
 const ARCHIVE = 'c:/libraries/prismata-replay-parser/replays_archive';
@@ -27,12 +28,10 @@ function stateAByTurn(replay) {
   return out;
 }
 
-// active player's available (blockable) units from a gameState.
-function availableBlockers(gs, player) {
-  return (gs.table || []).filter(u =>
-    u.owner === player && (u.deadness === undefined || u.deadness === 'alive')
-    && (u.constructionTime | 0) === 0 && !((u.delay | 0) > 0));
-}
+// availableBlockers — the active player's available (blockable) units. Now the SHARED
+// canBlock-faithful filter (imported from ./blockers), so this harness solves defense on
+// exactly the unit set validate_gate.js validates (was a permissive owner/alive/
+// constructionTime/delay-only filter that admitted non-blocking Drones/economy/tech units).
 
 function humanAssignment(committedGS, player, board) {
   const perUnit = {}; const chumps = []; let prime = null; const untouched = [];
