@@ -1,6 +1,5 @@
 'use strict';
 const fs = require('fs'); const path = require('path');
-const cp = require('child_process');
 const Analyzer = require('../../js_engine/Analyzer');
 const replay_exporter = require('../../js_engine/replay_exporter');
 const { loadJSON, buildInitInfo } = require('../replay_to_request');
@@ -93,15 +92,6 @@ function recordsForCode(code) {
   return out;
 }
 
-// Worker mode: `compare.js --one <code>` prints this code's records as JSONL on stdout.
-// Run per-replay in a child process so a single pathological replay (some long/undo-heavy
-// games blow the V8 heap inside Analyzer's per-click snapshotting) is ISOLATED — its crash
-// is skipped by the parent instead of killing the whole corpus run.
-function runOne() {
-  const code = process.argv[3];
-  for (const rec of recordsForCode(code)) process.stdout.write(JSON.stringify(rec) + '\n');
-}
-
 function main() {
   const [codesFile, outDir] = process.argv.slice(2);
   fs.mkdirSync(outDir, { recursive: true });
@@ -110,22 +100,26 @@ function main() {
   const recStream = fs.createWriteStream(path.join(outDir, 'records.jsonl'));
   let skipped = 0;
 
+  // In-process per-replay extraction. State-B capture no longer deep-clones the whole board on
+  // every click (it navigates via endDefenses/gotoCommand), removing the per-click-snapshot OOM
+  // that motivated the old per-replay subprocess isolation. A try/catch per code skips (and counts)
+  // a bad replay so one faithful-failure / parse error doesn't abort the whole corpus run.
+  // NOTE: a JS throw is caught here, but a true V8 heap OOM aborts the process and CANNOT be caught
+  // in-process. The remaining heavy consumer is defense_sim.solveDefense (its combinatorial solution
+  // enumeration), not State-B capture; a handful of dev replays can still OOM it. If that recurs on a
+  // corpus run, bound solveDefense rather than re-adding the subprocess workaround (see rework report).
   for (const code of codes) {
-    // Run the per-replay extraction in an isolated child (bounded heap; one crash != run abort).
-    // Cap the child heap so a pathological replay fails FAST (skipped) instead of thrashing GC.
-    const r = cp.spawnSync(process.execPath, ['--max-old-space-size=2048', __filename, '--one', code],
-      { encoding: 'utf-8', maxBuffer: 256 * 1024 * 1024 });
-    if (r.status !== 0 || r.error) {
-      const why = r.error ? r.error.message
-        : (r.stderr || '').split(/\r?\n/).filter(Boolean).pop() || `exit ${r.status}`;
-      process.stderr.write(`skip ${code}: ${why}\n`);
+    let recs;
+    try {
+      recs = recordsForCode(code);
+    } catch (e) {
+      process.stderr.write(`skip ${code}: ${e && e.message ? e.message : e}\n`);
       skipped++;
       continue;
     }
-    for (const line of (r.stdout || '').split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      records.push(JSON.parse(line));
-      recStream.write(line + '\n');
+    for (const rec of recs) {
+      records.push(rec);
+      recStream.write(JSON.stringify(rec) + '\n');
     }
   }
   recStream.end();
@@ -134,7 +128,6 @@ function main() {
   process.stdout.write(`wrote ${records.length} records + report.md to ${outDir} (skipped ${skipped} codes)\n`);
 }
 
-if (process.argv[2] === '--one') runOne();
-else main();
+if (require.main === module) main();
 
 module.exports = { recordsForCode, stateAByTurn, availableBlockers, humanAssignment };
