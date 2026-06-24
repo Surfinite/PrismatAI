@@ -137,8 +137,9 @@ ratio bug — so the gate matches the engine bit-for-bit.** Nothing is "fixed" i
 These corrections to the v2 model are agreed and must be applied before the sim runs (captured during the
 brainstorm):
 1. **Doomed-body nudge** (replaces the wrong geometric idea): keep `lifespan==1 → 0`; for `lifespan ≥ 2` subtract a
-   **small** penalty `const · (1 + maxLife − remainingLife)` (HP-scaled variant `const · HP · (1 + maxLife −
-   remainingLife)` optional). Rationale: a doomed unit keeps near-full *keep* value until its last turn (where it is
+   small penalty `0.1 · (1 + maxLife − remainingLife)` (HP-scaled variant `0.1 · HP · (1 + maxLife − remainingLife)`
+   optional). **`const = 0.1` to start; adjust once the pipeline is running.** Rationale: a doomed unit keeps
+   near-full *keep* value until its last turn (where it is
    a free chump), with only a small "finite tail / use-it-or-lose-it" discount — enough to land a Doomed Wall just
    below an equivalent ch0-Bombarder (charges do **not** recharge, so the Bombarder is correctly body-valued).
 2. **Infusion Grid:** optionality bonus → **0.1** (a prompt 4HP→4×1HP *convert/fragment* for 1 red, gaining nothing
@@ -246,12 +247,13 @@ skew/divergence tables = where to apply corrective terms.
 ## 8. Validation gate (one-time)
 
 Prove the JS sim (the BlockIterator port + `cpp` value replica) reproduces the real engine's defense picks.
-- Drive the real engine via `query_move.js` → a steam-bundle exe with **`think_time=0`, `max_traversals=1`**
-  (or the minimum floor that still emits a move). Defense is a deterministic `PartialPlayer` that runs *before* and
-  *independent of* the UCT search, so the search budget does not affect the defense assignment — only the defense
-  clicks are read; the degenerate action half is ignored.
-- Run **50–100 full games** (thousands of defense positions, ~20 min even at ~0.5s/process). **Pass** = the sim's
-  defense assignment (iso-multiset) matches the engine on every position (whitelist `timeRemainingMS`).
+- Drive the real engine via `query_move.js` → the steam bundle `C:/libraries/DSNN_steam_bundles/v221_rl_iter8/`
+  (`use_dsnn.txt`) with **`think_time=0`, `max_traversals=1`** — owner-verified (2026-06-24) to emit a move at
+  **< 0.5 s/process**. Defense is a deterministic `PartialPlayer` that runs *before* and *independent of* the UCT
+  search, so the search budget does not affect the defense assignment — only the defense clicks are read; the
+  degenerate action half is ignored. (Any DSNN bundle works: defense is shared code untouched by the net.)
+- Run **100 full games** (thousands of defense positions; fast at < 0.5 s/process). **Pass** = the sim's defense
+  assignment (iso-multiset) matches the engine on every position (whitelist `timeRemainingMS`).
 - This licenses the sim for all `ours` runs. The **state generator** is validated separately and already proven
   (handoff §3 `oracle_diff.js`), so the two concerns don't entangle.
 
