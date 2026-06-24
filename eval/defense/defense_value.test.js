@@ -28,3 +28,25 @@ test('V(Energy Matrix@5) == 11', () => {
   const em = dv.V(dv.unitView(mk('Golem', { health: 5 })));
   assert.ok(near(em, 11), `EM expected 11, got ${em}`);
 });
+
+test('loss ours: chump = full V', () => {
+  const wall = dv.unitView(mk('Wall', { health: 3 }));
+  assert.ok(near(dv.loss(wall, 3, 'ours'), 6.6)); // damage>=hp -> dies -> full value
+});
+
+test('loss ours: non-fragile survivor = 0', () => {
+  const wall = dv.unitView(mk('Wall', { health: 3 }));
+  assert.equal(dv.loss(wall, 2, 'ours'), 0);     // survives (2<3), non-fragile -> 0
+});
+
+test('loss ours: fragile healer survivor = body delta (Xaetron@3 absorbs 2)', () => {
+  const x = dv.unitView(mk('Xaetron', { health: 3 }));
+  // body(@3)=min(3+4,12)*2.2-0.1=15.3 ; body(@1)=min(1+4,12)*2.2-0.1=10.9 ; delta=4.4
+  assert.ok(near(dv.loss(x, 2, 'ours'), 4.4), `got ${dv.loss(x, 2, 'ours')}`);
+});
+
+test('loss ours: heal headroom makes absorption free (Xaetron@10 absorbs 2)', () => {
+  const x = dv.unitView(mk('Xaetron', { health: 10 }));
+  // body(@10)=min(14,12)=12 ; body(@8)=min(12,12)=12 ; delta 0
+  assert.ok(near(dv.loss(x, 2, 'ours'), 0), `got ${dv.loss(x, 2, 'ours')}`);
+});

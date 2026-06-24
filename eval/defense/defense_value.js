@@ -43,4 +43,21 @@ function body(view) {
   return r.block;   // ours() returns block/atk split; block carries the heal-aware floor + nudge + haircuts
 }
 
-module.exports = { unitView, V, body, resolveInternal };
+// Per-unit functional defense loss. mode 'ours' implemented here; 'cpp' lands in Task 5.
+function loss(view, damage, mode) {
+  if (mode === 'ours') return lossOurs(view, damage);
+  if (mode === 'cpp')  return lossCpp(view, damage);   // implemented in Task 5
+  throw new Error('unknown mode: ' + mode);
+}
+
+function lossOurs(view, damage) {
+  if (!view.ct) return 0;
+  const dies = damage >= view.hp;
+  if (dies) return V(view);                       // chump: full value lost
+  if (!view.fragile) return 0;                    // non-fragile survivor: repairs, free
+  // fragile survivor: body(before) - body(after); body() already projects one heal
+  const after = Object.assign({}, view, { hp: view.hp - damage });
+  return body(view) - body(after);
+}
+
+module.exports = { unitView, V, body, resolveInternal, loss };
