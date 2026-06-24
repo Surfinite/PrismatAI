@@ -124,6 +124,12 @@ function main() {
   recStream.end();
   const agg = metrics.aggregate(records);
   fs.writeFileSync(path.join(outDir, 'report.md'), renderReport(agg));
+  // Value-sanity tripwire: a suspicious negative min-loss is a strong signal of a value-layer
+  // bug (e.g. the lifespan -1 bug that gave Tia Thurnax value -34.86). Flag it prominently so
+  // future regressions self-announce on every corpus run.
+  if (agg.tripwire && agg.tripwire.suspicious.length > 0) {
+    process.stderr.write(`WARNING: ${agg.tripwire.suspicious.length} suspicious negative-min-loss positions (possible value-layer bug) — see report tripwire section\n`);
+  }
   process.stdout.write(`wrote ${records.length} records + report.md to ${outDir} (skipped ${skipped} codes)\n`);
 }
 

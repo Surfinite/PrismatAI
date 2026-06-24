@@ -1,3 +1,4 @@
-# scratch output dirs / temp code files from compare.js smoke runs
-_*/
-_*.txt
+# scratch output dirs / temp files + fetch helpers from compare.js runs
+_*
+# the full uncompressed corpus records are huge (~100MB); commit only the .gz
+results/records.jsonl

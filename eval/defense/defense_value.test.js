@@ -76,3 +76,23 @@ test('isIsomorphic: two same-HP Husks match; different HP do not', () => {
   assert.equal(dv.isoKey(a), dv.isoKey(b));
   assert.notEqual(dv.isoKey(a), dv.isoKey(c));
 });
+
+test('isoKey excludes status: inert vs sellable Walls are one iso-class', () => {
+  // status (role||status) was dropped from isoKey — for defense it never affects value/canBlock.
+  const inert = dv.unitView(mk('Wall', { health: 3, role: 'inert' }));
+  const sellable = dv.unitView(mk('Wall', { health: 3, status: 'sellable' }));
+  const plain = dv.unitView(mk('Wall', { health: 3 }));
+  assert.equal(dv.isoKey(inert), dv.isoKey(sellable));
+  assert.equal(dv.isoKey(inert), dv.isoKey(plain));
+});
+
+test('decodeIso round-trips internal/hp/charge/lifespan', () => {
+  const w = dv.unitView(mk('Wall', { health: 3 }));
+  const d = dv.decodeIso(dv.isoKey(w));
+  assert.equal(d.internal, 'Wall');
+  assert.equal(d.hp, 3);
+  assert.equal(d.lifespan, -1);   // non-doomed sentinel
+  const g = dv.decodeIso(dv.isoKey(dv.unitView(mk('Golem', { health: 5, charge: 2 }))));
+  assert.equal(g.internal, 'Golem');
+  assert.equal(g.charge, 2);
+});

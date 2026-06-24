@@ -45,6 +45,13 @@ function unitView(stateUnit) {
 // (never instId), so this is load-bearing for the sim + human-pick matching.
 // Reads iso fields not on the view (chill/delay/construction/status) from view.raw.
 // ---------------------------------------------------------------------------
+// NOTE: the trailing C++ `getStatus` field (role||status) is DELIBERATELY EXCLUDED.
+// For DEFENSE, status does not affect a unit's value or canBlock — non-`assigned` statuses
+// (inert/sellable/default) are all equivalent, and State-A blockers are never `assigned`
+// (a blocker stays role=DEFAULT until MOVE_DEFEND). Including it minted spurious duplicate
+// iso-classes (e.g. "Wall|...|inert" vs "Wall|...|sellable"). This now MATCHES the validation
+// gate's own matcher (validate_gate.js classSig, which likewise excludes status/blocking),
+// removing a real inconsistency between the sim's grouping and the gate's matching.
 function isoKey(view) {
   const r = view.raw || {};
   return [
@@ -57,8 +64,22 @@ function isoKey(view) {
     r.constructionTime | 0,                           // getConstructionTime
     view.life === undefined ? -1 : view.life,         // getCurrentLifespan
     r.deadness && r.deadness !== 'alive' ? 1 : 0,     // isDead
-    r.role || r.status || 'default',                  // getStatus
   ].join('|');
+}
+
+// decodeIso — parse an isoKey back into its structural fields, for report aggregation
+// (so callers key on internal/hp/charge/lifespan structurally, not by string position).
+// Field order MUST track isoKey() above: internal|owner|hp|chill|charge|delay|ctime|life|dead.
+function decodeIso(isoKey) {
+  const p = String(isoKey).split('|');
+  return {
+    internal: p[0],
+    owner: p[1] === undefined ? undefined : (p[1] === 'undefined' ? undefined : Number(p[1])),
+    hp: Number(p[2]),
+    chill: Number(p[3]),
+    charge: Number(p[4]),
+    lifespan: Number(p[7]),
+  };
 }
 
 function isIsomorphic(a, b) { return isoKey(a) === isoKey(b); }
@@ -309,4 +330,4 @@ function lossCpp(view, damage, ctx) {
   }
 }
 
-module.exports = { unitView, V, body, resolveInternal, loss, isoKey, isIsomorphic, buildResonateContext };
+module.exports = { unitView, V, body, resolveInternal, loss, isoKey, decodeIso, isIsomorphic, buildResonateContext };

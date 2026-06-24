@@ -1,4 +1,14 @@
 'use strict';
+const { decodeIso } = require('./defense_value');
+
+// UNIT-VALUE-KEY: the value-relevant subset of an isoKey — internal|hp|charge|lifespan.
+// MERGES owner + chill + (already-dropped) status, so each unit appears once per distinct
+// (hp, charge, lifespan) tuple. These are exactly the attributes that change a blocker's
+// defensive value; nothing else may split a unit onto multiple report rows.
+function unitValueKey(isoKey) {
+  const d = decodeIso(isoKey);
+  return [d.internal, d.hp, d.charge, d.lifespan].join('|');
+}
 
 function sameAssignment(a, b) {
   if (!a || !b) return false;
@@ -47,14 +57,38 @@ function computeMetrics({ board, incoming, human, aiOurs, aiCpp }) {
   };
 }
 
+const MAX_EXAMPLES = 5;          // per perUnit-key / per tie-break pair
+const MAX_SUSPICIOUS = 10;       // tripwire suspicious-list cap
+
+// Push a {replay, turn} citation onto a side's example list, deduped, capped at MAX_EXAMPLES.
+function pushExample(list, rec) {
+  if (!rec || !rec.id) return;
+  if (list.length >= MAX_EXAMPLES) return;
+  const ref = { replay: rec.id.replay, turn: rec.id.turnIndex };
+  if (list.some(e => e.replay === ref.replay && e.turn === ref.turn)) return;
+  list.push(ref);
+}
+
 function aggregate(records) {
   const n = records.length || 1;
   const sum = (f) => records.reduce((a, r) => a + f(r), 0);
-  const regrets = records.map(r => r.metrics.regret_ours);
-  const perUnit = {}; // isoKey -> {aiChumpedMore, humanChumpedMore}
+  // perUnit keyed by UNIT-VALUE-KEY (internal|hp|charge|lifespan) — owner/chill/status merged.
+  const perUnit = {}; // uvk -> { internal, hp, charge, lifespan, aiOnly, humanOnly, examplesAi[], examplesHuman[] }
   for (const r of records) {
-    for (const k of r.diag.chumpDiff_ours.aiOnly) (perUnit[k] = perUnit[k] || { aiOnly: 0, humanOnly: 0 }).aiOnly++;
-    for (const k of r.diag.chumpDiff_ours.humanOnly) (perUnit[k] = perUnit[k] || { aiOnly: 0, humanOnly: 0 }).humanOnly++;
+    for (const k of r.diag.chumpDiff_ours.aiOnly) {
+      const uvk = unitValueKey(k);
+      const d = decodeIso(k);
+      const e = (perUnit[uvk] = perUnit[uvk] || { internal: d.internal, hp: d.hp, charge: d.charge, lifespan: d.lifespan, aiOnly: 0, humanOnly: 0, examplesAi: [], examplesHuman: [] });
+      e.aiOnly++;
+      pushExample(e.examplesAi, r);
+    }
+    for (const k of r.diag.chumpDiff_ours.humanOnly) {
+      const uvk = unitValueKey(k);
+      const d = decodeIso(k);
+      const e = (perUnit[uvk] = perUnit[uvk] || { internal: d.internal, hp: d.hp, charge: d.charge, lifespan: d.lifespan, aiOnly: 0, humanOnly: 0, examplesAi: [], examplesHuman: [] });
+      e.humanOnly++;
+      pushExample(e.examplesHuman, r);
+    }
   }
   return {
     n: records.length,
@@ -66,28 +100,54 @@ function aggregate(records) {
     },
     exactMatch: { ours: sum(r => (r.metrics.exactMatch_ours ? 1 : 0)) / n, cpp: sum(r => (r.metrics.exactMatch_cpp ? 1 : 0)) / n },
     primeMatch: { ours: sum(r => (r.metrics.primeMatch_ours ? 1 : 0)) / n, cpp: sum(r => (r.metrics.primeMatch_cpp ? 1 : 0)) / n },
-    perUnitDivergence: Object.entries(perUnit).map(([k, v]) => ({ isoKey: k, ...v }))
+    perUnitDivergence: Object.values(perUnit)
       .sort((a, b) => (b.aiOnly + b.humanOnly) - (a.aiOnly + a.humanOnly)),
     tieBreakSkew: buildTieBreakSkew(records),
+    tripwire: buildTripwire(records),
   };
 }
 
 function buildTieBreakSkew(records) {
-  // pair-level: when ours ties >=2 primes, count which the human chose
-  const pairs = {}; // "P|Q" -> {P:count, Q:count}
+  // pair-level: when ours ties >=2 primes, count which UNIT-VALUE-KEY the human chose.
+  // Primes are isoKeys; collapse to unit-value-keys so owner/chill/status don't split pairs.
+  const pairs = {}; // "P||Q" (unit-value-keys) -> { leans:{uvk:count}, decode:{uvk:{...}}, examples[] }
   for (const r of records) {
     const contrast = r.diag.tieBreakContrast || [];
     if (contrast.length < 2) continue;
-    const chosen = r.human.assignment.prime;
-    for (const alt of contrast) {
+    const chosenIso = r.human.assignment.prime;
+    if (!chosenIso) continue;
+    const chosen = unitValueKey(chosenIso);
+    for (const altIso of contrast) {
+      if (!altIso) continue;
+      const alt = unitValueKey(altIso);
       if (alt === chosen) continue;
       const key = [chosen, alt].sort().join('||');
-      pairs[key] = pairs[key] || {};
-      pairs[key][chosen] = (pairs[key][chosen] || 0) + 1;
+      const p = (pairs[key] = pairs[key] || { leans: {}, decode: {}, examples: [] });
+      p.leans[chosen] = (p.leans[chosen] || 0) + 1;
+      p.decode[chosen] = p.decode[chosen] || decodeIso(chosenIso);
+      p.decode[alt] = p.decode[alt] || decodeIso(altIso);
+      pushExample(p.examples, r);
     }
   }
-  return Object.entries(pairs).map(([k, v]) => ({ pair: k, leans: v }))
+  return Object.entries(pairs).map(([k, v]) => ({ pair: k, leans: v.leans, decode: v.decode, examples: v.examples }))
     .sort((a, b) => Object.values(b.leans).reduce((x, y) => x + y, 0) - Object.values(a.leans).reduce((x, y) => x + y, 0));
 }
 
-module.exports = { computeMetrics, aggregate, sameAssignment };
+// TRIPWIRE — value-sanity standing guard. A min-loss should never be meaningfully negative;
+// the only legitimate negative is the tiny doomed-last-turn nudge (~-0.10). A loss < -1 means
+// the value layer is producing wrong (e.g. NEGATIVE-valued) units (cf. the lifespan -1 bug that
+// made Tia Thurnax value -34.86). This self-flags such regressions on every corpus run.
+function buildTripwire(records) {
+  let negMinLoss = 0;
+  const suspicious = [];
+  for (const r of records) {
+    const loss = r.ai_ours && typeof r.ai_ours.loss === 'number' ? r.ai_ours.loss : 0;
+    if (loss < -0.001) negMinLoss++;
+    if (loss < -1 && suspicious.length < MAX_SUSPICIOUS) {
+      suspicious.push({ replay: r.id ? r.id.replay : undefined, turn: r.id ? r.id.turnIndex : undefined, loss });
+    }
+  }
+  return { negMinLoss, suspicious };
+}
+
+module.exports = { computeMetrics, aggregate, sameAssignment, unitValueKey };
