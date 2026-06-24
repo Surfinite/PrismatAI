@@ -247,6 +247,7 @@ python training/export_weights_v2.py \
 - **Tournament per-seat stats + slot attribution (dave `6e93480`)**: statsTable has `P1 W/G`/`P2 W/G` columns; results are credited by SLOT index, so same-name self-match blocks are legitimate (rows render `Name (gN)`; the old first-name-match `-nan` bug is gone).
 - **2016 MasterBot baseline**: permanent home `c:/libraries/prismata_baselines/masterbot2016/PrismataAI.exe` (sha-pinned README in-dir; the Steam-dir `.ORIG` remains as backup). run_eval's steam anchor + matchup tooling point here — never at the Steam install (whose live exe is our DSNN swap-in).
 - **query_move.js defaults**: WIDENED `HardIterator_5var_IGsubset_Root` + `UCTConstant 0.3`, echoed to stderr per run. Pass `--root-iterator HardIterator_5var_Root` to probe the narrow (auto-fire) space deliberately.
+- **Fast C++ defense eval**: `query_move.js` at `think_time=0`/`max_traversals=1` returns defense-correct picks (<0.5s/process) — the defense `PartialPlayer` (`BlockIterator`) runs before/independent of the UCT search, so the budget never affects block assignment (only the action half degenerates). Drive a steam-bundle exe (e.g. `DSNN_steam_bundles/v221_rl_iter8`).
 - **query_move.js eats raw F6 `.txt` dumps directly** (`parseRequestFile` brace-matches the `"CurrentInfo"` object out of the multi-section blob — no separate extractor needed). An F6 dump = `"CurrentInfo":{mergedDeck,gameState,aiParameters,aiPlayerName}` + `"TurnStartInfo":{…}` + trailing plain-text `VOU [Unit] chN hpM val=…` debug lines (a VOU-instrumented SWF build appends these; board state is still fully recoverable, and such dumps can be ACTION-phase, not only the historical pre-swoosh DEFENSE). To run `action_coverage.py --battery`, convert dumps → clean `*.json` (see `eval/build_ma_battery.py`).
 - **x86 OOM — 4 threads max per process (engine_v2 x86 builds ONLY)**: `/LARGEADDRESSAWARE` = 4GB. Use `"Threads": 4` + multiple bat instances. Process dies silently at ~1400 games. dave-master builds x64 — not affected.
 - **Console output routing**: `[SelfPlay]`/`[Progress]` use `fprintf(stderr, ...)`. New Tournament.cpp messages should use stderr.
@@ -413,6 +414,8 @@ From the **engine's internal sequence**: a player's `MOVE_COMMIT` (end of action
 `HardestAI` should be exactly equivalent to `OriginalHardestAI` at default configurations.
 **Strength: LiveHardestAI < MCDSAI <= SteamAI ≈ MasterBot (Steam).** Quantified gap: ~20% WR overall in single-unit matchups (60% of units at 0/4). Full data: `docs/deepsets-training-results.md`.
 
+**Defense block resolution is ONE-PRIME** (engine rule, dave-master `Card::takeDamage` Card.cpp:389-423): each committed blocker either FULL-dies (damage ≥ HP = chump) or is the SINGLE prime that absorbs the partial remainder and survives; every other available unit takes 0 damage (untouched). No damage-splitting across survivors. Non-fragile survivors are never decremented (repair free next turn); fragile persist then heal `getHealthGained()` capped at `getHealthMax()` in `beginOwnTurnPhase`. Live C++ defense = `DefenseSolver → BlockIterator` (min-loss over `DamageLoss_WillCost`); the prime absorber is EMERGENT (non-fragile survivor → loss 0, Heuristics.cpp:237-240) and heal-BLIND; GreedyKnapsack is dead. The AS3 "Q" defender (`AutoClicks.valueOfUnit`/`primeDefender`) is the heal-aware contrast (explicit prime + `health+healthGained−healthMax` free-absorber).
+
 ### Training Data Inventory
 
 | Dataset | File | Replays | Examples | Min Rating |
@@ -486,6 +489,8 @@ AMD Ryzen 7 5700X3D (8c/16t), 32GB DDR4-3200, Intel Arc B580 (12GB VRAM). Self-p
 | `docs/PROJECT_HISTORY.md` | Full chronological dev history (sections 1-29) |
 | `docs/jsengine-faithfulness-results.md` | JS engine faithfulness campaign — COMPLETE (May 2026): faithful to AS3 client; residual 33/61267 = client recording bugs reproduced faithfully (~0.05% replays unviewable in real client too) |
 | `docs/deepsets-training-results.md` | DeepSets training results + parity-gap finding (May 2026) |
+| `docs/superpowers/specs/2026-06-24-defense-eval-pipeline-design.md` | Defense-eval pipeline: grade the functional `DamageLoss_Functional` heuristic vs elite human defense — design + plan (`.../plans/2026-06-24-defense-eval-pipeline.md`) + handoff (Jun 2026, SPEC'D, not built) |
+| `docs/scratch/2026-06-22-unit-value-heuristic-v3-handoff.md` | Functional unit-value model (`docs/scratch/gen_our_numbers_v2.js`); §16 = the prime-absorber survivor-delta redesign |
 | `docs/CLAUDE_REFERENCE.md` | Extended reference (cloud, sniffer, commentary, full file tables) |
 | `docs/plans/2026-03-09-training-plan-v3-READY-v3.md` | Training plan v3 (finalized) |
 | `docs/plans/2026-02-15-selfplay-training-master-plan.md` | Self-play training master plan |
