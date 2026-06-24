@@ -33,7 +33,11 @@ const dv = require('./defense_value');
 //   This port follows the C++ so the Task-12 gate (which runs 'cpp' mode against
 //   the real engine) sees a structure-matching search.
 // ---------------------------------------------------------------------------
-function solveDefense(stateUnits, incoming, mode, eps = 0.001) {
+// ctx (optional): a resonate context (dv.buildResonateContext) for the DEFENDING board, used only by
+// 'cpp' mode (the C++ adds resonateAttackAddedValue on death). The caller must build it from the FULL
+// active-player board, NOT just the blockers — resonators (e.g. Resophore, defaultBlocking=0) are not
+// blockers yet still contribute. Omitted -> resonate=0 (correct for resonate-free boards).
+function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) {
   const views = stateUnits.map(u => dv.unitView(u));
 
   // Group into iso-classes (mirrors _isoBlockers; order = first-appearance, as C++).
@@ -74,7 +78,7 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001) {
       const used = chumpCounts.get(g.key) || 0;
       if (used >= g.units.length) continue;          // no spare unit (canBlock, cpp:192)
       if (g.hp >= remaining) {                        // isLastBlocker (cpp:193)
-        const primeLoss = dv.loss(g.view, remaining, mode); // heuristic charged FULL remaining (cpp:84/105)
+        const primeLoss = dv.loss(g.view, remaining, mode, ctx); // heuristic charged FULL remaining (cpp:84/105)
         record(lossScore + primeLoss, g.key, remaining);
       }
     }
@@ -93,7 +97,7 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001) {
     const used = chumpCounts.get(g.key) || 0;
     if (used < g.units.length && g.hp <= remaining) {  // canBlock (cpp:102) + full-kill only
       const takeDamage = g.hp;                         // cpp:104 (= min(hp, remaining) here)
-      const chumpLoss = dv.loss(g.view, remaining, mode);     // heuristic charged FULL remaining (cpp:105)
+      const chumpLoss = dv.loss(g.view, remaining, mode, ctx);     // heuristic charged FULL remaining (cpp:105)
       chumpCounts.set(g.key, used + 1);
       recurse(depth, remaining - takeDamage, lossScore + chumpLoss); // cpp:109
       chumpCounts.set(g.key, used);                    // unwind (cpp:110)
