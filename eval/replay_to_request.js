@@ -19,7 +19,10 @@
  *
  * Usage:
  *   node replay_to_request.js <replay.json[.gz]> <ply|a,b,c|--all> <outDir> [--prefix P]
- *                             [--ig-only] [--aiparams <request-or-template.json>]
+ *                             [--ig-only] [--defense-only] [--aiparams <request-or-template.json>]
+ *
+ *   --defense-only keeps only begin-of-defense plies with incoming attack (State A — the AI's
+ *   defense input); see defenseDecidable().
  */
 
 const fs = require('fs');
@@ -76,15 +79,22 @@ function igDecidable(gs) {
     });
 }
 
+// Is this a begin-of-defense state with incoming attack? (State A — the AI's defense input.)
+// Operates on the stateToCppJSON gameState so it matches exactly what query_move.js sees.
+function defenseDecidable(gs) {
+    return gs.phase === 'defense' && ((gs.incomingAttack | 0) > 0);
+}
+
 function main() {
     const argv = process.argv.slice(2);
     if (argv.length < 3) {
-        process.stderr.write('usage: node replay_to_request.js <replay.json[.gz]> <ply|a,b,c|--all> <outDir> [--prefix P] [--ig-only] [--aiparams F]\n');
+        process.stderr.write('usage: node replay_to_request.js <replay.json[.gz]> <ply|a,b,c|--all> <outDir> [--prefix P] [--ig-only] [--defense-only] [--aiparams F]\n');
         process.exit(2);
     }
     const [replayPath, plySpec, outDir] = argv;
     const prefix = (argv.includes('--prefix')) ? argv[argv.indexOf('--prefix') + 1] : null;
     const igOnly = argv.includes('--ig-only');
+    const defenseOnly = argv.includes('--defense-only');
     const aiparamsPath = (argv.includes('--aiparams')) ? argv[argv.indexOf('--aiparams') + 1] : DEFAULT_AIPARAMS;
 
     const replay = loadJSON(replayPath);
@@ -108,13 +118,14 @@ function main() {
         if (!state) continue;
         const gameState = replay_exporter.stateToCppJSON(state);
         if (igOnly && !igDecidable(gameState)) continue;
+        if (defenseOnly && !defenseDecidable(gameState)) continue;
         const base = `${prefix || code}_p${ply}`;
         const outPath = path.join(outDir, `${base}.json`);
         fs.writeFileSync(outPath, JSON.stringify({ mergedDeck, gameState, aiParameters }, null, 2));
         written.push({ ply, phase: gameState.phase, out: outPath });
     }
     process.stdout.write(JSON.stringify({ replay: code, requested: plies.length,
-        written: written.length, igOnly, files: written }, null, 2) + '\n');
+        written: written.length, igOnly, defenseOnly, files: written }, null, 2) + '\n');
 }
 
 main();
