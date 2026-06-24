@@ -128,4 +128,5 @@ function main() {
         written: written.length, igOnly, defenseOnly, files: written }, null, 2) + '\n');
 }
 
-main();
+module.exports = { loadJSON, buildInitInfo };
+if (require.main === module) main();
