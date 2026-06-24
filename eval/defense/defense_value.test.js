@@ -1,0 +1,30 @@
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert');
+const dv = require('./defense_value');
+const near = (a, b, eps = 0.02) => Math.abs(a - b) < eps;
+
+function mk(name, over = {}) { // build a minimal game-state unit
+  return Object.assign({ cardName: name, owner: 0, health: undefined, charge: undefined, lifespan: undefined }, over);
+}
+
+test('unitView resolves internal name + current state', () => {
+  const v = dv.unitView(mk('Wall', { health: 3 }));
+  assert.equal(v.internal, 'Wall');
+  assert.equal(v.hp, 3);
+  assert.equal(v.fragile, false);
+});
+
+test('body uses CURRENT hp and heal-aware effective soak', () => {
+  // Xaetron: heal 4, max 12, fragile. At HP 8: effective soak min(8+4,12)=12 -> 12*2.2 - 0.1 fragile = 26.3
+  const x8 = dv.body(dv.unitView(mk('Xaetron', { health: 8 })));
+  assert.ok(near(x8, 26.3), `Xaetron@8 body expected ~26.3, got ${x8}`);
+  // At HP 5: min(5+4,12)=9 -> 9*2.2 - 0.1 = 19.7
+  const x5 = dv.body(dv.unitView(mk('Xaetron', { health: 5 })));
+  assert.ok(near(x5, 19.7), `Xaetron@5 body expected ~19.7, got ${x5}`);
+});
+
+test('V(Energy Matrix@5) == 11', () => {
+  const em = dv.V(dv.unitView(mk('Golem', { health: 5 })));
+  assert.ok(near(em, 11), `EM expected 11, got ${em}`);
+});

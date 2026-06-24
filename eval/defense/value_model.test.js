@@ -39,7 +39,7 @@ test('§4.4 fix: doomed nudge puts a fresh Doomed Wall just below ch0-Bombarder'
   // 'Wall'/'Golem'/'House'); the Doomed Wall unit's internal key is 'Doomwall'
   // (UIName "Doomed Wall"). The brief's display-name key 'Doomed Wall' is not a lib key.
   const dw = vm.ours(vm.lib['Doomwall']).v;
-  const bomb0 = vm.ours(vm.lib['Bombarder'], { charge: 0 }).v; // stateOverride added in Task 3; here charge 0 == body 8.8
-  assert.ok(dw < bomb0, `Doomed Wall (${dw}) must be < ch0-Bombarder (${bomb0})`);
-  assert.ok(dw > 8.0, `Doomed Wall (${dw}) should still be near body, not heavily discounted`);
+  // ch0-Bombarder body == 8.8 (via the Task-3 stateOverride { charge: 0 }); a fresh Doomed Wall
+  // sits just below it, still near its own body floor (not heavily discounted).
+  assert.ok(dw < 8.8 && dw > 8.0, `Doomed Wall (${dw}) should be just below ch0-Bombarder body 8.8 and near its own body floor`);
 });

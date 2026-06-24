@@ -59,18 +59,24 @@ function createValue(arr) {
 }
 
 // ---- RAW value (additive body-floor + production), BEFORE the undef/fragile haircuts (those are applied in ours()). ----
-function coreValue(c, chargeOverride, noCreate) {
+function coreValue(c, stateOverride, noCreate) {
+    // stateOverride: { hp, charge, life } overrides the card's nominal toughness/charge/lifespan for the value PICKER.
+    // Backward-compat shim: a numeric override is the legacy charge-override (`ours(c, 2)`).
+    const _ov = (typeof stateOverride === 'number') ? { charge: stateOverride } : (stateOverride || {});
+    const _hp  = _ov.hp     !== undefined ? _ov.hp     : c.toughness;
+    const _chg = _ov.charge !== undefined ? _ov.charge : c.charge;
+    const _rem = _ov.life   !== undefined ? _ov.life   : c.lifespan;
     // Heal: the table is BUY-state, but the value reflects the implementation rule — effective soak HP = current HP + one
     // heal, capped at max (a healer self-repairs across the soak window, so it absorbs more than its starting bar).
     const heal = c.HPGained || 0, hpMax = (c.HPMax !== undefined) ? c.HPMax : c.toughness;
-    const soakHP = heal > 0 ? Math.min(c.toughness + heal, hpMax) : c.toughness;
-    const HP = c.toughness, ab = c.abilityScript, bt = c.beginOwnTurnScript;
+    const soakHP = heal > 0 ? Math.min(_hp + heal, hpMax) : _hp;
+    const HP = _hp, ab = c.abilityScript, bt = c.beginOwnTurnScript;
     let body = soakHP * BV;
     const abA = attackOf(ab), btA = attackOf(bt);
-    const life = c.lifespan, doomed = life !== undefined;
+    const life = _rem, doomed = life !== undefined;
     // doomed keep-value nudge: lifespan==1 stays 0 (handled by the terminal branch); lifespan>=2 gets a small haircut
     const _maxLife = c.lifespan;          // nominal/max lifespan from the card
-    const _remLife = c.lifespan;          // current == nominal in table mode (Task 3 overrides)
+    const _remLife = _rem;                // current remaining lifespan (== nominal in table mode; overridden in state mode)
     if (_maxLife !== undefined && _remLife >= 2) {
         body -= DOOMED_NUDGE * (1 + _maxLife - _remLife);
     }
@@ -90,7 +96,7 @@ function coreValue(c, chargeOverride, noCreate) {
     if (c.abilityNetherfy) {
         const drone = lib['Drone'], denied = drone ? (ours(drone).atk || 0) : 0;
         const net = denied - costWill(c.abilityCost) - abilitySacWill(c);
-        const ch = chargeOverride === undefined ? (c.charge || 0) : chargeOverride;
+        const ch = _chg === undefined ? 0 : _chg;
         const stream = net > 0 ? (c.charge ? net * geom(ch) : net * (geomPerp(1) - 1)) : 0;
         if (c.charge) mods.unshift('charge=' + ch);
         return { v: f2(body + stream), type: `drone-kill${c.charge ? `(x${ch})` : ''}`, flags: mods.join(','), block: f2(body), atk: f2(stream), rule: 'block+kill' };
@@ -139,7 +145,7 @@ function coreValue(c, chargeOverride, noCreate) {
     const net = abProd - costWill(c.abilityCost) - abilitySacWill(c);
     const label = abCreate ? `create(${abA}A)` : `click-atk(${abA})`;
     if (c.charge) {
-        const ch = chargeOverride === undefined ? c.charge : chargeOverride;
+        const ch = _chg === undefined ? c.charge : _chg;
         const T = doomed ? Math.min(ch, life - 1) : ch;
         const stream = (ch > 0 && net > 0) ? net * geom(T) : 0;
         mods.unshift('charge=' + ch);
@@ -158,8 +164,9 @@ function coreValue(c, chargeOverride, noCreate) {
 }
 
 // ---- ours() = coreValue, then apply the undefendable / fragile haircuts (both reduce BLOCK reliability, keeping block+atk = v). ----
-function ours(c, chargeOverride, noCreate) {
-    const r = coreValue(c, chargeOverride, noCreate);
+// stateOverride: { hp, charge, life } values the unit at its CURRENT game-state (else nominal); a numeric arg is the legacy charge override.
+function ours(c, stateOverride, noCreate) {
+    const r = coreValue(c, stateOverride, noCreate);
     if (r.v == null) return r;
     let block = +r.block; const hit = [];
     if (c.undefendable) { const h = UNDEF_PER_HP * (c.toughness || 0); block -= h; hit.push(`undef−${f2(h)}`); }
