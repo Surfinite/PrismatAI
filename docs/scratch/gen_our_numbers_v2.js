@@ -25,8 +25,9 @@ const ATK = 2.0;    // value of 1 attack PRODUCED (community; pending an attacke
 const R = 4 / 3;    // interest rate: Wall-vs-IG promptness AND producer amortization BOTH give 4/3
 const RES = { gold: 1, green: 4 / 3, blue: 5 / 3, red: 1, energy: 0.3 }; // green/blue/red PRODUCER-derived = gold-cost/(output x 1/(R-1)=3) [Conduit/Blastforge/Animus]. energy: NOT a clean producer value — the Engineer's 1HP body shares its 2g cost (body-adjusted estimate ~0.1; producer-naive 0.667). 0.3 = hedged starting point; real value is board-dependent (ability-usable gate, later).
 const THREAT = 0.1; // residual value of a click-attacker's held-back (forgone-to-soak) attack, PER attack point (x abA). TUNABLE.
-const OPT_SELFSAC_ATK = 1.0;   // optionality bonus for a self-sac unit whose burst is ATTACK (Nitrocybe/Protoplasm/Photonic). TUNABLE.
-const OPT_SELFSAC_TOKEN = 0.5; // optionality bonus for a self-sac unit whose burst is TOKENS (Infusion Grid) — smaller. TUNABLE.
+const OPT_SELFSAC_ATK = 0.2;   // optionality bonus for a self-sac unit whose burst is ATTACK (Nitrocybe/Protoplasm/Photonic). TUNABLE. (§4.4: 1.0→0.2)
+const OPT_SELFSAC_TOKEN = 0.1; // optionality bonus for a self-sac unit whose burst is TOKENS (Infusion Grid) — smaller. TUNABLE. (§4.4: 0.5→0.1)
+const DOOMED_NUDGE = 0.1; // small per-step doomed keep-value haircut (§4.4: lifespan>=2 only)
 const CHILL_COEFF = 0.5;       // chill point valued as CHILL_COEFF x an attack point; forces one defense (flat, board-aware later). TUNABLE.
 const UNDEF_PER_HP = 0.5;      // undefendable haircut: lose this much BLOCK value per HP (opponent can kill it directly). TUNABLE.
 const FRAGILE_PEN = 0.1;       // fragile flat BLOCK haircut (differentiates e.g. Forcefield from a ch0-Rhino). TUNABLE.
@@ -63,9 +64,16 @@ function coreValue(c, chargeOverride, noCreate) {
     // heal, capped at max (a healer self-repairs across the soak window, so it absorbs more than its starting bar).
     const heal = c.HPGained || 0, hpMax = (c.HPMax !== undefined) ? c.HPMax : c.toughness;
     const soakHP = heal > 0 ? Math.min(c.toughness + heal, hpMax) : c.toughness;
-    const HP = c.toughness, body = soakHP * BV, ab = c.abilityScript, bt = c.beginOwnTurnScript;
+    const HP = c.toughness, ab = c.abilityScript, bt = c.beginOwnTurnScript;
+    let body = soakHP * BV;
     const abA = attackOf(ab), btA = attackOf(bt);
     const life = c.lifespan, doomed = life !== undefined;
+    // doomed keep-value nudge: lifespan==1 stays 0 (handled by the terminal branch); lifespan>=2 gets a small haircut
+    const _maxLife = c.lifespan;          // nominal/max lifespan from the card
+    const _remLife = c.lifespan;          // current == nominal in table mode (Task 3 overrides)
+    if (_maxLife !== undefined && _remLife >= 2) {
+        body -= DOOMED_NUDGE * (1 + _maxLife - _remLife);
+    }
     const hpFunded = c.HPUsed !== undefined; // HP-funded ability (Xaetron: pay 7HP → 5 Flame Kin) — user ruling: ignore the click, treat as block
     const mods = []; if (doomed) mods.push('life=' + life); if (heal > 0 || c.HPMax) mods.push('heal→' + soakHP);
     const abCreateArr = (!hpFunded && ab && Array.isArray(ab.create)) ? ab.create : null;
@@ -93,9 +101,11 @@ function coreValue(c, chargeOverride, noCreate) {
         const tokens = Array.isArray(s.create) ? createValue(s.create) : 0;
         let burst = attackOf(s) * ATK + costWill(s.receive) + tokens - abilitySacWill(c);
         if (sclick) burst -= costWill(c.abilityCost);
-        const opt = Array.isArray(s.create) ? OPT_SELFSAC_TOKEN : OPT_SELFSAC_ATK;
+        const isToken = Array.isArray(s.create);
+        const opt = isToken ? OPT_SELFSAC_TOKEN : OPT_SELFSAC_ATK;
         const v = Math.max(body, burst) + opt;
-        return { v: f2(v), type: 'self-sac', flags: mods.concat(`burst=${f2(burst)},opt=${opt}`).join(','), block: f2(body), atk: f2(v - body), rule: 'max(block,burst)+opt' };
+        const word = isToken ? 'convert' : 'burst'; // IG (token) "converts" its body into Houses; atk-sac "bursts"
+        return { v: f2(v), type: 'self-sac', flags: mods.concat(`${word}=${f2(burst)},opt=${opt}`).join(','), block: f2(body), atk: f2(v - body), rule: `max(block,${word})+opt` };
     }
     // ---- terminal lifespan (dies THIS turn regardless → free chump) ----
     if (life === 1) return { v: 0, type: 'pure-block', flags: 'life=1', block: 0, atk: 0, rule: 'terminal→0' };
@@ -271,5 +281,5 @@ console.log(`wrote ${OUT}: ${inscope.length} in-scope, ${deferred.length} deferr
 
 module.exports = {
   ours, parseCost, costWill, attackOf, geom, geomPerp, lib,
-  CONSTANTS: { BV, ATK, R, RES, THREAT, OPT_SELFSAC_ATK, OPT_SELFSAC_TOKEN, CHILL_COEFF, UNDEF_PER_HP, FRAGILE_PEN },
+  CONSTANTS: { BV, ATK, R, RES, THREAT, OPT_SELFSAC_ATK, OPT_SELFSAC_TOKEN, DOOMED_NUDGE, CHILL_COEFF, UNDEF_PER_HP, FRAGILE_PEN },
 };

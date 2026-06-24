@@ -6,7 +6,7 @@
 > production: **auto** = net·P (no tap/penalty) · **click** = net·(P−1)+THREAT·atk (taps → forgoes the one death-eve soak attack; threat residual) ·
 > **charge** = net·geom(ch) (preserved STOCK → no penalty) · **doomed** = net·geom(life−1)+THREAT·atk · **economy** = resource·{auto P / click P−1}.
 > **block**/**atk** columns sum to **OURS**. Charge units at FULL charge (per-charge breakdown + convergence below).
-> **New mechanics (tunable):** self-sac = max(block,burst)+opt (atk-burst 1 / token-burst 0.5) · token-spawn = production stream of created tokens (own = +ours(token), discounted by build-time; opponent = −block) · chill = +targetAmount·ATK·0.5 (flat, board-aware later) · drone-kill = +denied-drone PRODUCTION (Deadeye charge) · **undef −0.5/HP block** · **fragile −0.1 block**. Heal: effective soak HP = **current HP + one heal, capped at max** (buy-state in the table; matches the impl rule). Xaetron's HP-funded click ignored (→pure block).
+> **New mechanics (tunable):** self-sac = max(block,burst)+opt (atk-burst 0.2 / token-burst 0.1) · token-spawn = production stream of created tokens (own = +ours(token), discounted by build-time; opponent = −block) · chill = +targetAmount·ATK·0.5 (flat, board-aware later) · drone-kill = +denied-drone PRODUCTION (Deadeye charge) · **undef −0.5/HP block** · **fragile −0.1 block**. Heal: effective soak HP = **current HP + one heal, capped at max** (buy-state in the table; matches the impl rule). Xaetron's HP-funded click ignored (→pure block).
 
 ## In-scope — sorted by OURS
 | Unit | HP | type | flags | block | atk | rule | **OURS** | Q | Q/O | C++ | sDef | sTot |
@@ -14,24 +14,24 @@
 | Barrier | 1 | pure-block | life=1 | 0 | 0 | terminal→0 | **0** | 7 | — | 0 | 2.37 | 2.37 |
 | Plexo Cell | 4 | pure-block | life=1 | 0 | 0 | terminal→0 | **0** | 14 | — | 0 | 9.47 | 9.47 |
 | Husk | 1 | pure-block |  | 2.2 | 0 | block | **2.2** | 7 | 3.18 | 1.875 | 2.37 | 2.37 |
-| Nitrocybe | 1 | self-sac | burst=2,opt=1 | 2.2 | 1 | max(block,burst)+opt | **3.2** | 9.83 | 3.07 | 2.43 | 1.21 | 1.91 |
+| Nitrocybe | 1 | self-sac | burst=2,opt=0.2 | 2.2 | 0.2 | max(block,burst)+opt | **2.4** | 9.83 | 4.1 | 2.43 | 1.21 | 1.91 |
 | Engineer | 1 | economy-auto |  | 2.2 | 1.2 | block+econ | **3.4** | 7.3 | 2.15 | 1.875 | 1.69 | 1.69 |
 | Forcefield | 2 | pure-block | fragile−0.1 | 4.3 | 0 | block | **4.3** | 13.75 | 3.2 | 3.75 | 4.73 | 4.73 |
-| Doomed Drone | 1 | economy-click | life=4 | 2.2 | 2.31 | block+econ(doom) | **4.51** | 10.24 | 2.27 | 2.5 | 1.69 | 2.2 |
+| Doomed Drone | 1 | economy-click | life=4 | 2.1 | 2.31 | block+econ(doom) | **4.41** | 10.24 | 2.32 | 2.5 | 1.69 | 2.2 |
+| Photonic Fibroid | 2 | self-sac | burst=4,opt=0.2 | 4.4 | 0.2 | max(block,burst)+opt | **4.6** | 16 | 3.48 | 4.51 | ? | ? |
 | Immolite | 1 | click-atk(1) | exhaust2 | 2.2 | 2.67 | block+click/2 | **4.87** | 15.36 | 3.15 | 3.9 |  | 4.08 |
 | Drone | 1 | economy-click |  | 2.2 | 3 | block+econ | **5.2** | 11 | 2.12 | 3.5 | 1.69 | 2.5 |
-| Photonic Fibroid | 2 | self-sac | burst=4,opt=1 | 4.4 | 1 | max(block,burst)+opt | **5.4** | 16 | 2.96 | 4.51 | ? | ? |
 | Shiver Yeti | 2 | chill | chill2 | 4.4 | 2 | block+chill | **6.4** | 18 | 2.81 | 5.22 | 4.73 |  |
 | Wall | 3 | pure-block |  | 6.6 | 0 | block | **6.6** | 21 | 3.18 | 5.75 | 7.1 | 7.1 |
 | Corpus | 2 | charge-create(0A) | charge=2 | 4.4 | 2.8 | block+charge | **7.2** | 16.67 | 2.32 | 6.9 | 7.1 | 12.78 |
 | Perforator | 2 | click-atk(1) |  | 4.4 | 3.1 | block+click | **7.5** | 15.36 | 2.05 | 3.9 | 3.38 | 4 |
 | Rhino | 2 | charge-click-atk(1) | charge=2 | 4.4 | 3.5 | block+charge | **7.9** | 18.67 | 2.36 | 5.22 | 4.73 | 5.15 |
-| Innervi Field | 3 | pure-block | life=3,heal→4,fragile−0.1 | 8.7 | 0 | block | **8.7** | 26.5 | 3.05 | 5.66 | ? | ? |
-| Doomed Wall | 4 | pure-block | life=3 | 8.8 | 0 | block | **8.8** | 26 | 2.95 | 7.52 | 9.47 | 12.36 |
-| Grimbotch | 2 | click-atk(1) | life=4 | 4.4 | 4.72 | block+doomed | **9.13** | 19.2 | 2.1 | 4.9 | 3.38 | 5.89 |
-| Infusion Grid | 4 | self-sac | burst=7.8,opt=0.5 | 8.8 | 0.5 | max(block,burst)+opt | **9.3** | 28 | 3.01 | 6.5 | 6.76 | 10.99 |
+| Innervi Field | 3 | pure-block | life=3,heal→4,fragile−0.1 | 8.6 | 0 | block | **8.6** | 26.5 | 3.08 | 5.66 | ? | ? |
+| Doomed Wall | 4 | pure-block | life=3 | 8.7 | 0 | block | **8.7** | 26 | 2.99 | 7.52 | 9.47 | 12.36 |
+| Infusion Grid | 4 | self-sac | convert=7.8,opt=0.1 | 8.8 | 0.1 | max(block,convert)+opt | **8.9** | 28 | 3.15 | 6.5 | 6.76 | 10.99 |
+| Protoplasm | 4 | self-sac | burst=8,opt=0.2,fragile−0.1 | 8.7 | 0.2 | max(block,burst)+opt | **8.9** | 35 | 3.93 | 9.91 | 9.47 | 12.39 |
+| Grimbotch | 2 | click-atk(1) | life=4 | 4.3 | 4.72 | block+doomed | **9.03** | 19.2 | 2.13 | 4.9 | 3.38 | 5.89 |
 | Electrovore | 2 | click-atk(1) |  | 4.4 | 5.2 | block+click | **9.6** | 19.2 | 2 | 4.9 | 3.38 | 7 |
-| Protoplasm | 4 | self-sac | burst=8,opt=1,fragile−0.1 | 8.7 | 1 | max(block,burst)+opt | **9.7** | 35 | 3.61 | 9.91 | 9.47 | 12.39 |
 | Polywall | 6 | pure-block | undef−3 | 10.2 | 0 | block | **10.2** | 35 | 3.43 | 10.18 | 14.2 | 14.2 |
 | Ossified Drone | 2 | economy-auto+create |  | 4.4 | 6.3 | block+econ+create×1 | **10.7** | 17 | 1.59 | 6.4 |  |  |
 | Aegis | 5 | pure-block | fragile−0.1 | 10.9 | 0 | block | **10.9** | 32.5 | 2.98 | 8.5 | 11.83 | 11.83 |
@@ -51,22 +51,22 @@
 | Bombarder | 4 | charge-click-atk(3) | charge=2 | 8.8 | 10.5 | block+charge | **19.3** | 49 | 2.54 | 11.9 | ? | ? |
 | Mega Drone | 4 | economy-click |  | 8.8 | 12 | block+econ | **20.8** | 57.6 | 2.77 | 15.5 | ? | ? |
 | Lancetooth | 4 | click-atk(2) |  | 8.8 | 12.2 | block+click | **21** | 57.34 | 2.73 | 15.36 |  | 10 |
-| Doomed Mech | 5 | click-atk(2) | life=5 | 11 | 11.14 | block+doomed | **22.14** | 47.36 | 2.14 | 12 | 8.45 | 12.85 |
-| Chieftain | 7 | click-atk(2) | life=3,fragile−0.1 | 15.3 | 7.2 | block+doomed | **22.5** | 48.3 | 2.15 | 11.9 | 11.83 | 14.25 |
+| Doomed Mech | 5 | click-atk(2) | life=5 | 10.9 | 11.14 | block+doomed | **22.04** | 47.36 | 2.15 | 12 | 8.45 | 12.85 |
+| Chieftain | 7 | click-atk(2) | life=3,fragile−0.1 | 15.2 | 7.2 | block+doomed | **22.4** | 48.3 | 2.16 | 11.9 | 11.83 | 14.25 |
 | Mahar Rectifier | 5 | click-atk(2) | heal→5,fragile−0.1 | 10.9 | 12.2 | block+click | **23.1** | 52.48 | 2.27 | 13.4 | 8.45 | 18.03 |
 | Valkyrion | 4 | create(4A) |  | 8.8 | 14.5 | block+click | **23.3** | 66.56 | 2.86 | 16.8 |  | 22.58 |
 | Plasmafier | 4 | click-atk(4) | sac:Drone,fragile−0.1 | 8.7 | 15.4 | block+click | **24.1** | 67.84 | 2.81 | 17.1 |  | 21.75 |
 | Hannibull | 7 | auto(1)+click-atk(1) | undef−3.5 | 11.9 | 14.1 | block+auto+click | **26** | 48.64 | 1.87 | 12.4 | 13.83 | 14.4 |
 | Redeemer | 4 | click-atk(3) |  | 8.8 | 18.3 | block+click | **27.1** | 68 | 2.51 | 12.7 |  | 13.76 |
-| Defense Grid | 7 | auto-create | life=7 | 15.4 | 13.52 | block+auto | **28.92** | 80.64 | 2.79 | 20.5 | 11.83 | 32.15 |
+| Defense Grid | 7 | auto-create | life=7 | 15.3 | 13.52 | block+auto | **28.82** | 80.64 | 2.8 | 20.5 | 11.83 | 32.15 |
 | Centurion | 6 | auto-atk(2) |  | 13.2 | 16 | block+auto | **29.2** | 77 | 2.64 | 21.5 | 18.2 | 45.95 |
 | Omega Splitter | 6 | click-atk(3) |  | 13.2 | 18.3 | block+click | **31.5** | 76.8 | 2.44 | 19.5 |  | 28.82 |
 | Colossus | 8 | click-atk(3) | fragile−0.1 | 17.5 | 18.3 | block+click | **35.8** | 83.2 | 2.32 | 21 | 13.52 | 26.61 |
-| Thunderhead | 11 | auto-atk(4) | life=3,undef−5.5 | 18.7 | 18.5 | block+auto | **37.2** | 89.6 | 2.41 | 22.5 |  |  |
+| Thunderhead | 11 | auto-atk(4) | life=3,undef−5.5 | 18.6 | 18.5 | block+auto | **37.1** | 89.6 | 2.42 | 22.5 |  |  |
 | Arka Sodara | 7 | click-atk(4) |  | 15.4 | 24.4 | block+click | **39.8** | 76 | 1.91 | 23.58 | 16.57 | 48.23 |
 | Tia Thurnax | 4 | charge-click-atk(7) | charge=3,fragile−0.1 | 8.7 | 32.38 | block+charge | **41.08** | 78 | 1.9 | 31.86 |  | 35.54 |
 
-> **Q/O ratio: mean 2.61** (Q ≈ 2.61× OURS on average). **Lowest** (OURS rich vs Q): Ossified Drone 1.59, Feral Warden 1.75, Cauterizer 1.78, Borehole Patroller 1.85. **Highest** (OURS lean vs Q): Odin 7.56, Protoplasm 3.61, Polywall 3.43, Forcefield 3.2. Outliers from the mean are the rows to justify.
+> **Q/O ratio: mean 2.65** (Q ≈ 2.65× OURS on average). **Lowest** (OURS rich vs Q): Ossified Drone 1.59, Feral Warden 1.75, Cauterizer 1.78, Borehole Patroller 1.85. **Highest** (OURS lean vs Q): Odin 7.56, Nitrocybe 4.1, Protoplasm 3.93, Photonic Fibroid 3.48. Outliers from the mean are the rows to justify.
 
 ## Charge breakdown (ch0=spent .. full)
 | Unit | ch0 | ch1 | ch2 | ch3 |
