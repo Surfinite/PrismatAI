@@ -22,7 +22,12 @@ function unitView(stateUnit) {
     instId: stateUnit.instId,
     hp: stateUnit.health !== undefined ? stateUnit.health : (ct ? ct.toughness : 0),
     charge: stateUnit.charge,
-    life: stateUnit.lifespan,
+    // The engine emits lifespan = -1 (the "no lifespan" sentinel) for NON-doomed units, and a
+    // positive remaining-lifespan (>=1) for doomed ones. The value model expects `undefined` for
+    // non-doomed (it then uses the card's nominal lifespan); passing -1 makes ours() treat the unit
+    // as a doomed unit with -1 turns left and corrupts the charge/attack valuation (e.g. Tia Thurnax
+    // @4/ch3 -> -34.86 instead of +41.08). Normalize the sentinel to undefined; keep real (>=1) lifespans.
+    life: (stateUnit.lifespan !== undefined && stateUnit.lifespan >= 1) ? stateUnit.lifespan : undefined,
     fragile: !!(ct && ct.fragile),
     heal: ct ? (ct.HPGained || 0) : 0,
     max: ct ? (ct.HPMax !== undefined ? ct.HPMax : ct.toughness) : 0,
