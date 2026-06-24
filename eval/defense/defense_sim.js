@@ -60,15 +60,71 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) 
   }
 
   // A solution = chump-count per iso-key + optional last blocker (key + damage it takes).
-  const solutions = [];
+  //
+  // BRANCH-AND-BOUND (output-identical to the former exhaustive enumeration).
+  //   `lossScore` accumulates the per-unit chump (full-kill, death-path) terms of the current
+  //   branch; the optional last blocker adds ONE more terminal term in record(). Each added term
+  //   is `dv.loss(view, ..., mode)`. These are USUALLY >= 0, but NOT always: a unit's functional
+  //   value can be negative ('ours' mode prices a Polywall@1 death at -0.8 via its undefendable
+  //   haircut), so `lossScore` is NOT strictly monotonic and the naive bound (prune when
+  //   lossScore > bestLoss+eps) would wrongly drop a tied alt that later chumps a negative-loss
+  //   unit. We therefore prune against a SOUND lower bound: any completion of this branch can
+  //   subtract at most `negFloor` (the most negative total a chump-set + one prime could add, a
+  //   board constant <= 0). A completion's loss is thus >= lossScore + negFloor, so we prune only
+  //   when lossScore + negFloor > bestLoss + eps. negFloor is ~0 on the husk-heavy boards that
+  //   used to blow up (their death losses are all positive), so pruning stays aggressive there.
+  //   * `bestLoss` tracks the minimum solution loss seen so far (Infinity until the first).
+  //   * `kept` holds exactly the solutions within eps of the best — the tied set, bounded in size.
+  //   record() drops any solution whose loss exceeds bestLoss+eps; a strictly-better solution
+  //   lowers bestLoss and PURGES kept of now-stale entries. The exhaustive version stored EVERY
+  //   feasible tuple, then filtered to <= best+eps and deduped; this stores only the survivors,
+  //   but the surviving SET (and DFS order within it) is identical, so best/loss/tiedAlts/perUnit/
+  //   prime are unchanged — only memory is bounded.
+
+  // negFloor: a board-level lower bound on the TOTAL added loss any branch completion can have.
+  // A completion adds some subset of full-kill chumps (each charged its death loss, independent of
+  // `remaining`) plus at most one last blocker. The most a completion can REDUCE lossScore by is
+  // the sum of every available unit's negative death-loss, plus one extra worst-case last-blocker
+  // term (a prime can take partial/exact damage, a distinct term from the death loss). We sum
+  // min(0, deathLoss) over all units, then add the single most-negative term seen on the board.
+  let negFloor = 0;
+  let minTerm = 0;                                           // most negative single term (chump or prime)
+  for (const g of groups) {
+    // death loss of one g-unit (full-kill): dv.loss is damage-independent once it dies, so any
+    // damage >= g.hp gives the same value; use g.hp.
+    const deathLoss = dv.loss(g.view, g.hp, mode, ctx);
+    if (deathLoss < 0) negFloor += deathLoss * g.units.length;
+    if (deathLoss < minTerm) minTerm = deathLoss;
+    // a surviving prime (partial-damage last blocker) is a different term; sample its sign too.
+    if (g.hp > 1) {
+      const survLoss = dv.loss(g.view, g.hp - 1, mode, ctx);
+      if (survLoss < minTerm) minTerm = survLoss;
+    }
+  }
+  negFloor += minTerm;                                       // one extra terminal prime term
+
+  const kept = [];               // solutions with loss <= bestLoss + eps (the live tied set)
+  let bestLoss = Infinity;       // min solution loss seen so far
   const chumpCounts = new Map(); // key -> number currently chumping (mutated during recursion)
 
   function record(lossScore, lastKey, lastDmg) {
-    solutions.push({ loss: lossScore, chumpCounts: new Map(chumpCounts), lastKey, lastDmg });
+    if (lossScore > bestLoss + eps) return;                  // strictly outside the tied band -> drop
+    if (lossScore < bestLoss) {                              // new strict best -> tighten + purge
+      bestLoss = lossScore;
+      for (let i = kept.length - 1; i >= 0; i--) {
+        if (kept[i].loss > bestLoss + eps) kept.splice(i, 1);
+      }
+    }
+    kept.push({ loss: lossScore, chumpCounts: new Map(chumpCounts), lastKey, lastDmg });
   }
 
   // cpp:50-118 recurse. `remaining` is the un-blocked incoming damage.
   function recurse(depth, remaining, lossScore) {
+    // Prune: lossScore + negFloor is a SOUND lower bound on every completion of this branch
+    // (negFloor <= 0 caps the largest reduction any future chump/prime set can contribute); if it
+    // already exceeds the tied band, no descendant solution can be within eps of best (B&B cutoff).
+    if (lossScore + negFloor > bestLoss + eps) return;
+
     // cpp:53-68 solve condition — chumps (and earlier last-blockers) already zeroed it.
     if (remaining === 0) { record(lossScore, null, 0); return; }
 
@@ -110,11 +166,15 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) 
   recurse(0, incoming, 0);
 
   // No feasible defense (incoming overwhelms the pool; no group can ever zero it) -> breach/skip.
-  if (!solutions.length) return { assignment: null, loss: Infinity, tiedAlts: [] };
+  if (!kept.length) return { assignment: null, loss: Infinity, tiedAlts: [] };
 
-  solutions.sort((a, b) => a.loss - b.loss);
-  const best = solutions[0];
-  const tied = solutions.filter(s => s.loss <= best.loss + eps);
+  // `kept` already holds exactly the within-eps tied set (B&B maintained it). A stable sort by
+  // loss reproduces the exhaustive path's `solutions.sort((a,b)=>a.loss-b.loss)` ordering: the
+  // DFS-first minimum-loss solution lands at index 0 (its branch was never pruned — its prefix
+  // lower bound <= its own loss == bestLoss <= bestLoss+eps), matching the former `solutions[0]`.
+  kept.sort((a, b) => a.loss - b.loss);
+  const best = kept[0];
+  const tied = kept;
 
   // Materialise an assignment from a solution: per-instId damage by iso-class.
   // Within a group: the first `nc` units are chumps (take full hp, die); if this
