@@ -197,6 +197,7 @@ function csvLine(line) { const o = []; let cur = '', q = false; for (let i = 0; 
 const sheet = {};
 for (const line of fs.readFileSync(SHEET, 'utf8').split(/\r?\n/).slice(1)) { if (!line.trim()) continue; const f = csvLine(line); const nm = (f[0] || '').trim(); if (!nm) continue; const num = x => { const v = parseFloat(x); return isNaN(v) ? '' : f2(v); }; sheet[nm] = { def: num(f[3]), tot: num(f[5]) }; }
 
+if (require.main === module) {
 // ---- build ----
 const inscope = [], deferred = [];
 for (const [k, c] of Object.entries(lib)) {
@@ -266,3 +267,9 @@ if (deferred.length) {
 
 fs.writeFileSync(OUT, md);
 console.log(`wrote ${OUT}: ${inscope.length} in-scope, ${deferred.length} deferred`);
+}
+
+module.exports = {
+  ours, parseCost, costWill, attackOf, geom, geomPerp, lib,
+  CONSTANTS: { BV, ATK, R, RES, THREAT, OPT_SELFSAC_ATK, OPT_SELFSAC_TOKEN, CHILL_COEFF, UNDEF_PER_HP, FRAGILE_PEN },
+};
