@@ -13,24 +13,34 @@ Built from: `docs/superpowers/specs/2026-06-24-defense-eval-pipeline-design.md` 
 
 ---
 
+> **UPDATE 2026-06-25 — audit fixes applied; numbers below are CORRECTED.** An independent
+> adversarial audit (`docs/superpowers/plans/2026-06-24-defense-eval-audit-findings.md`) found four
+> localized defects; all are now fixed (commit on `feature/production-vectors`) and the corpus re-run.
+> The two that moved the headline: **② FP-dust** in the regret equality (exact `===` counted true
+> 0-regret as a miss on ~1e-13 dust, asymmetrically against ours) and **③ asymmetric exact-match** (ours
+> used its full tied-min-loss set; cpp only its single chosen pick). Also: **④** the divergence table
+> censored same-class count differences (set-diff dropped multiplicity); **①** doomed fragile/
+> undefendable units valued negative at `life==1` (terminal {v:0} took the undef/fragile haircuts).
+> The tables/headline in §1/§5/§6 below have been updated to the corrected values.
+
 ## 1. TL;DR — what the run says
 
-Over **5,000 elite (2000+ ELO) games → 55,839 defense positions** (run in **2m6s**, 0 skipped):
+Over **5,000 elite (2000+ ELO) games → 55,839 defense positions** (~75 s, 0 skipped), **post-audit-fix**:
 
 | metric (vs elite human defense) | **ours (functional)** | current C++ (`DamageLoss_WillCost`) |
 |---|--:|--:|
 | mean regret | 0.383 | 0.356 |
-| **zero-regret** (ranks human optimal) | **79.8%** | 84.1% |
-| exact-match-iso | **82.6%** | 81.6% |
+| **zero-regret** (ranks human optimal) | **82.7%** | 84.7% |
+| exact-match-iso | 82.7% | **84.7%** |
 | prime-match | 88.7% | 91.7% |
 
-Read: the functional model is **competitive but not yet ahead** — the current C++ value system agrees
-with elite human defense slightly more often (84.1% vs 79.8% zero-regret), while ours matches the
-human's *exact* multiset slightly more (82.6% vs 81.6%). **~80% of positions are forced** (one
-min-loss defense), so the signal lives in the ~20% genuine-choice positions and in the per-unit
-divergence/skew tables. **Caveat:** regret measures agreement with *elite humans*, not ground-truth
-optimality — humans aren't perfect oracles, so "close the gap to humans" is the working objective, not
-a proof of correctness.
+Read: the functional model is **competitive but trails the strong engine's own metric by ~2pp** (was
+mis-reported as ~4pp before the FP fix). It does **not** lead on exact-match — the prior "ours 82.6 >
+cpp 81.6" was the apples-to-oranges ③ bug; like-for-like (tied-set membership for both modes), **cpp
+leads on both zero-regret and exact-match**. **~80% of positions are forced** (one min-loss defense),
+so the signal lives in the ~20% genuine-choice positions and in the per-unit divergence/skew tables.
+**Caveat:** regret measures agreement with *elite humans*, not ground-truth optimality — humans aren't
+perfect oracles, so "close the gap to humans" is the working objective, not a proof of correctness.
 
 The concrete tuning to-do list (from the divergence + tie-break-skew tables) is in §5.
 
@@ -137,18 +147,21 @@ the **tie-break skew** table (when ours ties two options, which one humans syste
 at a small, concrete set of value corrections. Top signals (`eval/defense/results/report.md` has the
 full tables with `replay@turn` citations for every row):
 
+(Counts below are **post-④** — multiset-aware, so same-class count differences are no longer censored;
+magnitudes are ~2–3× the pre-fix numbers, direction unchanged.)
+
 **Ours OVER-chumps (treats as cheaper than humans do → likely under-valued):**
-- **Wall (3hp): 2563 ai-only vs 629 human-only** — the single biggest divergence. Ours sacrifices
+- **Wall (3hp): 4367 ai-only vs 1024 human-only** — the single biggest divergence. Ours sacrifices
   Walls; humans keep them.
-- **Forcefield (2hp): 708 vs 67**, **Nitrocybe (1hp): 616 vs 34**, **Protoplasm (4hp): 564 vs 0**,
-  **Shiver Yeti (2hp): 194 vs 13**, **Photonic Fibroid (2hp): 75 vs 67**.
+- **Forcefield (2hp): 2559 vs 129**, **Nitrocybe (1hp): 1054 vs 66**, **Protoplasm (4hp): 585 vs 0**,
+  **Husk (1hp): 682 vs 266**.
 
 **Ours UNDER-chumps (treats as more valuable than humans do → likely over-valued for defense):**
-- **Engineer (1hp): 522 vs 3191** — the biggest the other way. Humans throw Engineers as chump
+- **Engineer (1hp): 1571 vs 7805** — the biggest the other way. Humans throw Engineers as chump
   fodder; ours keeps them.
-- **Rhino (2hp, ch2): 205 vs 1264**, **Drone (1hp): 28 vs 425**, **Perforator (2hp): 18 vs 431**,
-  **Steelsplitter (3hp): 25 vs 298**, **Ossified Drone (2hp): 3 vs 288**, **Barrier (1hp, life1):
-  7 vs 252**, **Cauterizer (3hp): 0 vs 167**, **Feral Warden (3hp): 19 vs 190**.
+- **Rhino (2hp, ch2): 283 vs 1468**, **Drone (1hp): 34 vs 589**, **Perforator (2hp): 24 vs 555**,
+  **Barrier (1hp, life1): 8 vs 516**, **Ossified Drone (2hp): 4 vs 457**, **Steelsplitter (3hp):
+  28 vs 350**.
 
 **Tie-break skew (corrective-term candidates — humans break ties our model leaves even):**
 - When ours ties a bigger body against a **Wall**, humans **keep the Wall** and chump the bigger unit:
@@ -171,8 +184,9 @@ tie-break the model doesn't yet encode. These are the first knobs to move.
 - **The `cpp` sim reproduces the real engine**: gate = **1234/1235** defense positions over 100 games
   (the 1 residual is a deployed-binary tie-break among equal-min-loss defenses — regret-neutral,
   unreproducible from the open `BlockIterator` source).
-- **Tripwire clean** on the full corpus: 62 negative-min-loss (all legitimate doomed-last-turn),
-  **0 suspicious**.
+- **Tripwire fully clean** (post-①): **0 negative-min-loss, 0 suspicious**. The prior 62 negatives were
+  exactly the `life==1` fragile/undefendable doomed units (fix ① now values them 0), and the threshold
+  is tightened to −0.3 so future value-layer regressions surface.
 
 ---
 
