@@ -74,6 +74,11 @@ function coreValue(c, stateOverride, noCreate) {
     let body = soakHP * BV;
     const abA = attackOf(ab), btA = attackOf(bt);
     const life = _rem, doomed = life !== undefined;
+    // ---- terminal lifespan (dies THIS turn regardless → free chump). Checked FIRST, before the
+    // chill / netherfy / self-sac / economy branches below, so a doomed chill/self-sac/etc. unit on
+    // its LAST turn is also valued 0 (closes a latent bypass; the fragile/undef haircuts in ours()
+    // are guarded off this terminal result so they can't drive a 0-value unit negative). ----
+    if (life === 1) return { v: 0, type: 'pure-block', flags: 'life=1', block: 0, atk: 0, rule: 'terminal→0' };
     // doomed keep-value nudge: lifespan==1 stays 0 (handled by the terminal branch); lifespan>=2 gets a small haircut
     const _maxLife = c.lifespan;          // nominal/max lifespan from the card
     const _remLife = _rem;                // current remaining lifespan (== nominal in table mode; overridden in state mode)
@@ -113,8 +118,6 @@ function coreValue(c, stateOverride, noCreate) {
         const word = isToken ? 'convert' : 'burst'; // IG (token) "converts" its body into Houses; atk-sac "bursts"
         return { v: f2(v), type: 'self-sac', flags: mods.concat(`${word}=${f2(burst)},opt=${opt}`).join(','), block: f2(body), atk: f2(v - body), rule: `max(block,${word})+opt` };
     }
-    // ---- terminal lifespan (dies THIS turn regardless → free chump) ----
-    if (life === 1) return { v: 0, type: 'pure-block', flags: 'life=1', block: 0, atk: 0, rule: 'terminal→0' };
     // ---- economy (resource producer). body + production stream; NO threat. Ossified Drone = econ + a ONE-SHOT self-create click. ----
     const resProd = s => (s && s.receive && /[0-9GBCH]/.test(String(s.receive))) ? costWill(s.receive) : 0;
     const autoEcon = resProd(bt), clickEcon = resProd(ab);
@@ -168,6 +171,10 @@ function coreValue(c, stateOverride, noCreate) {
 function ours(c, stateOverride, noCreate) {
     const r = coreValue(c, stateOverride, noCreate);
     if (r.v == null) return r;
+    // ① A terminal/zero unit (life==1 → {v:0,block:0}) must NOT take the undef/fragile haircuts — they
+    // would drive a 0-value unit NEGATIVE, rewarding the solver for sacrificing a genuinely-doomed
+    // fragile/undefendable unit on its last turn (a free chump worth exactly 0). Guard them off here.
+    if (+r.block === 0 && +r.v === 0) return r;
     let block = +r.block; const hit = [];
     if (c.undefendable) { const h = UNDEF_PER_HP * (c.toughness || 0); block -= h; hit.push(`undef−${f2(h)}`); }
     if (c.fragile) { block -= FRAGILE_PEN; hit.push('fragile−' + FRAGILE_PEN); }

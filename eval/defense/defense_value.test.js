@@ -8,6 +8,20 @@ function mk(name, over = {}) { // build a minimal game-state unit
   return Object.assign({ cardName: name, owner: 0, health: undefined, charge: undefined, lifespan: undefined }, over);
 }
 
+// ① a genuinely-doomed fragile/undefendable unit on its LAST turn (life==1) must value 0 in OURS
+// mode — the terminal {v:0} must survive the undef/fragile haircuts (which previously drove it
+// negative, rewarding the solver for sacrificing it). The other tests never hit ours() at life==1.
+test('① ours-mode life==1 doomed fragile/undefendable units value exactly 0', () => {
+  const frag = dv.unitView(mk('Innervi Field', { lifespan: 1 }));   // fragile, nominal lifespan 3
+  const undef = dv.unitView(mk('Thunderhead', { lifespan: 1 }));    // undefendable, nominal lifespan 3
+  assert.ok(frag.ct && undef.ct, 'both units must resolve in the library');
+  assert.equal(dv.V(frag), 0);
+  assert.equal(dv.V(undef), 0);
+  // sanity: not terminal at life>=2 -> positive value (the fix is life==1-specific)
+  assert.ok(dv.V(dv.unitView(mk('Innervi Field', { lifespan: 3 }))) > 0);
+  assert.ok(dv.V(dv.unitView(mk('Thunderhead', { lifespan: 3 }))) > 0);
+});
+
 test('unitView resolves internal name + current state', () => {
   const v = dv.unitView(mk('Wall', { health: 3 }));
   assert.equal(v.internal, 'Wall');

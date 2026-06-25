@@ -68,6 +68,58 @@ test('aggregate: tripwire flags suspicious negative min-loss', () => {
   ];
   const agg = m.aggregate(recs);
   assert.equal(agg.tripwire.negMinLoss, 2);                 // both < -0.001
-  assert.equal(agg.tripwire.suspicious.length, 1);          // only the < -1 one
+  assert.equal(agg.tripwire.suspicious.length, 1);          // only the suspicious one
   assert.equal(agg.tripwire.suspicious[0].replay, 'D2');
+});
+
+test('② FP-dust regret clamps to 0; a real small regret survives', () => {
+  const dust = m.computeMetrics({
+    board: [], incoming: 5,
+    human: { humanLoss: 11 + 1e-12, assignment: { prime: 'A', chumps: [] } },
+    aiOurs: { loss: 11, assignment: { prime: 'A', chumps: [] }, tiedAlts: [] },
+    aiCpp: { loss: 11, assignment: { prime: 'A', chumps: [] } },
+  });
+  assert.equal(dust.metrics.regret_ours, 0);                // 1e-12 dust -> 0, not a phantom miss
+  const real = m.computeMetrics({
+    board: [], incoming: 5,
+    human: { humanLoss: 11.05, assignment: { prime: 'A', chumps: [] } },
+    aiOurs: { loss: 11, assignment: { prime: 'A', chumps: [] }, tiedAlts: [] },
+    aiCpp: { loss: 11, assignment: { prime: 'A', chumps: [] } },
+  });
+  assert.ok(Math.abs(real.metrics.regret_ours - 0.05) < 1e-9);  // real regret unaffected
+});
+
+test('③ exact-match is symmetric: cpp uses its tied-min-loss set too', () => {
+  const rec = m.computeMetrics({
+    board: [], incoming: 5,
+    human: { humanLoss: 11, humanLoss_cpp: 11, assignment: { prime: 'B', chumps: [] } },
+    aiOurs: { loss: 11, assignment: { prime: 'A', chumps: [] }, tiedAlts: [] },
+    // cpp chose A but B is a tied alternative -> symmetric metric must credit the match
+    aiCpp: { loss: 11, assignment: { prime: 'A', chumps: [] },
+      tiedAlts: [{ assignment: { prime: 'A', chumps: [] } }, { assignment: { prime: 'B', chumps: [] } }] },
+  });
+  assert.equal(rec.metrics.exactMatch_cpp, true);           // old single-chosen (A) would be false
+});
+
+test('④ divergence counts same-class excess (multiset, not set-diff)', () => {
+  const rec = m.computeMetrics({
+    board: [], incoming: 5,
+    human: { humanLoss: 5, assignment: { prime: 'P', chumps: [{ isoKey: 'Eng', count: 2 }] } },
+    aiOurs: { loss: 5, assignment: { prime: 'P', chumps: [{ isoKey: 'Eng', count: 5 }] }, tiedAlts: [] },
+    aiCpp: { loss: 5, assignment: { prime: 'P', chumps: [] } },
+  });
+  // both chump Eng (AI 5, human 2) -> AI excess 3, formerly censored by the set-difference
+  assert.equal(rec.diag.chumpDiff_ours.aiOnly.filter(k => k === 'Eng').length, 3);
+  assert.equal(rec.diag.chumpDiff_ours.humanOnly.length, 0);
+});
+
+test('tripwire threshold -0.3: a -0.5 min-loss is suspicious, a -0.1 is not', () => {
+  const recs = [
+    { id: { replay: 'E1', turnIndex: 1 }, ai_ours: { loss: -0.1 }, metrics: { regret_ours: 0, exactMatch_ours: true, primeMatch_ours: true }, diag: { chumpDiff_ours: { aiOnly: [], humanOnly: [] }, tieBreakContrast: [] }, human: { assignment: {} }, tags: [] },
+    { id: { replay: 'E2', turnIndex: 2 }, ai_ours: { loss: -0.5 }, metrics: { regret_ours: 0, exactMatch_ours: true, primeMatch_ours: true }, diag: { chumpDiff_ours: { aiOnly: [], humanOnly: [] }, tieBreakContrast: [] }, human: { assignment: {} }, tags: [] },
+  ];
+  const agg = m.aggregate(recs);
+  assert.equal(agg.tripwire.negMinLoss, 2);
+  assert.equal(agg.tripwire.suspicious.length, 1);
+  assert.equal(agg.tripwire.suspicious[0].replay, 'E2');
 });

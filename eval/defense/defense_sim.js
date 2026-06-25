@@ -32,6 +32,11 @@ const dv = require('./defense_value');
 //         a solution with no prime at all. The plan requires a surviving prime.
 //   This port follows the C++ so the Task-12 gate (which runs 'cpp' mode against
 //   the real engine) sees a structure-matching search.
+//   NOTE: this port intentionally OMITS the C++ depth-0 zero-loss early-return
+//   (BlockIterator.cpp:92-96). In 'cpp' mode loss is non-negative so this only prunes
+//   a no-op; in 'ours' mode (which can have a negative-loss term) keeping it lets the
+//   search find a true min the engine would skip. So 'ours' search != C++ search exactly
+//   here — beneficial, not a bug; the gate validates 'cpp' only.
 // ---------------------------------------------------------------------------
 // ctx (optional): a resonate context (dv.buildResonateContext) for the DEFENDING board, used only by
 // 'cpp' mode (the C++ adds resonateAttackAddedValue on death). The caller must build it from the FULL
