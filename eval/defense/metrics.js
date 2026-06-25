@@ -83,11 +83,13 @@ function computeMetrics({ board, incoming, human, aiOurs, aiCpp }) {
 const MAX_EXAMPLES = 5;          // per perUnit-key / per tie-break pair
 const MAX_SUSPICIOUS = 10;       // tripwire suspicious-list cap
 
-// Push a {replay, turn} citation onto a side's example list, deduped, capped at MAX_EXAMPLES.
+// Push a citation onto a side's example list, deduped, capped at MAX_EXAMPLES.
+// `step` = the begin-of-defense replay click index (for jumping to the position in the viewer);
+// `turn` is kept as a fallback for records lacking a step.
 function pushExample(list, rec) {
   if (!rec || !rec.id) return;
   if (list.length >= MAX_EXAMPLES) return;
-  const ref = { replay: rec.id.replay, turn: rec.id.turnIndex };
+  const ref = { replay: rec.id.replay, step: rec.id.step, turn: rec.id.turnIndex };
   if (list.some(e => e.replay === ref.replay && e.turn === ref.turn)) return;
   list.push(ref);
 }
@@ -171,7 +173,7 @@ function buildTripwire(records) {
     const loss = r.ai_ours && typeof r.ai_ours.loss === 'number' ? r.ai_ours.loss : 0;
     if (loss < -0.001) negMinLoss++;
     if (loss < SUSPICIOUS_THRESHOLD && suspicious.length < MAX_SUSPICIOUS) {
-      suspicious.push({ replay: r.id ? r.id.replay : undefined, turn: r.id ? r.id.turnIndex : undefined, loss });
+      suspicious.push({ replay: r.id ? r.id.replay : undefined, step: r.id ? r.id.step : undefined, turn: r.id ? r.id.turnIndex : undefined, loss });
     }
   }
   return { negMinLoss, suspicious };

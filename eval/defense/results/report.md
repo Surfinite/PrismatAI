@@ -17,70 +17,70 @@
 ## Per-unit divergence (AI chumps/saves differently than humans)
 | Unit | HP | Charge | Lifespan | ai-only chumped | human-only chumped | examples (ai-only / human-only) |
 |---|--:|--:|--:|--:|--:|---|
-| Engineer | 1 | - | - | 1571 | 7805 | ++olh-wraRD@t22, +8HlK-BZS0J@t21, +8HlK-BZS0J@t25, +8HlK-BZS0J@t31, +G7gY-4uhVt@t13 / +0Uwb-QeB+B@t14, +8HlK-BZS0J@t18, +8HlK-BZS0J@t22, +90KA-t9Ef4@t16, +982Y-PG+5w@t15 |
-| Wall | 3 | - | - | 4367 | 1024 | +0Uwb-QeB+B@t14, +3@i+-0pBRr@t15, +3@i+-0pBRr@t16, +3@i+-0pBRr@t18, +3@i+-0pBRr@t19 / +FPif-Sa6pQ@t21, +OJZX-B+j7W@t17, +OJZX-B+j7W@t21, +by8B-0eCes@t23, +by8B-0eCes@t25 |
-| Forcefield | 2 | - | - | 2559 | 129 | +MBWT-epO8W@t17, +MBWT-epO8W@t19, +MBWT-epO8W@t21, +OJZX-B+j7W@t17, +OJZX-B+j7W@t19 / +Xbxz-SHBcv@t24, +ZOfK-INjvt@t21, 0Q2Fa-P8f53@t19, 0Q2Fa-P8f53@t21, 16msF-5ZwRl@t21 |
-| Rhino | 2 | 2 | - | 283 | 1468 | +PCrP-Yn2gQ@t18, 0q6WG-e2UZT@t14, 108nn-vyQwz@t44, 108nn-vyQwz@t46, 109E2-DeKJY@t26 / +3@i+-0pBRr@t19, +F8I5-Feri2@t19, +F8I5-Feri2@t21, +F8I5-Feri2@t22, +FPif-Sa6pQ@t23 |
-| Nitrocybe | 1 | - | - | 1054 | 66 | +982Y-PG+5w@t15, +982Y-PG+5w@t21, +MBWT-epO8W@t16, +MBWT-epO8W@t18, +MBWT-epO8W@t20 / +MBWT-epO8W@t22, +OJZX-B+j7W@t23, 05O@2-yPQOy@t33, 1kKFk-UQpey@t18, 1kKFk-UQpey@t20 |
-| Husk | 1 | - | - | 682 | 266 | +Scqa-20G0H@t18, 0DfyK-h3Mf8@t18, 0DfyK-h3Mf8@t20, 0QTrP-wb1pg@t21, 0QTrP-wb1pg@t25 / 0dnSu-yOgrW@t30, 1IbpY-TumET@t30, 2MiCj-harSA@t22, 2MiCj-harSA@t24, 2MiCj-harSA@t26 |
-| Drone | 1 | - | - | 34 | 589 | 38bQH-Xnp@p@t20, 7lmMa-f7wpF@t27, 7yEQi-xSj9e@t34, 8a7x+-94@np@t33, BnRAJ-TBHF2@t38 / +cvBx-rRItc@t15, +laGq-7tK@V@t23, +tlHW-SQpvn@t22, +uH0p-iF9DE@t22, 0Gvpt-Uem7w@t25 |
-| Protoplasm | 4 | - | - | 585 | 0 | +MNNI-vrJj4@t17, +MNNI-vrJj4@t19, +PCrP-Yn2gQ@t13, +cvBx-rRItc@t14, +cvBx-rRItc@t15 |
-| Perforator | 2 | - | - | 24 | 555 | +sf5U-DoyDc@t24, 1MhFg-YKS3X@t22, 1VYbT-@M@OC@t36, 33Rkn-qowc5@t17, 6lesc-HqpF8@t23 / +3@i+-0pBRr@t15, +3@i+-0pBRr@t16, +3@i+-0pBRr@t18, +6nVE-wsiqX@t15, +a0Ss-rPM2U@t18 |
-| Barrier | 1 | - | 1 | 8 | 516 | 0hF0J-YR6iK@t28, 1l6fu-yvt0d@t15, 5cgGl-bz3FX@t25, 7U@8t-q2spy@t32, 8RHmo-iMct5@t36 / +7Msl-Gmh41@t18, +7Msl-Gmh41@t24, +Aeyh-h4vXD@t21, +Aeyh-h4vXD@t26, +e+d7-dfBcy@t20 |
-| Ossified Drone | 2 | - | - | 4 | 457 | 1droY-IRfD9@t15, RY3F1-MAvO+@t25, p3593-t5jiK@t31, p7i4U-JKTDC@t21 / +JQYi-VdEsx@t12, +JQYi-VdEsx@t20, +JQYi-VdEsx@t22, +JQYi-VdEsx@t23, +JQYi-VdEsx@t24 |
-| Steelsplitter | 3 | - | - | 28 | 350 | 449@K-e9lXZ@t38, 66JQW-WEL82@t48, 8fnpT-fLTlo@t37, 9R39n-dnnFz@t26, A+wRV-Qdw8p@t27 / +7Msl-Gmh41@t19, +QzmS-VgORb@t33, +Scqa-20G0H@t18, +gBSl-WwL3c@t29, +z8tI-OucRU@t33 |
-| Rhino | 2 | 1 | - | 318 | 45 | +FPif-Sa6pQ@t21, +ZOfK-INjvt@t26, +a0Ss-rPM2U@t13, +a0Ss-rPM2U@t18, +a0Ss-rPM2U@t20 / +j2P8-z6w12@t18, 16dhC-aztdO@t25, 2i9B8-yNkJQ@t18, 3gva5-9j5VL@t12, 3rMDk-rPexN@t22 |
-| Infusion Grid | 4 | - | - | 269 | 91 | +JQYi-VdEsx@t20, +JQYi-VdEsx@t22, +JQYi-VdEsx@t23, +tlHW-SQpvn@t22, +uH0p-iF9DE@t22 / +MNNI-vrJj4@t17, +MNNI-vrJj4@t19, +Scqa-20G0H@t23, 0QTrP-wb1pg@t21, 0q6WG-e2UZT@t14 |
-| Energy Matrix | 5 | - | - | 236 | 70 | +QzmS-VgORb@t33, +Xbxz-SHBcv@t24, +Zwpt-Su@Va@t18, +z8tI-OucRU@t30, 02MV2-IQ2Wd@t29 / 0xd1h-ss+Kb@t19, 1j1oV-SbQi3@t24, 1j1oV-SbQi3@t25, 1j1oV-SbQi3@t29, 1kKFk-UQpey@t22 |
-| Rhino | 2 | - | - | 173 | 115 | +Scqa-20G0H@t23, +by8B-0eCes@t29, 0Q2Fa-P8f53@t23, 0hBxG-inUM@@t31, 0q6WG-e2UZT@t22 / +OJZX-B+j7W@t19, +OJZX-B+j7W@t21, 16oLY-CW5v2@t22, 2fb4D-wWLRi@t26, 2fb4D-wWLRi@t30 |
-| Shiver Yeti | 2 | - | - | 255 | 16 | +e+d7-dfBcy@t33, +laGq-7tK@V@t20, +uH0p-iF9DE@t16, +uH0p-iF9DE@t20, 05PgJ-y3bE+@t24 / 0dnSu-yOgrW@t28, 2i9B8-yNkJQ@t22, 2i9B8-yNkJQ@t24, 5f6Fg-EOFYd@t22, 8uhCE-Flirk@t26 |
-| Innervi Field | 3 | - | 3 | 198 | 43 | 0Q2Fa-P8f53@t15, 0uwuf-VgqV6@t21, 0uwuf-VgqV6@t23, 0uwuf-VgqV6@t27, 1tOV+-OYe9O@t17 / +j2P8-z6w12@t15, +j2P8-z6w12@t19, 7BbxV-37tIG@t23, 7a11+-fRVYH@t30, 8luZX-0SHPA@t21 |
-| Feral Warden | 3 | - | - | 21 | 218 | 19VkT-tNkKn@t14, 19VkT-tNkKn@t16, 1tlRb-zFNlJ@t21, 5D6nO-9oyCi@t19, 5tYZn-db+Wc@t37 / +V3ey-CCx5X@t25, +wSiv-rbZ@N@t14, 1XdCT-DvgSZ@t18, 1XdCT-DvgSZ@t20, 1XdCT-DvgSZ@t21 |
-| Plasmafier | 4 | - | - | 2 | 211 | A+wRV-Qdw8p@t23, SG5yH-uN@zS@t22 / +Zwpt-Su@Va@t18, 13pKq-5tXML@t27, 13pKq-5tXML@t29, 13pKq-5tXML@t31, 1jdZR-vwwdC@t26 |
-| Xeno Guardian | 4 | - | - | 43 | 148 | 3gT9L-EWEft@t22, 6A6@p-IWTid@t22, 6A6@p-IWTid@t24, 6x2hp-4FzmK@t22, A8Qbr-ny2LA@t29 / +oxIv-Scr4c@t34, +z8tI-OucRU@t30, 0Dq46-u8A3k@t26, 11wt0-BMTlh@t24, 32Wc@-a@Px8@t27 |
-| Photonic Fibroid | 2 | - | - | 93 | 96 | +ZOfK-INjvt@t28, 02rAI-fk0F9@t20, 0IDmx-CqECf@t20, 0qYjP-vqlhp@t25, 0qYjP-vqlhp@t27 / +ZOfK-INjvt@t19, +ZOfK-INjvt@t21, +ZOfK-INjvt@t23, +a0Ss-rPM2U@t29, 47Wh8-Chntj@t29 |
-| Doomed Drone | 1 | - | 1 | 2 | 186 | 6T@cg-WRPlY@t22, YX6gZ-@n@Vc@t19 / +5S15-cfmxW@t14, +982Y-PG+5w@t19, +982Y-PG+5w@t20, +IsJh-fB7gy@t11, +IsJh-fB7gy@t21 |
-| Cauterizer | 3 | - | - | 0 | 188 | +8HlK-BZS0J@t21, +8HlK-BZS0J@t25, +8HlK-BZS0J@t31, +uTXo-s@rv9@t20, 0MNHa-IcgD3@t20 |
-| Corpus | 2 | 2 | - | 7 | 175 | E1stg-YyQfe@t15, Q@Co1-gqgi0@t27, SG5yH-uN@zS@t20, d0qVG-E8nE2@t21, dYp7R-bSU7d@t33 / 0Gvpt-Uem7w@t13, 0Gvpt-Uem7w@t19, 0Gvpt-Uem7w@t22, 0Gvpt-Uem7w@t23, 0oFZ0-n@57Y@t18 |
-| Doomed Wall | 4 | - | 3 | 106 | 68 | 108nn-vyQwz@t26, 2pu58-MbXPp@t25, 31Rg8-Mw0+w@t30, 3b6dJ-ZOc26@t25, 4e+DE-FLrQ8@t20 / 0+nXK-dQG1x@t17, 108nn-vyQwz@t40, 19VkT-tNkKn@t16, 3cQmW-XyItQ@t15, 5jZc8-s9jaE@t25 |
-| Electrovore | 2 | - | - | 2 | 162 | DPStf-tYYgJ@t15, oLWii-@dbyj@t22 / +PCrP-Yn2gQ@t18, +gBSl-WwL3c@t30, 0L2nT-BSCov@t18, 0ZOfp-X3hbh@t31, 0ZOfp-X3hbh@t33 |
-| Grimbotch | 2 | - | 2 | 5 | 125 | QoutZ-PaTYu@t21, fkLmT-lSYgj@t32, kg1xO-1oyfO@t50, kqYkl-XFB7P@t33, zYdSy-DoYWN@t30 / +G7gY-4uhVt@t13, 05O@2-yPQOy@t33, 108nn-vyQwz@t19, 108nn-vyQwz@t23, 1Mh6@-B+twq@t24 |
-| Borehole Patroller | 2 | - | - | 12 | 110 | 5jZc8-s9jaE@t19, A5e3E-4EXAK@t39, SG5yH-uN@zS@t29, ZvWL3-AKs8o@t35, eOMON-ubT9N@t21 / 02MV2-IQ2Wd@t28, 02MV2-IQ2Wd@t29, 0SnBR-7N2Bh@t24, 1kKFk-UQpey@t21, 1kKFk-UQpey@t23 |
-| Doomed Wall | 4 | - | 2 | 53 | 57 | 108nn-vyQwz@t19, 31Rg8-Mw0+w@t28, 6bWu9-ryXeU@t35, 6cS6i-yYbi8@t24, 7lmMa-f7wpF@t20 / 19VkT-tNkKn@t14, 4LG+Z-rxc@C@t15, 5uD9j-Yn8hv@t18, @LV7c-Zx7Pn@t30, @PrB8-@Y5m3@t22 |
+| Engineer | 1 | - | - | 1571 | 7805 | ++olh-wraRD@s284, +8HlK-BZS0J@s277, +8HlK-BZS0J@s394, +8HlK-BZS0J@s561, +G7gY-4uhVt@s164 / +0Uwb-QeB+B@s106, +8HlK-BZS0J@s176, +8HlK-BZS0J@s314, +90KA-t9Ef4@s122, +982Y-PG+5w@s194 |
+| Wall | 3 | - | - | 4367 | 1024 | +0Uwb-QeB+B@s106, +3@i+-0pBRr@s221, +3@i+-0pBRr@s240, +3@i+-0pBRr@s290, +3@i+-0pBRr@s318 / +FPif-Sa6pQ@s212, +OJZX-B+j7W@s159, +OJZX-B+j7W@s229, +by8B-0eCes@s344, +by8B-0eCes@s407 |
+| Forcefield | 2 | - | - | 2559 | 129 | +MBWT-epO8W@s188, +MBWT-epO8W@s231, +MBWT-epO8W@s288, +OJZX-B+j7W@s159, +OJZX-B+j7W@s197 / +Xbxz-SHBcv@s432, +ZOfK-INjvt@s232, 0Q2Fa-P8f53@s264, 0Q2Fa-P8f53@s311, 16msF-5ZwRl@s322 |
+| Rhino | 2 | 2 | - | 283 | 1468 | +PCrP-Yn2gQ@s239, 0q6WG-e2UZT@s124, 108nn-vyQwz@s645, 108nn-vyQwz@s707, 109E2-DeKJY@s488 / +3@i+-0pBRr@s318, +F8I5-Feri2@s163, +F8I5-Feri2@s204, +F8I5-Feri2@s231, +FPif-Sa6pQ@s257 |
+| Nitrocybe | 1 | - | - | 1054 | 66 | +982Y-PG+5w@s194, +982Y-PG+5w@s337, +MBWT-epO8W@s174, +MBWT-epO8W@s204, +MBWT-epO8W@s250 / +MBWT-epO8W@s310, +OJZX-B+j7W@s268, 05O@2-yPQOy@s509, 1kKFk-UQpey@s176, 1kKFk-UQpey@s218 |
+| Husk | 1 | - | - | 682 | 266 | +Scqa-20G0H@s190, 0DfyK-h3Mf8@s231, 0DfyK-h3Mf8@s279, 0QTrP-wb1pg@s282, 0QTrP-wb1pg@s420 / 0dnSu-yOgrW@s407, 1IbpY-TumET@s409, 2MiCj-harSA@s406, 2MiCj-harSA@s510, 2MiCj-harSA@s575 |
+| Drone | 1 | - | - | 34 | 589 | 38bQH-Xnp@p@s234, 7lmMa-f7wpF@s532, 7yEQi-xSj9e@s649, 8a7x+-94@np@s542, BnRAJ-TBHF2@s875 / +cvBx-rRItc@s181, +laGq-7tK@V@s301, +tlHW-SQpvn@s384, +uH0p-iF9DE@s475, 0Gvpt-Uem7w@s347 |
+| Protoplasm | 4 | - | - | 585 | 0 | +MNNI-vrJj4@s151, +MNNI-vrJj4@s188, +PCrP-Yn2gQ@s148, +cvBx-rRItc@s167, +cvBx-rRItc@s181 |
+| Perforator | 2 | - | - | 24 | 555 | +sf5U-DoyDc@s367, 1MhFg-YKS3X@s307, 1VYbT-@M@OC@s647, 33Rkn-qowc5@s260, 6lesc-HqpF8@s356 / +3@i+-0pBRr@s221, +3@i+-0pBRr@s240, +3@i+-0pBRr@s290, +6nVE-wsiqX@s106, +a0Ss-rPM2U@s295 |
+| Barrier | 1 | - | 1 | 8 | 516 | 0hF0J-YR6iK@s501, 1l6fu-yvt0d@s158, 5cgGl-bz3FX@s327, 7U@8t-q2spy@s835, 8RHmo-iMct5@s676 / +7Msl-Gmh41@s186, +7Msl-Gmh41@s411, +Aeyh-h4vXD@s196, +Aeyh-h4vXD@s327, +e+d7-dfBcy@s272 |
+| Ossified Drone | 2 | - | - | 4 | 457 | 1droY-IRfD9@s133, RY3F1-MAvO+@s396, p3593-t5jiK@s488, p7i4U-JKTDC@s278 / +JQYi-VdEsx@s102, +JQYi-VdEsx@s298, +JQYi-VdEsx@s404, +JQYi-VdEsx@s450, +JQYi-VdEsx@s480 |
+| Steelsplitter | 3 | - | - | 28 | 350 | 449@K-e9lXZ@s668, 66JQW-WEL82@s1102, 8fnpT-fLTlo@s1013, 9R39n-dnnFz@s485, A+wRV-Qdw8p@s377 / +7Msl-Gmh41@s208, +QzmS-VgORb@s707, +Scqa-20G0H@s190, +gBSl-WwL3c@s411, +z8tI-OucRU@s609 |
+| Rhino | 2 | 1 | - | 318 | 45 | +FPif-Sa6pQ@s212, +ZOfK-INjvt@s382, +a0Ss-rPM2U@s175, +a0Ss-rPM2U@s295, +a0Ss-rPM2U@s336 / +j2P8-z6w12@s254, 16dhC-aztdO@s302, 2i9B8-yNkJQ@s169, 3gva5-9j5VL@s120, 3rMDk-rPexN@s270 |
+| Infusion Grid | 4 | - | - | 269 | 91 | +JQYi-VdEsx@s298, +JQYi-VdEsx@s404, +JQYi-VdEsx@s450, +tlHW-SQpvn@s384, +uH0p-iF9DE@s475 / +MNNI-vrJj4@s151, +MNNI-vrJj4@s188, +Scqa-20G0H@s342, 0QTrP-wb1pg@s282, 0q6WG-e2UZT@s124 |
+| Energy Matrix | 5 | - | - | 236 | 70 | +QzmS-VgORb@s707, +Xbxz-SHBcv@s432, +Zwpt-Su@Va@s137, +z8tI-OucRU@s494, 02MV2-IQ2Wd@s539 / 0xd1h-ss+Kb@s252, 1j1oV-SbQi3@s296, 1j1oV-SbQi3@s313, 1j1oV-SbQi3@s390, 1kKFk-UQpey@s259 |
+| Rhino | 2 | - | - | 173 | 115 | +Scqa-20G0H@s342, +by8B-0eCes@s548, 0Q2Fa-P8f53@s352, 0hBxG-inUM@@s457, 0q6WG-e2UZT@s318 / +OJZX-B+j7W@s197, +OJZX-B+j7W@s229, 16oLY-CW5v2@s308, 2fb4D-wWLRi@s354, 2fb4D-wWLRi@s435 |
+| Shiver Yeti | 2 | - | - | 255 | 16 | +e+d7-dfBcy@s599, +laGq-7tK@V@s229, +uH0p-iF9DE@s270, +uH0p-iF9DE@s405, 05PgJ-y3bE+@s380 / 0dnSu-yOgrW@s349, 2i9B8-yNkJQ@s264, 2i9B8-yNkJQ@s328, 5f6Fg-EOFYd@s228, 8uhCE-Flirk@s436 |
+| Innervi Field | 3 | - | 3 | 198 | 43 | 0Q2Fa-P8f53@s142, 0uwuf-VgqV6@s249, 0uwuf-VgqV6@s293, 0uwuf-VgqV6@s388, 1tOV+-OYe9O@s165 / +j2P8-z6w12@s146, +j2P8-z6w12@s290, 7BbxV-37tIG@s313, 7a11+-fRVYH@s573, 8luZX-0SHPA@s261 |
+| Feral Warden | 3 | - | - | 21 | 218 | 19VkT-tNkKn@s120, 19VkT-tNkKn@s191, 1tlRb-zFNlJ@s264, 5D6nO-9oyCi@s355, 5tYZn-db+Wc@s639 / +V3ey-CCx5X@s392, +wSiv-rbZ@N@s117, 1XdCT-DvgSZ@s188, 1XdCT-DvgSZ@s266, 1XdCT-DvgSZ@s369 |
+| Plasmafier | 4 | - | - | 2 | 211 | A+wRV-Qdw8p@s282, SG5yH-uN@zS@s281 / +Zwpt-Su@Va@s137, 13pKq-5tXML@s370, 13pKq-5tXML@s402, 13pKq-5tXML@s438, 1jdZR-vwwdC@s527 |
+| Xeno Guardian | 4 | - | - | 43 | 148 | 3gT9L-EWEft@s349, 6A6@p-IWTid@s318, 6A6@p-IWTid@s415, 6x2hp-4FzmK@s293, A8Qbr-ny2LA@s390 / +oxIv-Scr4c@s793, +z8tI-OucRU@s494, 0Dq46-u8A3k@s379, 11wt0-BMTlh@s297, 32Wc@-a@Px8@s741 |
+| Photonic Fibroid | 2 | - | - | 93 | 96 | +ZOfK-INjvt@s466, 02rAI-fk0F9@s269, 0IDmx-CqECf@s263, 0qYjP-vqlhp@s385, 0qYjP-vqlhp@s437 / +ZOfK-INjvt@s193, +ZOfK-INjvt@s232, +ZOfK-INjvt@s307, +a0Ss-rPM2U@s631, 47Wh8-Chntj@s490 |
+| Doomed Drone | 1 | - | 1 | 2 | 186 | 6T@cg-WRPlY@s307, YX6gZ-@n@Vc@s314 / +5S15-cfmxW@s203, +982Y-PG+5w@s299, +982Y-PG+5w@s314, +IsJh-fB7gy@s92, +IsJh-fB7gy@s296 |
+| Cauterizer | 3 | - | - | 0 | 188 | +8HlK-BZS0J@s277, +8HlK-BZS0J@s394, +8HlK-BZS0J@s561, +uTXo-s@rv9@s256, 0MNHa-IcgD3@s255 |
+| Corpus | 2 | 2 | - | 7 | 175 | E1stg-YyQfe@s174, Q@Co1-gqgi0@s367, SG5yH-uN@zS@s224, d0qVG-E8nE2@s188, dYp7R-bSU7d@s537 / 0Gvpt-Uem7w@s133, 0Gvpt-Uem7w@s213, 0Gvpt-Uem7w@s255, 0Gvpt-Uem7w@s289, 0oFZ0-n@57Y@s217 |
+| Doomed Wall | 4 | - | 3 | 106 | 68 | 108nn-vyQwz@s283, 2pu58-MbXPp@s359, 31Rg8-Mw0+w@s356, 3b6dJ-ZOc26@s388, 4e+DE-FLrQ8@s219 / 0+nXK-dQG1x@s177, 108nn-vyQwz@s570, 19VkT-tNkKn@s191, 3cQmW-XyItQ@s135, 5jZc8-s9jaE@s325 |
+| Electrovore | 2 | - | - | 2 | 162 | DPStf-tYYgJ@s130, oLWii-@dbyj@s328 / +PCrP-Yn2gQ@s239, +gBSl-WwL3c@s429, 0L2nT-BSCov@s229, 0ZOfp-X3hbh@s482, 0ZOfp-X3hbh@s502 |
+| Grimbotch | 2 | - | 2 | 5 | 125 | QoutZ-PaTYu@s251, fkLmT-lSYgj@s618, kg1xO-1oyfO@s1149, kqYkl-XFB7P@s927, zYdSy-DoYWN@s750 / +G7gY-4uhVt@s164, 05O@2-yPQOy@s509, 108nn-vyQwz@s162, 108nn-vyQwz@s227, 1Mh6@-B+twq@s420 |
+| Borehole Patroller | 2 | - | - | 12 | 110 | 5jZc8-s9jaE@s153, A5e3E-4EXAK@s657, SG5yH-uN@zS@s491, ZvWL3-AKs8o@s699, eOMON-ubT9N@s252 / 02MV2-IQ2Wd@s491, 02MV2-IQ2Wd@s539, 0SnBR-7N2Bh@s289, 1kKFk-UQpey@s235, 1kKFk-UQpey@s283 |
+| Doomed Wall | 4 | - | 2 | 53 | 57 | 108nn-vyQwz@s162, 31Rg8-Mw0+w@s310, 6bWu9-ryXeU@s740, 6cS6i-yYbi8@s318, 7lmMa-f7wpF@s259 / 19VkT-tNkKn@s120, 4LG+Z-rxc@C@s117, 5uD9j-Yn8hv@s205, @LV7c-Zx7Pn@s465, @PrB8-@Y5m3@s296 |
 
 ## Tie-break skew (corrective-term candidates)
 | Unit | HP | Charge | Lifespan | vs Unit | HP | Charge | Lifespan | human lean | examples |
 |---|--:|--:|--:|---|--:|--:|--:|---|---|
-| Steelsplitter | 3 | - | - | Wall | 3 | - | - | Steelsplitter: 221, Wall: 31 | +7Msl-Gmh41@t15, +BdaQ-3IXtB@t13, +BdaQ-3IXtB@t15, +ZOfK-INjvt@t31, +j2P8-z6w12@t19 |
-| Rhino | 2 | 2 | - | Wall | 3 | - | - | Wall: 246, Rhino: 2 | +F8I5-Feri2@t19, +FPif-Sa6pQ@t19, +OVLW-gn1IQ@t13, +OVLW-gn1IQ@t28, +OVLW-gn1IQ@t29 |
-| Urban Sentry | 3 | - | - | Wall | 3 | - | - | Urban Sentry: 109, Wall: 8 | +e+d7-dfBcy@t12, 3Quy@-LostC@t25, 3uhSW-SR1bo@t13, 4fVLw-NI@tg@t26, 4u+iS-w4mSF@t13 |
-| Borehole Patroller | 2 | - | - | Wall | 3 | - | - | Wall: 108, Borehole Patroller: 2 | +L5eO-onrlF@t17, 0B+de-elx65@t18, 2SAxl-KeOOP@t13, 2SAxl-KeOOP@t14, 2SAxl-KeOOP@t15 |
-| Arka Sodara | 7 | - | - | Wall | 3 | - | - | Arka Sodara: 85, Wall: 1 | +7Msl-Gmh41@t18, 0Jnrk-zdymM@t15, 0Jnrk-zdymM@t18, 16dhC-aztdO@t26, 2+vpB-tUkWb@t19 |
-| Centurion | 6 | - | - | Wall | 3 | - | - | Centurion: 84 | +BdaQ-3IXtB@t16, 05O@2-yPQOy@t17, 05O@2-yPQOy@t19, 05O@2-yPQOy@t21, 05O@2-yPQOy@t22 |
-| Bombarder | 4 | - | - | Bombarder | 4 | 1 | - | Bombarder: 47, Bombarder: 18 | 3a3@N-9E6tt@t28, 5ZW7r-xsbgE@t23, 5ZW7r-xsbgE@t24, 7@ECb-9D3V6@t23, 7@ECb-9D3V6@t27 |
-| Perforator | 2 | - | - | Wall | 3 | - | - | Wall: 58 | +a0Ss-rPM2U@t30, +a0Ss-rPM2U@t31, +kT0N-wfgM9@t25, 0tozj-yTcYb@t38, 8eiBe-q4GPV@t20 |
-| Ossified Drone | 2 | - | - | Wall | 3 | - | - | Wall: 58 | +kT0N-wfgM9@t25, 3CBJ8-2G6f0@t22, 3CBJ8-2G6f0@t24, 3nTbE-BmRFy@t19, 5uMGX-Ej2vN@t22 |
-| Infusion Grid | 4 | - | - | Wall | 3 | - | - | Infusion Grid: 54, Wall: 3 | 1CK11-rJWn5@t15, 31kqM-v49SH@t16, 40a+F-fZ+nW@t19, 43rbL-NrpW@@t23, 4b1RU-x+Ofb@t16 |
-| Xeno Guardian | 4 | - | - | Wall | 3 | - | - | Xeno Guardian: 53, Wall: 2 | 3nTbE-BmRFy@t21, 48CSK-Y2EFg@t21, 5qqGu-vVZra@t28, 5qqGu-vVZra@t29, 6A6@p-IWTid@t21 |
-| Energy Matrix | 5 | - | - | Wall | 3 | - | - | Energy Matrix: 52 | +MRIM-HrZLw@t16, +z8tI-OucRU@t16, +z8tI-OucRU@t22, 02MV2-IQ2Wd@t17, 02MV2-IQ2Wd@t25 |
-| Bombarder | 4 | 1 | - | Wall | 3 | - | - | Bombarder: 47, Wall: 1 | +QtkV-gKLKS@t26, 14RU3-6e3Kj@t15, 5ZW7r-xsbgE@t23, 6+fWT-ZQRbg@t16, 6+fWT-ZQRbg@t24 |
-| Doomed Wall | 4 | - | 2 | Doomed Wall | 4 | - | 3 | Doomed Wall: 34, Doomed Wall: 3 | BTVtG-guJSG@t25, FMOZF-Obgs@@t21, IAhbN-X4zI5@t23, IAhbN-X4zI5@t24, IAhbN-X4zI5@t26 |
-| Plexo Cell | 4 | - | 1 | Wall | 3 | - | - | Plexo Cell: 34 | +7Msl-Gmh41@t20, 3J0iR-yPYX6@t22, 5n@iM-xZ2bG@t29, 6x2hp-4FzmK@t35, 6x2hp-4FzmK@t38 |
-| Odin | 3 | - | - | Steelsplitter | 3 | - | - | Odin: 33, Steelsplitter: 1 | +Y0Sm-@b6CR@t15, 0MNHa-IcgD3@t20, 3M7Yx-2DDE+@t18, 3M7Yx-2DDE+@t20, @Z5dg-v3EnA@t20 |
-| Rhino | 2 | - | - | Wall | 3 | - | - | Wall: 33, Rhino: 1 | 1CJ1m-M7nXh@t15, 3WaxE-KZdCF@t17, BXeip-az+t9@t23, BdZzF-herE2@t23, C2X2l-CCxhF@t16 |
-| Bombarder | 4 | 2 | - | Wall | 3 | - | - | Bombarder: 32, Wall: 1 | 1W2nI-XASKl@t14, 1W2nI-XASKl@t16, 41lJ5-fvNND@t17, 4WRqn-z+2ZW@t21, 4e+DE-FLrQ8@t17 |
-| Odin | 3 | - | - | Wall | 3 | - | - | Odin: 30, Wall: 1 | @4dR6-erfYG@t17, @Z5dg-v3EnA@t25, @Z5dg-v3EnA@t29, CBRiw-fIdHH@t22, EUPd7-FEXGD@t25 |
-| Cauterizer | 3 | - | - | Wall | 3 | - | - | Cauterizer: 22, Wall: 5 | 1Oqzk-ih9QQ@t17, 1Oqzk-ih9QQ@t19, 4LG+Z-rxc@C@t16, 6kIs6-R8Hws@t24, 7Dls4-2UQsJ@t12 |
-| Doomed Wall | 4 | - | 3 | Wall | 3 | - | - | Doomed Wall: 26 | 0+nXK-dQG1x@t37, 3b6dJ-ZOc26@t16, @57o1-7Vywr@t21, BTVtG-guJSG@t23, CRwcN-sJcMY@t15 |
-| Bombarder | 4 | - | - | Wall | 3 | - | - | Bombarder: 25 | 41lJ5-fvNND@t23, 6FZ8h-0SsoV@t24, 7a11+-fRVYH@t24, Dyxfw-UI7PA@t21, FDzzp-8nKif@t18 |
-| Valkyrion | 4 | - | - | Wall | 3 | - | - | Valkyrion: 23 | 4@8Dp-JFrHL@t15, 73URG-K3YQf@t17, 73URG-K3YQf@t21, Bznva-V@Uir@t18, D1VMv-IGTVV@t17 |
-| Grimbotch | 2 | - | 1 | Wall | 3 | - | - | Grimbotch: 22 | 0hF0J-YR6iK@t28, 1Mh6@-B+twq@t23, 34HZx-YH67y@t22, 8Gfq0-f12x3@t33, Afkca-Vx5QS@t22 |
-| Bombarder | 4 | 1 | - | Bombarder | 4 | 2 | - | Bombarder: 19, Bombarder: 3 | 14RU3-6e3Kj@t18, 36TdK-ILVmd@t21, 9zSqc-4y8uq@t18, @XPK8-KA4ux@t20, ANTOh-mSib@@t31 |
-| Rhino | 2 | 1 | - | Wall | 3 | - | - | Wall: 21 | +FPif-Sa6pQ@t19, +Q@TX-R7MNM@t14, 0SnBR-7N2Bh@t18, 1rqkC-l4KtE@t12, 3jQw9-cCCFY@t16 |
-| Steelsplitter | 3 | - | - | Urban Sentry | 3 | - | - | Urban Sentry: 18, Steelsplitter: 2 | 2pXpN-RBjRA@t20, 3uhSW-SR1bo@t12, 47Wh8-Chntj@t26, 4EVuD-xI8ci@t14, A3pWt-huQYb@t24 |
-| Centurion | 6 | - | - | Energy Matrix | 5 | - | - | Centurion: 20 | 329i9-VnLOK@t22, 329i9-VnLOK@t23, 329i9-VnLOK@t25, 329i9-VnLOK@t27, 329i9-VnLOK@t29 |
-| Mahar Rectifier | 5 | - | - | Wall | 3 | - | - | Mahar Rectifier: 9, Wall: 10 | @nBM5-HSdZP@t16, BfG5u-mJNSO@t15, BfG5u-mJNSO@t17, L+DIl-cSIE+@t25, LzB5L-i@y7l@t33 |
-| Corpus | 2 | 2 | - | Wall | 3 | - | - | Wall: 18 | 41OXv-Ay6MI@t21, 41OXv-Ay6MI@t23, 5nGMJ-XqSb3@t16, 6G5rJ-2h7If@t22, 6mHV1-IE74U@t26 |
+| Steelsplitter | 3 | - | - | Wall | 3 | - | - | Steelsplitter: 221, Wall: 31 | +7Msl-Gmh41@s133, +BdaQ-3IXtB@s99, +BdaQ-3IXtB@s125, +ZOfK-INjvt@s536, +j2P8-z6w12@s290 |
+| Rhino | 2 | 2 | - | Wall | 3 | - | - | Wall: 246, Rhino: 2 | +F8I5-Feri2@s163, +FPif-Sa6pQ@s175, +OVLW-gn1IQ@s92, +OVLW-gn1IQ@s508, +OVLW-gn1IQ@s525 |
+| Urban Sentry | 3 | - | - | Wall | 3 | - | - | Urban Sentry: 109, Wall: 8 | +e+d7-dfBcy@s111, 3Quy@-LostC@s460, 3uhSW-SR1bo@s106, 4fVLw-NI@tg@s356, 4u+iS-w4mSF@s100 |
+| Borehole Patroller | 2 | - | - | Wall | 3 | - | - | Wall: 108, Borehole Patroller: 2 | +L5eO-onrlF@s211, 0B+de-elx65@s178, 2SAxl-KeOOP@s160, 2SAxl-KeOOP@s181, 2SAxl-KeOOP@s197 |
+| Arka Sodara | 7 | - | - | Wall | 3 | - | - | Arka Sodara: 85, Wall: 1 | +7Msl-Gmh41@s186, 0Jnrk-zdymM@s131, 0Jnrk-zdymM@s170, 16dhC-aztdO@s344, 2+vpB-tUkWb@s232 |
+| Centurion | 6 | - | - | Wall | 3 | - | - | Centurion: 84 | +BdaQ-3IXtB@s138, 05O@2-yPQOy@s113, 05O@2-yPQOy@s152, 05O@2-yPQOy@s181, 05O@2-yPQOy@s190 |
+| Bombarder | 4 | - | - | Bombarder | 4 | 1 | - | Bombarder: 47, Bombarder: 18 | 3a3@N-9E6tt@s514, 5ZW7r-xsbgE@s361, 5ZW7r-xsbgE@s378, 7@ECb-9D3V6@s512, 7@ECb-9D3V6@s610 |
+| Perforator | 2 | - | - | Wall | 3 | - | - | Wall: 58 | +a0Ss-rPM2U@s653, +a0Ss-rPM2U@s675, +kT0N-wfgM9@s401, 0tozj-yTcYb@s721, 8eiBe-q4GPV@s217 |
+| Ossified Drone | 2 | - | - | Wall | 3 | - | - | Wall: 58 | +kT0N-wfgM9@s401, 3CBJ8-2G6f0@s466, 3CBJ8-2G6f0@s533, 3nTbE-BmRFy@s305, 5uMGX-Ej2vN@s301 |
+| Infusion Grid | 4 | - | - | Wall | 3 | - | - | Infusion Grid: 54, Wall: 3 | 1CK11-rJWn5@s181, 31kqM-v49SH@s166, 40a+F-fZ+nW@s216, 43rbL-NrpW@@s324, 4b1RU-x+Ofb@s128 |
+| Xeno Guardian | 4 | - | - | Wall | 3 | - | - | Xeno Guardian: 53, Wall: 2 | 3nTbE-BmRFy@s357, 48CSK-Y2EFg@s256, 5qqGu-vVZra@s512, 5qqGu-vVZra@s545, 6A6@p-IWTid@s295 |
+| Energy Matrix | 5 | - | - | Wall | 3 | - | - | Energy Matrix: 52 | +MRIM-HrZLw@s208, +z8tI-OucRU@s166, +z8tI-OucRU@s298, 02MV2-IQ2Wd@s159, 02MV2-IQ2Wd@s417 |
+| Bombarder | 4 | 1 | - | Wall | 3 | - | - | Bombarder: 47, Wall: 1 | +QtkV-gKLKS@s333, 14RU3-6e3Kj@s163, 5ZW7r-xsbgE@s361, 6+fWT-ZQRbg@s122, 6+fWT-ZQRbg@s258 |
+| Doomed Wall | 4 | - | 2 | Doomed Wall | 4 | - | 3 | Doomed Wall: 34, Doomed Wall: 3 | BTVtG-guJSG@s328, FMOZF-Obgs@@s301, IAhbN-X4zI5@s261, IAhbN-X4zI5@s295, IAhbN-X4zI5@s349 |
+| Plexo Cell | 4 | - | 1 | Wall | 3 | - | - | Plexo Cell: 34 | +7Msl-Gmh41@s305, 3J0iR-yPYX6@s308, 5n@iM-xZ2bG@s364, 6x2hp-4FzmK@s730, 6x2hp-4FzmK@s831 |
+| Odin | 3 | - | - | Steelsplitter | 3 | - | - | Odin: 33, Steelsplitter: 1 | +Y0Sm-@b6CR@s135, 0MNHa-IcgD3@s255, 3M7Yx-2DDE+@s138, 3M7Yx-2DDE+@s182, @Z5dg-v3EnA@s225 |
+| Rhino | 2 | - | - | Wall | 3 | - | - | Wall: 33, Rhino: 1 | 1CJ1m-M7nXh@s184, 3WaxE-KZdCF@s193, BXeip-az+t9@s343, BdZzF-herE2@s242, C2X2l-CCxhF@s159 |
+| Bombarder | 4 | 2 | - | Wall | 3 | - | - | Bombarder: 32, Wall: 1 | 1W2nI-XASKl@s113, 1W2nI-XASKl@s148, 41lJ5-fvNND@s179, 4WRqn-z+2ZW@s189, 4e+DE-FLrQ8@s163 |
+| Odin | 3 | - | - | Wall | 3 | - | - | Odin: 30, Wall: 1 | @4dR6-erfYG@s163, @Z5dg-v3EnA@s399, @Z5dg-v3EnA@s546, CBRiw-fIdHH@s355, EUPd7-FEXGD@s252 |
+| Cauterizer | 3 | - | - | Wall | 3 | - | - | Cauterizer: 22, Wall: 5 | 1Oqzk-ih9QQ@s173, 1Oqzk-ih9QQ@s203, 4LG+Z-rxc@C@s151, 6kIs6-R8Hws@s370, 7Dls4-2UQsJ@s91 |
+| Doomed Wall | 4 | - | 3 | Wall | 3 | - | - | Doomed Wall: 26 | 0+nXK-dQG1x@s688, 3b6dJ-ZOc26@s141, @57o1-7Vywr@s284, BTVtG-guJSG@s264, CRwcN-sJcMY@s231 |
+| Bombarder | 4 | - | - | Wall | 3 | - | - | Bombarder: 25 | 41lJ5-fvNND@s308, 6FZ8h-0SsoV@s292, 7a11+-fRVYH@s397, Dyxfw-UI7PA@s301, FDzzp-8nKif@s188 |
+| Valkyrion | 4 | - | - | Wall | 3 | - | - | Valkyrion: 23 | 4@8Dp-JFrHL@s118, 73URG-K3YQf@s227, 73URG-K3YQf@s325, Bznva-V@Uir@s216, D1VMv-IGTVV@s196 |
+| Grimbotch | 2 | - | 1 | Wall | 3 | - | - | Grimbotch: 22 | 0hF0J-YR6iK@s501, 1Mh6@-B+twq@s399, 34HZx-YH67y@s299, 8Gfq0-f12x3@s435, Afkca-Vx5QS@s329 |
+| Bombarder | 4 | 1 | - | Bombarder | 4 | 2 | - | Bombarder: 19, Bombarder: 3 | 14RU3-6e3Kj@s238, 36TdK-ILVmd@s330, 9zSqc-4y8uq@s215, @XPK8-KA4ux@s186, ANTOh-mSib@@s519 |
+| Rhino | 2 | 1 | - | Wall | 3 | - | - | Wall: 21 | +FPif-Sa6pQ@s175, +Q@TX-R7MNM@s138, 0SnBR-7N2Bh@s162, 1rqkC-l4KtE@s185, 3jQw9-cCCFY@s186 |
+| Steelsplitter | 3 | - | - | Urban Sentry | 3 | - | - | Urban Sentry: 18, Steelsplitter: 2 | 2pXpN-RBjRA@s217, 3uhSW-SR1bo@s88, 47Wh8-Chntj@s440, 4EVuD-xI8ci@s104, A3pWt-huQYb@s296 |
+| Centurion | 6 | - | - | Energy Matrix | 5 | - | - | Centurion: 20 | 329i9-VnLOK@s273, 329i9-VnLOK@s298, 329i9-VnLOK@s348, 329i9-VnLOK@s374, 329i9-VnLOK@s400 |
+| Mahar Rectifier | 5 | - | - | Wall | 3 | - | - | Mahar Rectifier: 9, Wall: 10 | @nBM5-HSdZP@s139, BfG5u-mJNSO@s163, BfG5u-mJNSO@s197, L+DIl-cSIE+@s364, LzB5L-i@y7l@s539 |
+| Corpus | 2 | 2 | - | Wall | 3 | - | - | Wall: 18 | 41OXv-Ay6MI@s378, 41OXv-Ay6MI@s428, 5nGMJ-XqSb3@s148, 6G5rJ-2h7If@s237, 6mHV1-IE74U@s292 |
 
 ## Tripwire (value-sanity)
 Negative min-loss positions (loss < -0.001): **0**

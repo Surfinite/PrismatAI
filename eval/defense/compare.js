@@ -82,7 +82,7 @@ function recordsForCode(code) {
       human: { assignment: human, humanLoss: humanLossOurs, humanLoss_cpp: humanLossCpp },
       aiOurs, aiCpp,
     });
-    rec.id = { replay: code, turnIndex: c.turnIndex, player };
+    rec.id = { replay: code, turnIndex: c.turnIndex, player, step: c.step };
     rec.tags = [];
     if ((gsA.table || []).some(u => (u.disruptDamage | 0) > 0)) rec.tags.push('chillPresent');
     if (aiOurs.tiedAlts.length <= 1 && blockers.length <= 2) rec.tags.push('forced');

@@ -18,10 +18,11 @@ function attrCells(d) {
   return { hp, charge, life };
 }
 
-// Format citations "CODE@tN, CODE@tN" from a list of {replay, turn}.
+// Format citations "CODE@sN" from a list of {replay, step, turn}. `@sN` is the begin-of-defense
+// replay click index (the step to jump to in the viewer); falls back to `@tN` (turn) if no step.
 function citeList(examples) {
   if (!examples || !examples.length) return '';
-  return examples.map(e => `${e.replay}@t${e.turn}`).join(', ');
+  return examples.map(e => `${e.replay}@${e.step != null ? 's' + e.step : 't' + e.turn}`).join(', ');
 }
 
 function renderReport(a) {
@@ -66,8 +67,8 @@ function renderReport(a) {
     md += `Suspicious (loss < -1): **0 suspicious (clean)**\n`;
   } else {
     md += `Suspicious (loss < -1): **${tw.suspicious.length}**\n\n`;
-    md += `| replay | turn | loss |\n|---|--:|--:|\n`;
-    for (const s of tw.suspicious) md += `| ${s.replay} | ${s.turn} | ${s.loss.toFixed(3)} |\n`;
+    md += `| replay | step | loss |\n|---|--:|--:|\n`;
+    for (const s of tw.suspicious) md += `| ${s.replay} | ${s.step != null ? s.step : s.turn} | ${s.loss.toFixed(3)} |\n`;
   }
   return md;
 }

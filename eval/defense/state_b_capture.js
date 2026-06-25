@@ -2,7 +2,9 @@
 const Analyzer = require('../../js_engine/Analyzer');
 const { buildInitInfo } = require('../replay_to_request');
 
-// captureCommittedDefenses(replay) -> [{ turnIndex, player, gameState }]
+// captureCommittedDefenses(replay) -> [{ turnIndex, player, step, gameState }]
+//   step = the begin-of-defense click index (analyzer.turnStarts[turnIndex]) — the replay
+//   command index where this defense turn STARTS, for citing positions in the viewer.
 //
 // State B = the COMMITTED pre-swoosh defense board for each turn that ended a defense.
 // We use the Analyzer's NATIVE replay-navigation API instead of monkeypatching recordClick
@@ -40,7 +42,7 @@ function captureCommittedDefenses(replay) {
     // gameState is the toString'd cpp board (the same shape oracle_diff.js relies on): per-unit
     // `damage` + the iso fields (disruptDamage/deadness/delay/constructionTime/role + health/
     // charge/lifespan/instId/owner/cardName) are all preserved.
-    out.push({ turnIndex: analyzer.turnIndex, player: (gameState.turn % 2), gameState });
+    out.push({ turnIndex: analyzer.turnIndex, player: (gameState.turn % 2), step: analyzer.turnStarts[analyzer.turnIndex], gameState });
   }
   return out;
 }

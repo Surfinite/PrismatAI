@@ -48,9 +48,9 @@ test('unitValueKey merges owner/chill/status; keeps hp/charge/lifespan', () => {
 
 test('aggregate: perUnitDivergence aggregates by unit-value-key with attrs + citations', () => {
   const recs = [
-    { id: { replay: 'C1', turnIndex: 3 }, ai_ours: { loss: 4 }, metrics: { regret_ours: 1, exactMatch_ours: false, primeMatch_ours: false }, diag: { chumpDiff_ours: { aiOnly: [ISO_WALL3], humanOnly: [] }, tieBreakContrast: [] }, human: { assignment: {} }, tags: [] },
+    { id: { replay: 'C1', turnIndex: 3, step: 30 }, ai_ours: { loss: 4 }, metrics: { regret_ours: 1, exactMatch_ours: false, primeMatch_ours: false }, diag: { chumpDiff_ours: { aiOnly: [ISO_WALL3], humanOnly: [] }, tieBreakContrast: [] }, human: { assignment: {} }, tags: [] },
     // owner-different Wall@3 must MERGE into the same row as ISO_WALL3
-    { id: { replay: 'C2', turnIndex: 4 }, ai_ours: { loss: 4 }, metrics: { regret_ours: 1, exactMatch_ours: false, primeMatch_ours: false }, diag: { chumpDiff_ours: { aiOnly: ['Wall|1|3|0|0|0|0|-1|0'], humanOnly: [] }, tieBreakContrast: [] }, human: { assignment: {} }, tags: [] },
+    { id: { replay: 'C2', turnIndex: 4, step: 40 }, ai_ours: { loss: 4 }, metrics: { regret_ours: 1, exactMatch_ours: false, primeMatch_ours: false }, diag: { chumpDiff_ours: { aiOnly: ['Wall|1|3|0|0|0|0|-1|0'], humanOnly: [] }, tieBreakContrast: [] }, human: { assignment: {} }, tags: [] },
   ];
   const agg = m.aggregate(recs);
   assert.equal(agg.perUnitDivergence.length, 1);            // merged -> ONE row
@@ -58,7 +58,8 @@ test('aggregate: perUnitDivergence aggregates by unit-value-key with attrs + cit
   assert.equal(row.internal, 'Wall');
   assert.equal(row.hp, 3);
   assert.equal(row.aiOnly, 2);
-  assert.deepEqual(row.examplesAi, [{ replay: 'C1', turn: 3 }, { replay: 'C2', turn: 4 }]);
+  // citations carry the begin-of-defense step (turn kept as fallback)
+  assert.deepEqual(row.examplesAi, [{ replay: 'C1', step: 30, turn: 3 }, { replay: 'C2', step: 40, turn: 4 }]);
 });
 
 test('aggregate: tripwire flags suspicious negative min-loss', () => {
