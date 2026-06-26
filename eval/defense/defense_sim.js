@@ -186,7 +186,7 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) 
   recurse(0, incoming, -H);
 
   // No feasible defense (incoming overwhelms the pool; no group can ever zero it) -> breach/skip.
-  if (!kept.length) return { assignment: null, loss: Infinity, tiedAlts: [] };
+  if (!kept.length) return { assignment: null, loss: Infinity, tiedAlts: [], chumpLossComponent: 0 };
 
   // `kept` already holds exactly the within-eps tied set (B&B maintained it). A stable sort by
   // loss reproduces the exhaustive path's `solutions.sort((a,b)=>a.loss-b.loss)` ordering: the
