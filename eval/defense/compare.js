@@ -87,6 +87,7 @@ function recordsForCode(code) {
       aiOurs, aiCpp,
     });
     rec.id = { replay: code, turnIndex: c.turnIndex, player, step: c.step };
+    rec.ai_ours.chumpLossComponent = aiOurs.chumpLossComponent;
     rec.tags = [];
     if ((gsA.table || []).some(u => (u.disruptDamage | 0) > 0)) rec.tags.push('chillPresent');
     if (aiOurs.tiedAlts.length <= 1 && blockers.length <= 2) rec.tags.push('forced');

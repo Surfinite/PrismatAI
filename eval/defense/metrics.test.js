@@ -124,3 +124,21 @@ test('tripwire threshold -0.3: a -0.5 min-loss is suspicious, a -0.1 is not', ()
   assert.equal(agg.tripwire.suspicious.length, 1);
   assert.equal(agg.tripwire.suspicious[0].replay, 'E2');
 });
+
+const { aggregate } = require('./metrics');
+// minimal record shape buildTripwire/aggregate read (no available -> isDecisionRelevant returns true).
+const twRec = (loss, comp) => ({ id: { replay: 'r', step: 1 }, incomingAttack: 1, available: [],
+  ai_ours: { loss, chumpLossComponent: comp, assignment: { prime: null } },
+  human: { assignment: { prime: null } }, metrics: {},
+  diag: { chumpDiff_ours: { aiOnly: [], humanOnly: [] }, tieBreakContrast: [] } });
+
+test('Finding B: tripwire reads the chump-loss component, not the credited loss', () => {
+  // credited loss very negative (good anchors survive) but chump component ~0 -> NOT suspicious.
+  const agg = aggregate([twRec(-28.6, 0)]);
+  assert.equal(agg.tripwire.suspicious.length, 0);
+});
+
+test('Finding B: a genuinely negative chump component IS flagged', () => {
+  const agg = aggregate([twRec(-1.0, -0.8)]); // -0.8 < SUSPICIOUS_THRESHOLD (-0.3)
+  assert.equal(agg.tripwire.suspicious.length, 1);
+});

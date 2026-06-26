@@ -1,5 +1,24 @@
 'use strict';
 const { decodeIso } = require('./defense_value');
+const vmLib = require('../../docs/scratch/gen_our_numbers_v2.js').lib;
+// A position is decision-IRRELEVANT when no REAL unit must die: incoming <= the single best survivable
+// absorb (max hp-1) + Σ HP of terminal (lifespan==1) units that die for free. Filter such positions out
+// of the two DIAGNOSTIC tables (the prime choice there is cosmetic) — EXCEPT keep any position where the
+// human's OR ours' prime is a healer (the perpetual-heal credit makes that choice consequential).
+const isHealerKey = (k) => { if (!k) return false; const ct = vmLib[String(k).split('|')[0]]; return !!(ct && ct.fragile && (ct.HPGained || 0) > 0); };
+function isDecisionRelevant(r) {
+  if (isHealerKey(r.human && r.human.assignment && r.human.assignment.prime) ||
+      isHealerKey(r.ai_ours && r.ai_ours.assignment && r.ai_ours.assignment.prime)) return true;
+  const keys = r.available || [];
+  if (!keys.length) return true;
+  let maxAbsorb = 0, freeHP = 0;
+  for (const k of keys) {
+    const d = decodeIso(k);
+    maxAbsorb = Math.max(maxAbsorb, Math.max(0, d.hp - 1));
+    if (d.lifespan === 1) freeHP += d.hp;
+  }
+  return (r.incomingAttack || 0) > maxAbsorb + freeHP;  // relevant iff some real unit must die
+}
 
 // UNIT-VALUE-KEY: the value-relevant subset of an isoKey — internal|hp|charge|lifespan.
 // MERGES owner + chill + (already-dropped) status, so each unit appears once per distinct
@@ -97,9 +116,13 @@ function pushExample(list, rec) {
 function aggregate(records) {
   const n = records.length || 1;
   const sum = (f) => records.reduce((a, r) => a + f(r), 0);
+  // Decision-relevance filter — the two diagnostic tables only (NOT the headline regret/exactMatch/
+  // primeMatch sums, which stay over the full corpus). In an irrelevant position no real unit must die,
+  // so the prime/chump choice there is cosmetic and would pollute the divergence/tie-break diagnostics.
+  const relevant = records.filter(isDecisionRelevant);
   // perUnit keyed by UNIT-VALUE-KEY (internal|hp|charge|lifespan) — owner/chill/status merged.
   const perUnit = {}; // uvk -> { internal, hp, charge, lifespan, aiOnly, humanOnly, examplesAi[], examplesHuman[] }
-  for (const r of records) {
+  for (const r of relevant) {
     for (const k of r.diag.chumpDiff_ours.aiOnly) {
       const uvk = unitValueKey(k);
       const d = decodeIso(k);
@@ -127,7 +150,7 @@ function aggregate(records) {
     primeMatch: { ours: sum(r => (r.metrics.primeMatch_ours ? 1 : 0)) / n, cpp: sum(r => (r.metrics.primeMatch_cpp ? 1 : 0)) / n },
     perUnitDivergence: Object.values(perUnit)
       .sort((a, b) => (b.aiOnly + b.humanOnly) - (a.aiOnly + a.humanOnly)),
-    tieBreakSkew: buildTieBreakSkew(records),
+    tieBreakSkew: buildTieBreakSkew(relevant),
     tripwire: buildTripwire(records),
   };
 }
@@ -170,10 +193,13 @@ function buildTripwire(records) {
   let negMinLoss = 0;
   const suspicious = [];
   for (const r of records) {
-    const loss = r.ai_ours && typeof r.ai_ours.loss === 'number' ? r.ai_ours.loss : 0;
-    if (loss < -0.001) negMinLoss++;
-    if (loss < SUSPICIOUS_THRESHOLD && suspicious.length < MAX_SUSPICIOUS) {
-      suspicious.push({ replay: r.id ? r.id.replay : undefined, step: r.id ? r.id.step : undefined, turn: r.id ? r.id.turnIndex : undefined, loss });
+    // Finding B: the credited min-loss is by-design strongly negative when good anchors survive; the
+    // value-sanity guard belongs on the chump-loss COMPONENT (Σ_dead V + primeLoss), which stays >= ~0.
+    const comp = r.ai_ours && typeof r.ai_ours.chumpLossComponent === 'number' ? r.ai_ours.chumpLossComponent
+               : (r.ai_ours && typeof r.ai_ours.loss === 'number' ? r.ai_ours.loss : 0);
+    if (comp < -0.001) negMinLoss++;
+    if (comp < SUSPICIOUS_THRESHOLD && suspicious.length < MAX_SUSPICIOUS) {
+      suspicious.push({ replay: r.id ? r.id.replay : undefined, step: r.id ? r.id.step : undefined, turn: r.id ? r.id.turnIndex : undefined, loss: comp });
     }
   }
   return { negMinLoss, suspicious };
