@@ -61,7 +61,15 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) 
     const perUnit = {};
     groups.forEach(g => g.units.forEach(u => { perUnit[u.instId] = 0; }));
     const assignment = { chumps: [], prime: null, untouched, perUnit };
-    return { assignment, perUnit, loss: 0, tiedAlts: [{ assignment, loss: 0 }] };
+    return { assignment, perUnit, loss: 0, tiedAlts: [{ assignment, loss: 0 }], chumpLossComponent: 0 };
+  }
+
+  // §2 untouched-healer credit (ours only). H = board total; below-max healers start "untouched-credited"
+  // (lossScore initialized to -H); chumping/priming one adds its credit back (it's no longer untouched).
+  let H = 0;
+  for (const g of groups) {
+    g.uhCredit = (mode === 'ours') ? dv.untouchedHealerCredit(g.view) : 0;  // 0 for non-healers / maxed / cpp
+    H += g.uhCredit * g.units.length;
   }
 
   // A solution = chump-count per iso-key + optional last blocker (key + damage it takes).
@@ -96,14 +104,18 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) 
   let minTerm = 0;                                           // most negative single term (chump or prime)
   for (const g of groups) {
     // death loss of one g-unit (full-kill): dv.loss is damage-independent once it dies, so any
-    // damage >= g.hp gives the same value; use g.hp.
-    const deathLoss = dv.loss(g.view, g.hp, mode, ctx);
+    // damage >= g.hp gives the same value; use g.hp. Plus the forgone untouched-healer credit for a
+    // below-max healer (the -H trick adds g.uhCredit back whenever it's chumped/dies, ours only).
+    const deathLoss = dv.loss(g.view, g.hp, mode, ctx) + g.uhCredit;
     if (deathLoss < 0) negFloor += deathLoss * g.units.length;
     if (deathLoss < minTerm) minTerm = deathLoss;
     // a surviving prime (partial-damage last blocker) is a different term; sample its sign too.
+    // The surviving prime earns -futureAbsorb (ours) and, if it's a below-max healer, +uhCredit.
     if (g.hp > 1) {
       const survLoss = dv.loss(g.view, g.hp - 1, mode, ctx);
-      if (survLoss < minTerm) minTerm = survLoss;
+      const primeCredit = (mode === 'ours') ? dv.futureAbsorb(g.view) : 0;
+      const survTerm = survLoss - primeCredit + g.uhCredit;
+      if (survTerm < minTerm) minTerm = survTerm;
     }
   }
   negFloor += minTerm;                                       // one extra terminal prime term
@@ -140,7 +152,10 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) 
       if (used >= g.units.length) continue;          // no spare unit (canBlock, cpp:192)
       if (g.hp >= remaining) {                        // isLastBlocker (cpp:193)
         const primeLoss = dv.loss(g.view, remaining, mode, ctx); // heuristic charged FULL remaining (cpp:84/105)
-        record(lossScore + primeLoss, g.key, remaining);
+        // §2: a TRULY surviving prime (hp>remaining) earns futureAbsorb (ours only). A below-max-healer
+        // prime forgoes its untouched credit (+g.uhCredit), whether it survives or dies as last blocker.
+        const primeCredit = (mode === 'ours' && g.hp > remaining) ? dv.futureAbsorb(g.view) : 0;
+        record(lossScore + primeLoss - primeCredit + g.uhCredit, g.key, remaining);
       }
     }
 
@@ -158,7 +173,7 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) 
     const used = chumpCounts.get(g.key) || 0;
     if (used < g.units.length && g.hp <= remaining) {  // canBlock (cpp:102) + full-kill only
       const takeDamage = g.hp;                         // cpp:104 (= min(hp, remaining) here)
-      const chumpLoss = dv.loss(g.view, remaining, mode, ctx);     // heuristic charged FULL remaining (cpp:105)
+      const chumpLoss = dv.loss(g.view, remaining, mode, ctx) + g.uhCredit; // + forgone untouched credit (0 unless below-max healer)
       chumpCounts.set(g.key, used + 1);
       recurse(depth, remaining - takeDamage, lossScore + chumpLoss); // cpp:109
       chumpCounts.set(g.key, used);                    // unwind (cpp:110)
@@ -168,7 +183,7 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) 
     if (depth + 1 < groups.length) recurse(depth + 1, remaining, lossScore);
   }
 
-  recurse(0, incoming, 0);
+  recurse(0, incoming, -H);
 
   // No feasible defense (incoming overwhelms the pool; no group can ever zero it) -> breach/skip.
   if (!kept.length) return { assignment: null, loss: Infinity, tiedAlts: [] };
@@ -241,12 +256,25 @@ function solveDefense(stateUnits, incoming, mode, eps = 0.001, ctx = undefined) 
     tiedAlts.push({ assignment: a, loss: s.loss });
   }
 
+  // chump-loss component (pre-credit) for the value-sanity tripwire (Finding B): Σ over damaged units of loss().
+  // This is Σ_dead V + primeLoss with NO futureAbsorb / untouched-healer credit applied (the credits live
+  // only in `best.loss`). Task-6 consumes it.
+  const chumpLossComponent = (a) => {
+    let s = 0;
+    for (const g of groups) for (const u of g.units) {
+      const d = a.perUnit[u.instId] || 0;
+      if (d > 0) s += dv.loss(g.view, d, mode, ctx);
+    }
+    return s;
+  };
+
   const assignment = toAssignment(best);
   return {
     assignment,
     perUnit: assignment.perUnit,   // convenience top-level mirror (== assignment.perUnit)
     loss: best.loss,
     tiedAlts,
+    chumpLossComponent: chumpLossComponent(assignment),
   };
 }
 
