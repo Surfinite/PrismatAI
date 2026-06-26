@@ -21,7 +21,8 @@ const lib = JSON.parse(fs.readFileSync(LIB, 'utf8'));
 
 // ===================== TUNABLE CONSTANTS =====================
 const BV = 2.2;     // block value per HP (one soak); blocker cost/HP w/ grounded resources (Wall 2.22, EM 2.27, Aegis 2.0)
-const ATK = 2.0;    // value of 1 attack PRODUCED (community; pending an attacker-producer derivation)
+const R_HALF = Math.sqrt(4 / 3); // per-HALF-turn discount base; d = 1/R_HALF, d^2 = 0.75. A block is realized on my
+const ATK = BV / R_HALF;    // defense phase; an attack lands a half-turn later -> ATK = BV*d. (was standalone 2.0)
 const R = 4 / 3;    // interest rate: Wall-vs-IG promptness AND producer amortization BOTH give 4/3
 const RES = { gold: 1, green: 4 / 3, blue: 5 / 3, red: 1, energy: 0.3 }; // green/blue/red PRODUCER-derived = gold-cost/(output x 1/(R-1)=3) [Conduit/Blastforge/Animus]. energy: NOT a clean producer value — the Engineer's 1HP body shares its 2g cost (body-adjusted estimate ~0.1; producer-naive 0.667). 0.3 = hedged starting point; real value is board-dependent (ability-usable gate, later).
 const THREAT = 0.1; // residual value of a click-attacker's held-back (forgone-to-soak) attack, PER attack point (x abA). TUNABLE.

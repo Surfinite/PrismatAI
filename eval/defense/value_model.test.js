@@ -43,3 +43,16 @@ test('§4.4 fix: doomed nudge puts a fresh Doomed Wall just below ch0-Bombarder'
   // sits just below it, still near its own body floor (not heavily discounted).
   assert.ok(dw < 8.8 && dw > 8.0, `Doomed Wall (${dw}) should be just below ch0-Bombarder body 8.8 and near its own body floor`);
 });
+
+test('§1 half-turn clock: ATK = BV / R_HALF', () => {
+  const R_HALF = Math.sqrt(4 / 3);
+  assert.ok(Math.abs(vm.CONSTANTS.ATK - vm.CONSTANTS.BV / R_HALF) < 1e-9, `ATK should derive from BV/R_HALF, got ${vm.CONSTANTS.ATK}`);
+  assert.ok(Math.abs(vm.CONSTANTS.ATK - 1.9053) < 0.001, `ATK ~1.905, got ${vm.CONSTANTS.ATK}`);
+});
+
+test('§1 ripple: attacker scales ~x0.95, pure blockers unchanged', () => {
+  const round = x => Math.round(x * 100) / 100;
+  assert.equal(round(vm.ours(vm.lib['Tesla Tower']).v), 9.82); // Tarsier attacker: 10.2 -> 9.82
+  assert.equal(round(vm.ours(vm.lib['Wall']).v), 6.6);          // pure blocker unchanged
+  assert.equal(round(vm.ours(vm.lib['Golem']).v), 11);          // EM unchanged
+});
