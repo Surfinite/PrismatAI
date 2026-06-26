@@ -109,3 +109,21 @@ test('decodeIso round-trips internal/hp/charge/lifespan', () => {
   assert.equal(g.internal, 'Golem');
   assert.equal(g.charge, 2);
 });
+
+test('§2 futureAbsorb: non-fragile hp-1, healer heal, doomed factor', () => {
+  const near = (a, b) => Math.abs(a - b) < 0.02;
+  assert.ok(near(dv.futureAbsorb(dv.unitView(mk('Wall', { health: 3 }))), 13.2));      // (3-1)*2.2*3
+  assert.ok(near(dv.futureAbsorb(dv.unitView(mk('Golem', { health: 5 }))), 26.4));     // EM (5-1)*2.2*3
+  assert.ok(near(dv.futureAbsorb(dv.unitView(mk('Xaetron', { health: 5 }))), 26.4));   // healer heal*2.2*3
+  assert.equal(dv.futureAbsorb(dv.unitView(mk('Engineer', { health: 1 }))), 0);        // hp-1 = 0
+  assert.ok(near(dv.futureAbsorb(dv.unitView(mk('Doomed Mech', { health: 5, lifespan: 5 }))), 18.05)); // factor Σ_1..4 .75^k
+  assert.ok(near(dv.futureAbsorb(dv.unitView(mk('Doomed Mech', { health: 5, lifespan: 2 }))), 6.6));   // factor .75
+});
+
+test('§2 untouchedHealerCredit: room-capped by min(1, room/heal)', () => {
+  const near = (a, b) => Math.abs(a - b) < 0.02;
+  assert.ok(near(dv.untouchedHealerCredit(dv.unitView(mk('Xaetron', { health: 8 }))), 26.4)); // room4=heal4 -> full
+  assert.ok(near(dv.untouchedHealerCredit(dv.unitView(mk('Xaetron', { health: 11 }))), 6.6)); // room1 -> *0.25
+  assert.equal(dv.untouchedHealerCredit(dv.unitView(mk('Xaetron', { health: 12 }))), 0);      // maxed -> 0 (dump)
+  assert.equal(dv.untouchedHealerCredit(dv.unitView(mk('Wall', { health: 3 }))), 0);          // non-healer -> 0
+});

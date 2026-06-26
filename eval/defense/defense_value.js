@@ -330,4 +330,37 @@ function lossCpp(view, damage, ctx) {
   }
 }
 
-module.exports = { unitView, V, body, resolveInternal, loss, isoKey, decodeIso, isIsomorphic, buildResonateContext };
+// ---------------------------------------------------------------------------
+// §2 prime-defender keep-value (ours mode). futureAbsorb = the perpetual future absorb a SURVIVING
+// ANCHOR provides on later turns — the one thing the chump term misses. untouchedHealerCredit = the
+// same value for a below-max healer that survives UNTOUCHED (it banks deferred absorb by climbing),
+// ROOM-CAPPED so a near-maxed healer is dumped rather than preserved. Design:
+// docs/superpowers/specs/2026-06-25-prime-defender-keep-value-design.md §2 (revised 2026-06-26).
+// ---------------------------------------------------------------------------
+const P_PERP = 1 / (1 - 0.75); // = 4 (d^2 = 0.75)
+function doomedFactorFA(life) { let s = 0; for (let k = 1; k <= life - 1; k++) s += Math.pow(0.75, k); return s; }
+
+// sustainableAbsorb · BV · factor. Uncapped (P-1)=3 perpetual (first future absorb is next defense
+// phase, already delayed). Non-fragile -> hp-1 (repairs); fragile healer -> heal; doomed -> finite factor.
+function futureAbsorb(view) {
+  if (!view.ct) return 0;
+  let sustain;
+  if (view.fragile) sustain = view.heal > 0 ? view.heal : 0;
+  else sustain = view.hp - 1;
+  if (sustain <= 0) return 0;
+  const life = view.life; // undefined = permanent; >=1 = doomed remaining
+  const factor = (life !== undefined) ? doomedFactorFA(life) : (P_PERP - 1);
+  return sustain * BV * factor;
+}
+
+function isBelowMaxHealer(view) { return !!(view.ct && view.fragile && view.heal > 0 && view.hp < view.max); }
+
+// Untouched below-max healer earns futureAbsorb, ROOM-CAPPED by min(1, room/heal) — mirroring the §3a
+// chump-loss climb cap. Full when room >= heal (climbs efficiently); shrinks near max; 0 at max ("dump it").
+function untouchedHealerCredit(view) {
+  if (!isBelowMaxHealer(view)) return 0;
+  const room = view.max - view.hp;          // > 0 by isBelowMaxHealer
+  return futureAbsorb(view) * Math.min(1, room / view.heal);
+}
+
+module.exports = { unitView, V, body, resolveInternal, loss, isoKey, decodeIso, isIsomorphic, buildResonateContext, futureAbsorb, untouchedHealerCredit, isBelowMaxHealer };
