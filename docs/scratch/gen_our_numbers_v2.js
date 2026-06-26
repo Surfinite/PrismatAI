@@ -70,7 +70,18 @@ function coreValue(c, stateOverride, noCreate) {
     // Heal: the table is BUY-state, but the value reflects the implementation rule — effective soak HP = current HP + one
     // heal, capped at max (a healer self-repairs across the soak window, so it absorbs more than its starting bar).
     const heal = c.HPGained || 0, hpMax = (c.HPMax !== undefined) ? c.HPMax : c.toughness;
-    const soakHP = heal > 0 ? Math.min(_hp + heal, hpMax) : _hp;
+    // §3a multi-turn heal: a kept healer climbs to max over several turns, each turn's gain
+    // (cumulative-capped at max) discounted by d^(2t). soakHP = currentHP + Σ_{t>=1} gain_t·d^(2t).
+    let soakHP = _hp;
+    if (heal > 0) {
+      const d2 = 1 / (R_HALF * R_HALF);  // = 0.75
+      let cumHP = _hp, t = 1;
+      while (cumHP < hpMax && t < 100) {
+        const gain = Math.min(heal, hpMax - cumHP);
+        soakHP += gain * Math.pow(d2, t);
+        cumHP += gain; t++;
+      }
+    }
     const HP = _hp, ab = c.abilityScript, bt = c.beginOwnTurnScript;
     let body = soakHP * BV;
     const abA = attackOf(ab), btA = attackOf(bt);

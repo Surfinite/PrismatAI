@@ -56,3 +56,13 @@ test('§1 ripple: attacker scales ~x0.95, pure blockers unchanged', () => {
   assert.equal(round(vm.ours(vm.lib['Wall']).v), 6.6);          // pure blocker unchanged
   assert.equal(round(vm.ours(vm.lib['Golem']).v), 11);          // EM unchanged
 });
+
+test('§3a multi-turn heal climb (discounted, capped at max)', () => {
+  const near = (a, b) => Math.abs(a - b) < 0.02;
+  // Xaetron heal 4 max 12, fragile (-0.1 haircut). @5: 5 + 4*.75 + 3*.5625 = 9.6875 -> *2.2 - 0.1 = 21.21
+  assert.ok(near(vm.ours(vm.lib['Xaetron'], { hp: 5 }).block, 21.21), `@5 got ${vm.ours(vm.lib['Xaetron'], { hp: 5 }).block}`);
+  // @2: 2 + 4*.75 + 4*.5625 + 2*.4219 = 8.06 -> 17.71
+  assert.ok(near(vm.ours(vm.lib['Xaetron'], { hp: 2 }).block, 17.71), `@2 got ${vm.ours(vm.lib['Xaetron'], { hp: 2 }).block}`);
+  // @8 (room 4 = one full heal then capped): 8 + 4*.75 = 11 -> 24.1
+  assert.ok(near(vm.ours(vm.lib['Xaetron'], { hp: 8 }).block, 24.1), `@8 got ${vm.ours(vm.lib['Xaetron'], { hp: 8 }).block}`);
+});

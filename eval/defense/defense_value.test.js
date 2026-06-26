@@ -30,12 +30,11 @@ test('unitView resolves internal name + current state', () => {
 });
 
 test('body uses CURRENT hp and heal-aware effective soak', () => {
-  // Xaetron: heal 4, max 12, fragile. At HP 8: effective soak min(8+4,12)=12 -> 12*2.2 - 0.1 fragile = 26.3
+  // Xaetron: heal 4, max 12, fragile. Multi-turn discounted heal climb (§3a).
   const x8 = dv.body(dv.unitView(mk('Xaetron', { health: 8 })));
-  assert.ok(near(x8, 26.3), `Xaetron@8 body expected ~26.3, got ${x8}`);
-  // At HP 5: min(5+4,12)=9 -> 9*2.2 - 0.1 = 19.7
+  assert.ok(near(x8, 24.1), `Xaetron@8 body expected ~24.1, got ${x8}`);
   const x5 = dv.body(dv.unitView(mk('Xaetron', { health: 5 })));
-  assert.ok(near(x5, 19.7), `Xaetron@5 body expected ~19.7, got ${x5}`);
+  assert.ok(near(x5, 21.21), `Xaetron@5 body expected ~21.21, got ${x5}`);
 });
 
 test('V(Energy Matrix@5) == 11', () => {
@@ -55,14 +54,14 @@ test('loss ours: non-fragile survivor = 0', () => {
 
 test('loss ours: fragile healer survivor = body delta (Xaetron@3 absorbs 2)', () => {
   const x = dv.unitView(mk('Xaetron', { health: 3 }));
-  // body(@3)=min(3+4,12)*2.2-0.1=15.3 ; body(@1)=min(1+4,12)*2.2-0.1=10.9 ; delta=4.4
-  assert.ok(near(dv.loss(x, 2, 'ours'), 4.4), `got ${dv.loss(x, 2, 'ours')}`);
+  // body(@3)=18.98 ; body(@1)=16.43 ; delta=2.55
+  assert.ok(near(dv.loss(x, 2, 'ours'), 2.55), `got ${dv.loss(x, 2, 'ours')}`);
 });
 
-test('loss ours: heal headroom makes absorption free (Xaetron@10 absorbs 2)', () => {
+test('loss ours: heal headroom makes absorption nearly free (Xaetron@10 absorbs 2)', () => {
   const x = dv.unitView(mk('Xaetron', { health: 10 }));
-  // body(@10)=min(14,12)=12 ; body(@8)=min(12,12)=12 ; delta 0
-  assert.ok(near(dv.loss(x, 2, 'ours'), 0), `got ${dv.loss(x, 2, 'ours')}`);
+  // body(@10)=25.2 ; body(@8)=24.1 ; delta 1.1 (NOT 0 — the discounted climb means @10 > @8)
+  assert.ok(near(dv.loss(x, 2, 'ours'), 1.1), `got ${dv.loss(x, 2, 'ours')}`);
 });
 
 test('loss cpp: non-fragile survivor = 0 (Wall absorbs 2)', () => {
