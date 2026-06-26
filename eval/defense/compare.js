@@ -73,8 +73,12 @@ function recordsForCode(code) {
     if (!aiOurs.assignment || !aiCpp.assignment) continue;      // breach -> skip (spec §9)
 
     const human = humanAssignment(c.gameState, player, blockers);
-    // human loss under each mode = Σ loss over the human's per-unit damage
-    const humanLossOurs = blockers.reduce((s, v) => s + dv.loss(v, human.perUnit[v.instId] || 0, 'ours'), 0);
+    // human loss under 'ours' = Σ loss over the human's per-unit damage, MINUS the same keep-value credits
+    // the AI's solveDefense applies (Finding A — else an identical human defense scores spurious regret).
+    let humanLossOurs = blockers.reduce((s, v) => s + dv.loss(v, human.perUnit[v.instId] || 0, 'ours'), 0);
+    const humanPrime = blockers.find(v => { const d = human.perUnit[v.instId] || 0; return d > 0 && d < v.hp; });
+    if (humanPrime) humanLossOurs -= dv.futureAbsorb(humanPrime);
+    for (const v of blockers) { const d = human.perUnit[v.instId] || 0; if (d === 0 && dv.isBelowMaxHealer(v)) humanLossOurs -= dv.untouchedHealerCredit(v); }
     const humanLossCpp = blockers.reduce((s, v) => s + dv.loss(v, human.perUnit[v.instId] || 0, 'cpp'), 0);
 
     const rec = metrics.computeMetrics({
